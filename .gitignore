@@ -1,0 +1,34 @@
+node_modules
+.next
+out
+build
+dist
+
+.env*.local
+.env
+
+.DS_Store
+Thumbs.db
+
+*.log
+.vscode
+.idea
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# Vercel
+.vercel
+
+# Claude Code (개인 설정)
+.claude/settings.local.json
+
+# TypeScript 빌드 캐시
+*.tsbuildinfo
+
+# PowerShell 리다이렉트 사고로 생긴 $null 파일
+$null

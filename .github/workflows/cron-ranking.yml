@@ -1,0 +1,42 @@
+name: Collect Naver Ranking
+
+on:
+  schedule:
+    # 매시 정각 (UTC 기준, KST 매시 정각과 동일)
+    - cron: "0 * * * *"
+  workflow_dispatch:
+    inputs:
+      media:
+        description: "수집할 매체 normalized_name 공백구분 (비우면 전체)"
+        required: false
+        default: ""
+      limit:
+        description: "매체별 상위 N건"
+        required: false
+        default: "10"
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_LEGACY_ANON_KEY: ${{ secrets.SUPABASE_LEGACY_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install deps
+        run: pip install -r requirements.txt
+      - name: Collect ranking
+        run: |
+          MEDIA="${{ github.event.inputs.media }}"
+          LIMIT="${{ github.event.inputs.limit || '10' }}"
+          if [ -n "$MEDIA" ]; then
+            python -m scripts.collect_ranking --limit "$LIMIT" --media $MEDIA
+          else
+            python -m scripts.collect_ranking --limit "$LIMIT"
+          fi

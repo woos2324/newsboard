@@ -1,0 +1,41 @@
+name: Daily AI Briefing
+
+on:
+  schedule:
+    # UTC 15:00 = KST 00:00 (자정)
+    - cron: "0 15 * * *"
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "대상 cluster_date (YYYY-MM-DD, 기본 오늘 UTC)"
+        required: false
+        default: ""
+
+jobs:
+  briefing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_LEGACY_ANON_KEY: ${{ secrets.SUPABASE_LEGACY_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
+      DEFAULT_AI_MODEL: ${{ secrets.DEFAULT_AI_MODEL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install deps
+        run: pip install -r requirements.txt
+      - name: Generate daily briefing
+        run: |
+          DATE_ARG="${{ github.event.inputs.date }}"
+          if [ -n "$DATE_ARG" ]; then
+            python -m scripts.generate_daily_briefing --date "$DATE_ARG"
+          else
+            python -m scripts.generate_daily_briefing
+          fi

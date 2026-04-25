@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  *:focus-visible {
+    @apply outline-none ring-2 ring-primary-500 ring-offset-2 ring-offset-background;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-border bg-white p-5 transition-shadow duration-150;
+  }
+
+  .card-hover {
+    @apply hover:shadow-md;
+  }
+
+  .card-alert {
+    @apply border-error/60 bg-error/5;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium;
+  }
+
+  .badge-success {
+    @apply bg-success/10 text-success;
+  }
+
+  .badge-warning {
+    @apply bg-warning/10 text-warning;
+  }
+
+  .badge-error {
+    @apply bg-error/10 text-error;
+  }
+
+  .badge-muted {
+    @apply bg-muted/10 text-muted;
+  }
+
+  .section-title {
+    @apply text-sm font-semibold text-foreground;
+  }
+
+  .caption {
+    @apply text-caption text-muted;
+  }
+}

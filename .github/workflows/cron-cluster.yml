@@ -1,0 +1,49 @@
+name: Cluster Articles
+
+on:
+  schedule:
+    # 6시간마다 30분 (수집 직후 마진).
+    # UTC 00:30 / 06:30 / 12:30 / 18:30 → KST 09:30 / 15:30 / 21:30 / 03:30
+    - cron: "30 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      hours:
+        description: "클러스터링 대상 시간 윈도우"
+        required: false
+        default: "7"
+      threshold:
+        description: "같은 클러스터 판정 cosine 임계값"
+        required: false
+        default: "0.80"
+      min_size:
+        description: "클러스터 최소 기사 수"
+        required: false
+        default: "1"
+
+jobs:
+  cluster:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_LEGACY_ANON_KEY: ${{ secrets.SUPABASE_LEGACY_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
+      DEFAULT_AI_MODEL: ${{ secrets.DEFAULT_AI_MODEL }}
+      DEFAULT_EMBED_MODEL: ${{ secrets.DEFAULT_EMBED_MODEL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install deps
+        run: pip install -r requirements.txt
+      - name: Cluster articles
+        run: |
+          python -m scripts.cluster_articles \
+            --hours "${{ github.event.inputs.hours || '7' }}" \
+            --threshold "${{ github.event.inputs.threshold || '0.80' }}" \
+            --min-size "${{ github.event.inputs.min_size || '1' }}"

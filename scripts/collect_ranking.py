@@ -36,16 +36,23 @@ async def collect_one(
 
 
 def _persist(sb, media: dict, items: list[RankingItem], now_iso: str) -> int:
+    # published_at = collected_at 으로 fallback (Naver 페이지에서 정확한 발행시각 추출 어려움).
+    # 대시보드의 "오늘 기사 수" 와 cluster_articles 의 시간 윈도우 필터(`published_at >= cutoff`)
+    # 두 곳 모두 published_at 을 기준으로 하므로 NULL 이면 안 잡힘.
     article_rows = [
         {
             "media_company_id": media["media_company_id"],
             "title": it.title,
             "url": it.url,
+            "published_at": now_iso,
             "collected_at": now_iso,
         }
         for it in items
     ]
-    sb.table("article").upsert(article_rows, on_conflict="url").execute()
+    # ignore_duplicates=True: 같은 url 재수집 시 첫 published_at 보존 (UPDATE 안 함).
+    sb.table("article").upsert(
+        article_rows, on_conflict="url", ignore_duplicates=True
+    ).execute()
 
     urls = [it.url for it in items]
     existing = (

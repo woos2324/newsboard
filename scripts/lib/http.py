@@ -16,6 +16,41 @@ DEFAULT_HEADERS = {
 }
 
 
+async def fetch_json(
+    url: str,
+    *,
+    timeout: float = 15.0,
+    retries: int = 3,
+):
+    """JSON 응답 endpoint 용 fetcher. Accept 헤더 application/json 추가."""
+    import json as _json
+
+    headers = {**DEFAULT_HEADERS, "Accept": "application/json,*/*;q=0.8"}
+    last_err: Exception | None = None
+    async with httpx.AsyncClient(
+        headers=headers, follow_redirects=True, timeout=timeout
+    ) as client:
+        for attempt in range(retries):
+            try:
+                resp = await client.get(url)
+                resp.raise_for_status()
+                try:
+                    return resp.json()
+                except _json.JSONDecodeError:
+                    # 일부 endpoint 가 JSONP/text 로 응답할 수도 — 그 경우 raw 반환
+                    return _json.loads(resp.text)
+            except httpx.HTTPStatusError as e:
+                last_err = e
+                if e.response.status_code in (429, 500, 502, 503, 504):
+                    await asyncio.sleep(1 + attempt * 2)
+                    continue
+                raise
+            except httpx.RequestError as e:
+                last_err = e
+                await asyncio.sleep(1 + attempt * 2)
+    raise RuntimeError(f"fetch_json 실패 ({url}): {last_err}")
+
+
 async def fetch_html(
     url: str,
     *,

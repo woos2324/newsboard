@@ -10,6 +10,10 @@ RANKING_URL_TEMPLATE = (
     "https://media.naver.com/press/{naver_media_id}/ranking?type=popular"
 )
 PRESS_HOME_URL_TEMPLATE = "https://media.naver.com/press/{naver_media_id}"
+# 구독자수 JSON endpoint (HTML 파싱보다 안정)
+SUBSCRIBER_API_URL_TEMPLATE = (
+    "https://media.naver.com/press/{naver_media_id}/channel/followers.json"
+)
 
 
 @dataclass
@@ -90,23 +94,37 @@ def parse_ranking_html(html: str, limit: int = 10) -> list[RankingItem]:
     return []
 
 
-# 구독자수 — "1,234,567 구독자", "123만 구독", "구독자 87만명" 등 다양 표기
-_SUBSCRIBER_PATTERNS: list[re.Pattern[str]] = [
-    re.compile(r"구독자[^0-9]{0,5}([0-9][0-9,]*)\s*만\s*명?"),
-    re.compile(r"구독자[^0-9]{0,5}([0-9][0-9,]*)\s*명"),
-    re.compile(r"([0-9][0-9,]*)\s*만\s*(?:명\s*)?구독"),
-    re.compile(r"([0-9][0-9,]*)\s*명\s*구독"),
-]
-
-
-def parse_subscriber_count(html: str) -> int | None:
-    text = BeautifulSoup(html, "html.parser").get_text(" ", strip=True)
-    for pat in _SUBSCRIBER_PATTERNS:
-        m = pat.search(text)
-        if not m:
-            continue
-        num = int(m.group(1).replace(",", ""))
-        if "만" in m.group(0):
-            num *= 10000
-        return num
+def extract_subscriber_count(data) -> int | None:
+    """followers.json 응답에서 구독자수 추출.
+    응답 형식이 변경될 수 있어 다양한 키와 중첩 구조에 대응."""
+    if data is None:
+        return None
+    if isinstance(data, list):
+        for item in data:
+            r = extract_subscriber_count(item)
+            if r is not None:
+                return r
+        return None
+    if isinstance(data, dict):
+        for key in (
+            "totalCount",
+            "total",
+            "count",
+            "subscriberCount",
+            "followerCount",
+            "subscribers",
+            "followers",
+        ):
+            v = data.get(key)
+            if isinstance(v, int):
+                return v
+            if isinstance(v, str):
+                try:
+                    return int(v.replace(",", ""))
+                except ValueError:
+                    pass
+        for nest in ("result", "data", "message", "channel"):
+            r = extract_subscriber_count(data.get(nest))
+            if r is not None:
+                return r
     return None

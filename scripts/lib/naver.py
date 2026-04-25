@@ -20,8 +20,11 @@ class RankingItem:
 
 
 # 네이버 UI 변경 대비 다중 셀렉터 시도. 위에서 아래 순으로 매칭하여 첫 성공을 사용.
+# 2026-04-25 검증: media.naver.com/press/{id}/ranking?type=popular 페이지에서
+#   <li class="as_thumb"> > <a href> > <strong class="list_title"> 구조.
 # selector 가 모두 실패하면 0건 반환되므로 dry-run 으로 검증 후 갱신할 것.
 _RANKING_LIST_SELECTORS: list[str] = [
+    "li.as_thumb",
     "ul.press_ranking_home_list_wrap li",
     "ul.ranking_list li",
     "ul.list_ranking li",
@@ -29,11 +32,23 @@ _RANKING_LIST_SELECTORS: list[str] = [
 ]
 
 _TITLE_SELECTORS: list[str] = [
+    "strong.list_title",
     ".list_title",
     ".title",
     ".press_news_title",
     "a strong",
 ]
+
+# 실제 기사 URL 패턴 (이외는 garbage 로 간주하고 필터)
+_ARTICLE_URL_PATTERNS = (
+    "n.news.naver.com/article/",
+    "news.naver.com/article/",
+    "news.naver.com/main/read",
+)
+
+
+def _is_article_url(href: str) -> bool:
+    return any(p in href for p in _ARTICLE_URL_PATTERNS)
 
 
 def parse_ranking_html(html: str, limit: int = 10) -> list[RankingItem]:
@@ -44,9 +59,19 @@ def parse_ranking_html(html: str, limit: int = 10) -> list[RankingItem]:
         if not nodes:
             continue
         items: list[RankingItem] = []
-        for idx, node in enumerate(nodes):
-            if idx >= limit:
-                break
+        rank = 0
+        for node in nodes:
+            link = node.select_one("a[href]")
+            href = link.get("href") if link else None
+            if not href:
+                continue
+            href = str(href)
+            if href.startswith("/"):
+                href = "https://news.naver.com" + href
+            # 실제 기사 URL 만 채택 (탭 메뉴·안내 링크 등 garbage 필터)
+            if not _is_article_url(href):
+                continue
+
             title: str | None = None
             for tsel in _TITLE_SELECTORS:
                 tnode = node.select_one(tsel)
@@ -55,14 +80,11 @@ def parse_ranking_html(html: str, limit: int = 10) -> list[RankingItem]:
                     break
             if not title:
                 title = node.get_text(" ", strip=True)[:120]
-            link = node.select_one("a[href]")
-            href = link.get("href") if link else None
-            if not href:
-                continue
-            href = str(href)
-            if href.startswith("/"):
-                href = "https://news.naver.com" + href
-            items.append(RankingItem(rank=idx + 1, title=title, url=href))
+
+            rank += 1
+            items.append(RankingItem(rank=rank, title=title, url=href))
+            if rank >= limit:
+                break
         if items:
             return items
     return []

@@ -248,13 +248,27 @@ export async function getRecentArticles(limit = 8): Promise<RankingArticleView[]
 // ===================================================================
 
 export async function getCompareMatrix(
-  mediaNames: string[] = ["조선일보", "중앙일보", "한겨레", "매일경제"],
+  normalizedNames: string[] = ["chosun", "joongang", "hani", "mk"],
   rows = 5
 ): Promise<CompareMatrix> {
   const sb = getSupabase();
 
+  // normalized_name -> 한글 name 변환 + 입력 순서 보존
+  const { data: mediaList, error: mediaErr } = await sb
+    .from("media_company")
+    .select("name, normalized_name")
+    .in("normalized_name", normalizedNames);
+  if (mediaErr) throw mediaErr;
+
+  const nameByNormalized = new Map(
+    (mediaList ?? []).map((m) => [m.normalized_name, m.name])
+  );
+  const orderedMedia = normalizedNames
+    .map((n) => nameByNormalized.get(n))
+    .filter((n): n is string => !!n);
+
   const perMedia = await Promise.all(
-    mediaNames.map(async (name) => {
+    orderedMedia.map(async (name) => {
       const { data, error } = await sb
         .from("article")
         .select("title, published_at, media_company!inner(name)")
@@ -275,7 +289,7 @@ export async function getCompareMatrix(
     out.push({ rank: i + 1, cells });
   }
 
-  return { media: mediaNames, rows: out };
+  return { media: orderedMedia, rows: out };
 }
 
 // ===================================================================

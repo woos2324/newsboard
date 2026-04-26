@@ -45,7 +45,7 @@ export default async function DashboardPage() {
   const [stats, issues, recent, alerts, sub, topComments, aiSummary] =
     await Promise.all([
       getOverviewStats(),
-      getIssues(3),
+      getIssues(4),
       getRecentArticles(8),
       getMissedAlerts("open", 5),
       getOurSubscriberSeries(7),
@@ -136,41 +136,42 @@ export default async function DashboardPage() {
             ))}
           </section>
 
-          <section className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
-            <div className="lg:col-span-2">
-              <div className="mb-3 flex items-end justify-between">
-                <div>
-                  <h2 className="section-title">주요 이슈</h2>
-                  <p className="caption">AI가 클러스터링한 오늘의 핵심 이슈</p>
-                </div>
-                <a
-                  href="/issue"
-                  className="text-xs font-medium text-primary-500 hover:underline"
-                >
-                  전체 이슈 →
-                </a>
-              </div>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                {issueCards.length === 0 ? (
-                  <p className="caption col-span-full">이슈 데이터가 없습니다.</p>
-                ) : (
-                  issueCards.map((i) => <IssueCard key={i.rank} {...i} />)
-                )}
-              </div>
-            </div>
-
+          <section className="mt-6">
             <AISummaryCard
               updatedAt={
                 aiSummary
                   ? formatDateTimeKr(aiSummary.summary_date + "T09:00:00+09:00")
                   : "-"
               }
+              title={aiSummary?.title}
               summary={
                 aiSummary?.content ??
                 "오늘의 AI 요약이 아직 생성되지 않았습니다."
               }
               bullets={aiSummary?.bullets ?? []}
             />
+          </section>
+
+          <section className="mt-6">
+            <div className="mb-3 flex items-end justify-between">
+              <div>
+                <h2 className="section-title">주요 이슈</h2>
+                <p className="caption">AI가 클러스터링한 오늘의 핵심 이슈</p>
+              </div>
+              <a
+                href="/issue"
+                className="text-xs font-medium text-primary-500 hover:underline"
+              >
+                전체 이슈 →
+              </a>
+            </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {issueCards.length === 0 ? (
+                <p className="caption col-span-full">이슈 데이터가 없습니다.</p>
+              ) : (
+                issueCards.map((i) => <IssueCard key={i.rank} {...i} />)
+              )}
+            </div>
           </section>
 
           <section className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">

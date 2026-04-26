@@ -32,3 +32,5 @@ venv/
 
 # PowerShell 리다이렉트 사고로 생긴 $null 파일
 $null
+
+.vercel

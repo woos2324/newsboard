@@ -69,7 +69,8 @@ export type AISummaryView = {
 };
 
 export type OverviewStats = {
-  today_articles: number;
+  today_articles: number;          // 자사 오늘 발행 수 (KST)
+  today_articles_delta_pct: number; // 전일 대비 %
   today_comments: number;
   today_subscriber_delta: number;
   total_subscribers: number;
@@ -174,30 +175,72 @@ export async function getIssues(limit = 20): Promise<IssueView[]> {
 // Dashboard stats
 // ===================================================================
 
+function todayKstStr(): string {
+  const now = new Date();
+  const kst = new Date(now.getTime() + 9 * 60 * 60_000);
+  const y = kst.getUTCFullYear();
+  const m = String(kst.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(kst.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function yesterdayKstStr(): string {
+  const now = new Date();
+  const kst = new Date(now.getTime() + 9 * 60 * 60_000 - 24 * 60 * 60_000);
+  const y = kst.getUTCFullYear();
+  const m = String(kst.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(kst.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 export async function getOverviewStats(): Promise<OverviewStats> {
   const sb = getSupabase();
   const since = startOfToday();
+  const todayKst = todayKstStr();
+  const yKst = yesterdayKstStr();
 
-  const [articlesRes, commentsRes, subRes] = await Promise.all([
+  const [pubRes, commentsRes, subRes] = await Promise.all([
     sb
-      .from("article")
-      .select("article_id", { count: "exact", head: true })
-      .gte("published_at", since),
+      .from("daily_publication_count")
+      .select(
+        "snapshot_date, publication_count, media_company!inner(is_our_company)"
+      )
+      .eq("media_company.is_our_company", true)
+      .eq("source", "naver")
+      .in("snapshot_date", [todayKst, yKst]),
     sb
       .from("comment_metric")
       .select("comment_count")
       .gte("measured_at", since),
     sb
       .from("subscriber_snapshot")
-      .select("subscriber_count, daily_delta, snapshot_date, media_company!inner(is_our_company)")
+      .select(
+        "subscriber_count, daily_delta, snapshot_date, media_company!inner(is_our_company)"
+      )
       .eq("media_company.is_our_company", true)
       .order("snapshot_date", { ascending: false })
       .limit(1),
   ]);
 
-  if (articlesRes.error) throw articlesRes.error;
+  if (pubRes.error) throw pubRes.error;
   if (commentsRes.error) throw commentsRes.error;
   if (subRes.error) throw subRes.error;
+
+  const todayRow = (pubRes.data ?? []).find(
+    (r) => r.snapshot_date === todayKst
+  );
+  const yRow = (pubRes.data ?? []).find((r) => r.snapshot_date === yKst);
+  const today_articles = todayRow?.publication_count ?? 0;
+  const yesterday_articles = yRow?.publication_count ?? 0;
+  const today_articles_delta_pct =
+    yesterday_articles > 0
+      ? Number(
+          (
+            ((today_articles - yesterday_articles) / yesterday_articles) *
+            100
+          ).toFixed(1)
+        )
+      : 0;
 
   const today_comments = (commentsRes.data ?? []).reduce(
     (acc, r) => acc + (r.comment_count ?? 0),
@@ -207,7 +250,8 @@ export async function getOverviewStats(): Promise<OverviewStats> {
   const latestSub = subRes.data?.[0];
 
   return {
-    today_articles: articlesRes.count ?? 0,
+    today_articles,
+    today_articles_delta_pct,
     today_comments,
     today_subscriber_delta: latestSub?.daily_delta ?? 0,
     total_subscribers: latestSub?.subscriber_count ?? 0,

@@ -207,6 +207,44 @@ export type Database = {
           },
         ]
       }
+      daily_publication_count: {
+        Row: {
+          created_at: string
+          daily_publication_count_id: number
+          media_company_id: number
+          publication_count: number
+          snapshot_date: string
+          source: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          daily_publication_count_id?: number
+          media_company_id: number
+          publication_count: number
+          snapshot_date: string
+          source?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          daily_publication_count_id?: number
+          media_company_id?: number
+          publication_count?: number
+          snapshot_date?: string
+          source?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_publication_count_media_company_id_fkey"
+            columns: ["media_company_id"]
+            isOneToOne: false
+            referencedRelation: "media_company"
+            referencedColumns: ["media_company_id"]
+          },
+        ]
+      }
       issue_cluster: {
         Row: {
           cluster_date: string

@@ -14,6 +14,12 @@ PRESS_HOME_URL_TEMPLATE = "https://media.naver.com/press/{naver_media_id}"
 SUBSCRIBER_API_URL_TEMPLATE = (
     "https://media.naver.com/press/{naver_media_id}/channel/followers.json"
 )
+# 매체별 일자별 발행 기사 목록 (페이지네이션 있음)
+PUBLICATION_LIST_URL_TEMPLATE = (
+    "https://news.naver.com/main/list.naver"
+    "?mode=LPOD&mid=sec&oid={naver_media_id}&listType=summary"
+    "&date={date}&page={page}"
+)
 
 
 @dataclass
@@ -92,6 +98,43 @@ def parse_ranking_html(html: str, limit: int = 10) -> list[RankingItem]:
         if items:
             return items
     return []
+
+
+def count_publication_links(html: str) -> tuple[int, int]:
+    """list.naver 페이지 HTML 파싱.
+    returns (count_on_this_page, max_page_seen_in_pagination).
+    count: 페이지 내 unique 기사 URL 수 (n.news.naver.com/mnews/article).
+    max_page: 페이지네이션에서 발견된 최대 정수, 없으면 1.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+
+    # 기사 URL — 사진 dt + 제목 dt 가 같은 href 라 set 으로 중복 제거
+    urls: set[str] = set()
+    for a in soup.select("a[href]"):
+        href = a.get("href") or ""
+        if "n.news.naver.com/mnews/article" in str(href) or (
+            "news.naver.com" in str(href) and "/mnews/article" in str(href)
+        ):
+            urls.add(str(href))
+    count = len(urls)
+
+    # 페이지네이션 — class 후보 다중 시도
+    max_page = 1
+    paging = (
+        soup.select_one(".paging")
+        or soup.select_one(".paginate")
+        or soup.select_one('[class*="paging"]')
+    )
+    if paging:
+        for el in paging.select("a, strong, em, span"):
+            text = el.get_text(strip=True)
+            try:
+                n = int(text)
+                if n > max_page:
+                    max_page = n
+            except ValueError:
+                continue
+    return count, max_page
 
 
 def extract_subscriber_count(data) -> int | None:

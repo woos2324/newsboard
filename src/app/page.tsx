@@ -55,19 +55,21 @@ export default async function DashboardPage() {
 
   const statCards = [
     {
-      label: "오늘 기사 수",
+      label: "자사 오늘 기사 (네이버)",
       value: stats.today_articles.toLocaleString(),
-      delta: 0,
+      delta: stats.today_articles_delta_pct,
+      deltaLabel: "전일 대비",
       icon: Flame,
     },
     {
-      label: "총 구독자",
+      label: "자사 총 구독자",
       value: stats.total_subscribers.toLocaleString(),
       delta: sub.deltaPct,
+      deltaLabel: "7일 대비",
       icon: Eye,
     },
     {
-      label: "일일 구독자 증감",
+      label: "자사 일일 구독자 증감",
       value:
         (stats.today_subscriber_delta >= 0 ? "+" : "") +
         stats.today_subscriber_delta.toLocaleString(),
@@ -75,7 +77,7 @@ export default async function DashboardPage() {
       icon: Users,
     },
     {
-      label: "댓글 반응",
+      label: "댓글 반응 (전체)",
       value: stats.today_comments.toLocaleString(),
       delta: 0,
       icon: MessageSquare,

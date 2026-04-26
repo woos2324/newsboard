@@ -1,0 +1,45 @@
+name: Collect Self Publications
+
+on:
+  schedule:
+    # 매시 5분 (UTC) — 매체별 인기 랭킹 cron(매시 정각)과 5분 간격 유지
+    - cron: "5 * * * *"
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "특정 날짜 (YYYYMMDD, 비우면 오늘+어제 KST)"
+        required: false
+        default: ""
+      dry_run:
+        description: "DB 적재 생략 (true/false)"
+        required: false
+        default: "false"
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_LEGACY_ANON_KEY: ${{ secrets.SUPABASE_LEGACY_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install deps
+        run: pip install -r requirements.txt
+      - name: Collect publications
+        run: |
+          DATE_ARG="${{ github.event.inputs.date }}"
+          DRY_FLAG=""
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            DRY_FLAG="--dry-run"
+          fi
+          if [ -n "$DATE_ARG" ]; then
+            python -m scripts.collect_publications --date "$DATE_ARG" $DRY_FLAG
+          else
+            python -m scripts.collect_publications $DRY_FLAG
+          fi

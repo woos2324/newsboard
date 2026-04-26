@@ -6,55 +6,69 @@
 
 ---
 
-## 현재 진행 상태 (2026-04-25)
+## 현재 진행 상태 (2026-04-26)
 
 새 세션 시작 시 가장 먼저 확인할 진행 현황 체크포인트.
 
-### 아키텍처 결정
-- **단일 Vercel 프로젝트** (프론트 + Python API 공존)
-- **AI 제공자**: Vercel AI Gateway (`anthropic/claude-opus-4-6` 기본 모델)
+### 핵심 아키텍처
+- **단일 Vercel 프로젝트** (프론트 + Python API 공존, production: https://newsboard-two.vercel.app)
+- **자사 매체**: **세계일보** (`normalized_name=segye`, `naver_media_id=022`, `is_our_company=TRUE`)
+- **AI 백엔드**: OpenAI 직접 (`AI_BASE_URL=https://api.openai.com/v1`, 모델 `gpt-4o-mini` / `text-embedding-3-small`). `AI_GATEWAY_API_KEY` 우선이지만 사용자는 OpenAI 직접 채택.
 - **DB**: Supabase (project_ref: `zwgqzutknvbmronqkkzw`)
-- **백엔드**: Python FastAPI (Vercel Fluid Compute, Python 3.13)
-- **프론트**: Next.js 15 App Router + Tailwind + lucide-react
+- **백엔드 Python**: FastAPI (Vercel Fluid Compute) — AI 생성 엔드포인트 전용 (`/api/report/daily`, `/api/report/issue/{id}`)
+- **프론트**: Next.js 15 App Router + Tailwind + lucide-react. `dev` 스크립트 `next dev --turbopack` (Windows webpack 행 회피)
 - **데이터 경로 (하이브리드)**:
-  - 단순 조회(리스트·상세·집계)는 **Next.js Server Component → [src/lib/queries.ts](src/lib/queries.ts) → Supabase JS 직접**
-  - AI 생성·무거운 파이프라인은 **FastAPI (`/api/*`) 경유**
+  - 단순 조회(리스트·상세·집계)는 Next.js Server Component → [src/lib/queries.ts](src/lib/queries.ts) → Supabase JS 직접
+  - AI 생성·무거운 파이프라인은 FastAPI 경유 OR GitHub Actions 의 Python scripts 가 직접 Supabase 적재
+
+### 자동화 파이프라인 (GitHub Actions, 5종)
+| 워크플로 | 트리거 | 역할 |
+|---|---|---|
+| [cron-ranking.yml](.github/workflows/cron-ranking.yml) | 매시 정각 (UTC) | 50개 매체 × 5건 인기 랭킹 → article + snapshot |
+| [cron-cluster.yml](.github/workflows/cron-cluster.yml) | **ranking 성공 직후 (workflow_run)** + 6시간 schedule fallback | 미할당 article 임베딩 클러스터링 → issue_cluster |
+| [cron-publications.yml](.github/workflows/cron-publications.yml) | 매시 5분 (UTC) | 자사 발행 기사 카운트 (오늘+어제 KST) → daily_publication_count |
+| [cron-subscribers.yml](.github/workflows/cron-subscribers.yml) | UTC 23:00 (KST 08:00) | followers.json API → subscriber_snapshot |
+| [cron-daily-briefing.yml](.github/workflows/cron-daily-briefing.yml) | UTC 15:00 (KST 00:00) | 오늘 클러스터 → AI 일간 브리핑 → ai_summary |
+
+### DB 스키마 (마이그레이션 2건)
+- `0001_init` — 11개 코어 테이블 (media_company, article, issue_cluster 등)
+- `0002_daily_publication_count` — 자사 일일 네이버 발행 수 카운트 테이블
+- 매체 51개 (시드 9 + 사용자 추가 42, naver_media_id 보유 47개)
 
 ### 완료된 작업
-- [x] Supabase 스키마 적용 (`0001_init` 마이그레이션, 11개 테이블)
-- [x] 시드 데이터 주입 (언론사 9, 기사 8, 클러스터 3, 관계·랭킹·구독자·댓글·알림·AI요약 샘플)
-- [x] `.env.local` 생성 — URL + publishable key 자동 주입, `SUPABASE_LEGACY_ANON_KEY` 백업 저장
-- [x] [src/lib/database.types.ts](src/lib/database.types.ts) — Supabase MCP로 생성한 전체 스키마 타입
-- [x] 의존성 설치 (pip: `httpx>=0.26,<0.28` 로 완화해야 supabase 2.10.0 호환 / npm: `@supabase/supabase-js`)
-- [x] [src/lib/supabase.ts](src/lib/supabase.ts) — 서버용 싱글톤 클라이언트 (service_role 우선, anon 폴백)
-- [x] [src/lib/queries.ts](src/lib/queries.ts) — 도메인별 타입 고정 쿼리 11개
-- [x] 프론트 7개 페이지 실DB 연결 (`/`, `/issue`, `/compare`, `/gap`, `/analytics/subscribers`, `/analytics/comments`, `/report`)
-- [x] **A) AI 요약 파이프라인** — [api/lib/ai.py](api/lib/ai.py) (JSON 구조 출력), [api/routes/report.py](api/routes/report.py) (클러스터 기반 + upsert), [src/components/GenerateReportButton.tsx](src/components/GenerateReportButton.tsx), `POST /api/report/daily`, `POST /api/report/issue/{cluster_id}`
-- [x] **B) 이슈 상세 페이지** [src/app/issue/\[cluster_id\]/page.tsx](src/app/issue/[cluster_id]/page.tsx) — 클러스터 + 기사 목록 + AI 이슈 요약 카드, 리스트에서 `<Link>` 연결
-- [x] **C) 시드 확장 (경쟁사 구독자)** — [supabase/seed.sql](supabase/seed.sql) 에 8개 경쟁사 × 7일 `subscriber_snapshot` (`source='naver'`) 추가. `/analytics/subscribers` 경쟁사 블록 실데이터로 채워짐 (최신 481.2K~76.2K, 7일 delta -0.3~+3.2%).
-- [x] **D-(a) 데이터 수집 스크립트** — [scripts/](scripts/) 디렉토리 신설. `scripts/lib/{db,http,naver}.py` 공통, [scripts/collect_subscribers.py](scripts/collect_subscribers.py) (네이버 press 페이지 → `subscriber_snapshot` upsert + daily/seven_day delta 자동 계산), [scripts/collect_ranking.py](scripts/collect_ranking.py) (네이버 매체별 인기 랭킹 → `article` upsert + `ranking_news_snapshot/item` 적재). `--media`, `--limit`, `--dry-run` 플래그. requirements.txt 에 `beautifulsoup4==4.12.3` 추가.
-- [x] **D-(b) AI 클러스터링 파이프라인** — [api/lib/ai.py](api/lib/ai.py) 에 `embed()` (Vercel AI Gateway `/v1/embeddings`, 기본 `openai/text-embedding-3-small`) + `generate_cluster_metadata()` 추가. [scripts/lib/cluster.py](scripts/lib/cluster.py) 에 cosine·greedy 클러스터링·centroid running mean·representative 선정. [scripts/cluster_articles.py](scripts/cluster_articles.py) 에서 미할당 기사(`issue_cluster_article` 에 없는)만 뽑아 임베딩 → 그리디 클러스터 → AI 메타(title/summary/keywords) → `issue_cluster` + `issue_cluster_article` 적재. `--hours`, `--threshold`, `--min-size`, `--dry-run` 플래그.
-- [x] **D-(c) GitHub Actions 자동화** — Vercel Cron 대신 **GitHub Actions** 채택 (Hobby 무료 티어가 일 1회 제한이라 우회). [.github/workflows/cron-ranking.yml](.github/workflows/cron-ranking.yml) 매시 정각 / [.github/workflows/cron-cluster.yml](.github/workflows/cron-cluster.yml) 6시간마다 30분 / [.github/workflows/cron-daily-briefing.yml](.github/workflows/cron-daily-briefing.yml) UTC 15:00 (=KST 00:00). 각 워크플로 `workflow_dispatch` 입력으로 수동 트리거 + 인자 오버라이드 지원. [scripts/generate_daily_briefing.py](scripts/generate_daily_briefing.py) 신규 — FastAPI 의존 없이 standalone 실행되는 일간 브리핑 CLI (cron 진입점).
+- [x] **A) AI 요약 파이프라인** — [api/lib/ai.py](api/lib/ai.py) JSON 구조 출력, [api/routes/report.py](api/routes/report.py) 클러스터 기반 upsert, `POST /api/report/daily`, `POST /api/report/issue/{cluster_id}`, [src/components/GenerateReportButton.tsx](src/components/GenerateReportButton.tsx)
+- [x] **B) 이슈 상세 페이지** [src/app/issue/\[cluster_id\]/page.tsx](src/app/issue/[cluster_id]/page.tsx)
+- [x] **C) 시드 확장** — 경쟁사 구독자 스냅샷 7일치 (라이브 데이터로 대체됨)
+- [x] **D-(a) 데이터 수집 스크립트** — `scripts/collect_subscribers.py` (followers.json JSON API 사용), `scripts/collect_ranking.py` (li.as_thumb selector). `published_at = collected_at` fallback 패치 + `ignore_duplicates=True`.
+- [x] **D-(b) AI 클러스터링 파이프라인** — [scripts/cluster_articles.py](scripts/cluster_articles.py), 그리디+centroid running mean, [scripts/lib/cluster.py](scripts/lib/cluster.py)
+- [x] **D-(c) GitHub Actions 자동화** — 5개 cron 워크플로, 모두 검증 완료
+- [x] **자사 매체 = 세계일보 이전** — `is_our_company` 플래그 newsboard → segye, 6일치 backfill
+- [x] **자사 발행 수 측정** — list.naver 페이지 페이지네이션 파싱, daily_publication_count 적재
+- [x] **A) 50매체 UI 대응** — `/compare` 동적 매체 선택 (searchParams + 프리셋), `/analytics/subscribers` TOP 15 + "+N개 더" 토글
+- [x] **B) Vercel 배포** — production https://newsboard-two.vercel.app, env 7개 설정, `vercel.json` runtime 키 제거 (Python 자동 감지)
+- [x] **C) cron chain** — cron-cluster 가 cron-ranking 성공 직후 `workflow_run` 으로 자동 발동
+- [x] **대시보드 레이아웃 개선** — AI 일간 요약 풀 폭 가로 + 주요 이슈 4 카드 grid
 
-### ⚠️ 사용자가 직접 채워야 할 env
-- `SUPABASE_SERVICE_ROLE_KEY` — Supabase 대시보드 → Settings → API → `service_role` (MCP로 못 가져옴, 옵션)
-- AI 백엔드는 다음 중 **하나** 채우면 동작:
-  - `AI_GATEWAY_API_KEY` (Vercel AI Gateway 사용 시), 또는
-  - `OPENAI_API_KEY` + `AI_BASE_URL=https://api.openai.com/v1` + `DEFAULT_AI_MODEL=gpt-4o-mini` + `DEFAULT_EMBED_MODEL=text-embedding-3-small` (OpenAI 직접 호출 시) — **현재 사용자는 이 옵션으로 동작 확인됨**
+### ⚠️ 환경변수 (라이브 / .env.local 양쪽)
+**Vercel Production env (이미 설정됨)**:
+- `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`(publishable), `SUPABASE_LEGACY_ANON_KEY`(JWT, Python 용)
+- `AI_BASE_URL=https://api.openai.com/v1`, `OPENAI_API_KEY`, `DEFAULT_AI_MODEL=gpt-4o-mini`, `DEFAULT_EMBED_MODEL=text-embedding-3-small`
 
-### 재개 지점 (2026-04-25 세션 종료)
-이번 세션에서 D-(b) 까지 완료. 마지막 검증 상태:
-- `python -m scripts.cluster_articles --dry-run` → DB 연결 OK, 미할당 4건 발견, 임베딩 호출 OK 까지 확인
-- 미할당 기사들의 실제 클러스터링/메타 생성 + DB 적재 결과는 **아직 미검증** (dry-run 만 통과)
-- 이전 세션에서 권장한 다음 액션:
-  1. **(권장) 옵션 1**: 실 적재 검증 — `python -m scripts.cluster_articles` (dry-run 없이) 실행 → `npm run dev` 후 `http://localhost:3000/issue` 에서 새 클러스터 카드 확인
-  2. **(메인) 옵션 2 = D-(c)**: Vercel Cron 자동화 코드 작성
-  3. **(보너스) 옵션 3**: 시드 다양화 (랭킹/낙종 추가)
+**GitHub Secrets (이미 설정됨, 동일)**: 위 7개 + 옵션 `SUPABASE_SERVICE_ROLE_KEY`, `AI_GATEWAY_API_KEY`
+
+**로컬 .env.local 만 있는 것** (gitignore): 위 값 + 옵션 1 (Vercel AI Gateway) 주석 블록
+
+### 재개 지점 (2026-04-26 세션 종료)
+- C) cron chain 완료 + 푸시 (`62dcacb`). 다음 매시 정각 ranking 직후 cluster 자동 발동 검증 대기 중.
+- 대시보드 production 에서 "자사 오늘 기사 (네이버) + 전일 대비 delta" 정상 동작 확인됨.
+- 디자인 미리보기 파일 [_design-preview.html](_design-preview.html) — gitignore 됨, 다른 PC에선 없음.
 
 ### 다음 작업 로드맵
-- **(보너스) 시드 다양화** — `ranking_news_snapshot/item` 를 8개 매체 × 일 1회로 확장 → `/compare` 풍성, `missed_issue_alert` 2~3건 추가해 priority 다양화.
-- **(보너스) Vercel 배포** — 프론트엔드를 Vercel 에 배포. 데이터 파이프라인은 GitHub Actions 가 담당하니 배포는 단순 정적/SSR 호스팅 목적.
-- **(미래) 셀렉터 견고화** — 첫 cron 실행 후 [scripts/lib/naver.py](scripts/lib/naver.py) 의 selector 가 실제 작동하는지 GitHub Actions 로그로 확인 후 갱신.
+- **D) 스포츠 매체 0 진단** (5분) — 스포츠조선/스포티비뉴스의 followers.json 응답 키 확인. cron-subscribers workflow_dispatch 에 `media: sportschosun spotvnews` + `debug: true`.
+- **P3) 댓글 반응 수집 파이프라인** (30분~) — 자사/전체 분리. 네이버 commonComment/listCount API 활용 가능.
+- **(보너스) 셀렉터 견고화** — Naver UI 변경 대비 [scripts/lib/naver.py](scripts/lib/naver.py) 다중 selector 우선순위 확장.
+- **(보너스) GitHub auto-deploy 연결** — Settings → Git 에서 Vercel ↔ GitHub 연결, push 자동 배포.
+- **(미래) 본문 임베딩** — `article.body` 채워지면 클러스터링 입력을 `title + body[:500]` 으로 확장.
 
 ### 판단 사항 (D-(a) 시점)
 - **네이버 셀렉터 다중 시도**: [scripts/lib/naver.py](scripts/lib/naver.py) 의 `_RANKING_LIST_SELECTORS`, `_TITLE_SELECTORS`, `_SUBSCRIBER_PATTERNS` 는 우선순위 리스트로 실시간 검증 안 된 상태. 첫 실행 시 `--dry-run` 으로 매체별 파싱 결과 확인 후 셀렉터 갱신.
@@ -94,13 +108,124 @@
 - **confidence_score**: 클러스터 내 페어 평균 유사도 (single = 1.0).
 - **비용 가드**: `--dry-run` 은 AI 메타 생성(chat) 도 skip — 임베딩 호출 비용만 발생. 실 적재는 일반 실행에서만.
 
+### 판단 사항 (자사 매체 = 세계일보)
+- 시드는 가상 매체 "뉴스보드" 가 자사로 들어가지만, 실 운영 시점에 `is_our_company` 플래그를 segye(세계일보) 로 옮김. 시드와 라이브 DB 의 자사 매체가 다르므로 새 환경 셋업 시 동일 UPDATE 필요 (`UPDATE media_company SET is_our_company=TRUE WHERE normalized_name='segye'; UPDATE ... =FALSE WHERE normalized_name='newsboard';`).
+- 세계일보 7일치 subscriber backfill 됨 (Naver 라운드값 3,000,000 으로 고정, 차트 평평한 라인). Naver 가 큰 매체는 round 단위로만 노출하는 한계.
+- 시드의 `missed_issue_alert.target_media_company_id` 도 세계일보로 변경됨.
+
+### 판단 사항 (daily_publication_count — 자사 발행 수)
+- "오늘 기사 수" 카드는 자사(세계일보) 가 네이버에 송출한 모든 기사 수. cron-ranking 의 인기 5건 만으로는 부족해서 별도 테이블 + 별도 cron.
+- 데이터 출처: `https://news.naver.com/main/list.naver?mode=LPOD&mid=sec&oid={id}&listType=summary&date=YYYYMMDD&page=N` (옛 list URL, HTML 정적 렌더)
+- 카운트 방법: 페이지 1 fetch → max_page 추출 → 2..N 병렬 fetch → `n.news.naver.com/mnews/article` 링크 unique URL 합산.
+- 별도 테이블로 둔 이유: 자사 article 을 모두 article 테이블에 적재하면 클러스터링이 자사 데이터로 편향됨. count 만 저장이 깔끔.
+- KST 기준 today/yesterday 둘 다 매시간 갱신 (오늘은 점점 늘고 어제는 안정화).
+
+### 판단 사항 (workflow_run cron chain)
+- ranking 성공 → cluster 자동 발동을 GitHub Actions 의 `workflow_run` trigger 로 구현.
+- `if` 가드: workflow_run 트리거면 `conclusion=='success'` 일 때만 실행, schedule/manual 은 항상 실행.
+- 6시간 schedule fallback 도 유지 — ranking 모두 실패해도 cluster 단독 발동 보장.
+- ⚠ **`workflow_dispatch` 로 트리거된 ranking 은 chain 자동 발동 안 될 수 있음** (GitHub 제약). 자연스러운 schedule 실행에서만 안정적으로 chain.
+- daily-briefing / publications / subscribers 는 chain 안 함 — 1일 1회 또는 자사 통계라 ranking 과 무관.
+
+### 판단 사항 (Vercel 배포)
+- **`vercel.json` 의 `functions.runtime` 키 제거** — Vercel 의 새 표준에서 community runtime 모듈 식별자만 받음. 공식 Python 은 자동 감지되므로 키 자체 빼야 함. `maxDuration` 만 유지.
+- Python 3.13 명시 안 하면 Vercel 이 3.12 사용. 코드가 3.13 전용 기능 안 써서 OK. 명시하려면 `.python-version` 파일에 `3.13` 추가.
+- production URL: `https://newsboard-two.vercel.app` (Vercel 이 `newsboard` 가 다른 곳 reserved 라 `newsboard-two` 로 alias 부여)
+- GitHub auto-deploy 미연결 — push 후 매번 `vercel deploy --prod` 수동 호출. 연결하려면 Settings → Git.
+
+### 판단 사항 (대시보드 레이아웃)
+- AI 일간 요약 카드: 우측 세로 박스 → 상단 풀 폭 가로 박스로 이전. 헤더 한 줄에 라벨+title+updated+button 다 배치. bullets 는 세로 stack 유지 (가독성).
+- 주요 이슈 카드: 3개 → **4개** (`md:grid-cols-2 xl:grid-cols-4`). `getIssues(3) → getIssues(4)`.
+- StatCard 라벨 명시: "오늘 기사 수" → "자사 오늘 기사 (네이버)", "총 구독자" → "자사 총 구독자", "댓글 반응" → "댓글 반응 (전체)" (자사 vs 전체 혼동 회피).
+- 디자인 미리보기 도구: [_design-preview.html](_design-preview.html) (gitignore, 로컬 전용). Tailwind CDN + emoji icons 로 레이아웃 픽셀 미리보기.
+
+### 판단 사항 (네이버 selector — 페이지별로 다름)
+- **인기 랭킹 페이지** (`media.naver.com/press/{id}/ranking?type=popular`): `li.as_thumb > a` + `strong.list_title`. 화이트리스트 URL `n.news.naver.com/mnews/article` 로 garbage(탭 메뉴) 자동 필터.
+- **list.naver 발행 페이지** (`news.naver.com/main/list.naver`): `<li><dl><dt class="photo">...</dt><dt><a>제목</a></dt><dd>요약 ... <span class="date">5시간전</span></dd></dl></li>`. 카운트는 unique 기사 URL set 으로.
+- **followers.json**: JSON API. `extract_subscriber_count` 가 다양한 키 시도 (`totalCount`, `total`, `count`, `subscriberCount` 등) + 중첩 (`result.*`, `data.*`) 자동 탐색.
+- 셀렉터 추가/패치 시 [scripts/lib/naver.py](scripts/lib/naver.py) 의 `_*_SELECTORS` 우선순위 리스트 맨 앞에 새 셀렉터 추가.
+
 ### 판단 사항 (의식해야 할 디자인 결정)
 - **댓글 sentiment**: DB에 sentiment 컬럼 없음 → `engagement_score` 휴리스틱으로 배지 ("매우 활발 ≥80 / 활발 ≥60 / 보통"). 실 NLP 붙이려면 스키마 + AI 파이프라인 필요.
-- **`/compare` 매체 목록**: 하드코딩 4개 (조선/중앙/한겨레/매일경제). 관리자 UI or 쿼리 파라미터 가변화 필요 시 수정.
 - **랭킹 변동 지표**: 어제 스냅샷 diff 로직 미구현 → `change: null` (평행). `ranking_news_snapshot` 2회/일 이상 쌓이면 추가.
 - **Gap priority 매핑**: `priority_score ≥80` high / `≥50` medium / else low.
 - **AI JSON 파싱**: 모델이 markdown 펜스나 pre-text로 감싸는 경우 대비 regex 추출 fallback 탑재.
 - **AI 요약 upsert 키**: `(summary_type, summary_date [, issue_cluster_id])` 조합으로 UPDATE or INSERT.
+
+---
+
+## 다른 PC 에서 작업 이어가는 방법
+
+이 프로젝트는 **클라우드 자원** (Supabase, Vercel, GitHub Actions) 에 의존하므로, 다른 PC 에서 풀 셋업 가능.
+
+### 필수: 옮겨야 할 것 (현재 PC 에서 빠져나가기 전)
+1. **`.env.local` 파일** — gitignore 라 git 에 없음. **유일한 sensitive secret 보관소**.
+   - 안전한 방법: 1Password/Bitwarden 같은 secret manager 에 통째로 저장 / 또는 본인에게 이메일 / 또는 USB
+   - 절대 방법: `cat d:\newsboard\.env.local` 결과를 채팅창/Slack 등 평문 노출 X (이전에 OpenAI 키 노출되어 rotate 했던 경험 참고)
+   - 또는 새 PC 에서 다시 발급:
+     - Supabase URL/anon: 누구나 볼 수 있는 정보 (대시보드에서 복사 가능)
+     - SUPABASE_LEGACY_ANON_KEY: Supabase 대시보드 → API → "Legacy API keys" → anon
+     - OPENAI_API_KEY: OpenAI 콘솔에서 새 키 발급 (구 키는 폐기)
+     - 나머지 상수 (AI_BASE_URL, DEFAULT_AI_MODEL 등) 는 [.env.local.example](.env.local.example) 보고 그대로
+
+### 새 PC 셋업 절차
+
+```powershell
+# 1) 기본 도구 설치 (없으면)
+#    - Node.js LTS (https://nodejs.org)
+#    - Python 3.13 (https://python.org)
+#    - Git for Windows (https://git-scm.com)
+#    - Vercel CLI (선택, deploy 할 때만): npm i -g vercel
+#    - VSCode (선택)
+
+# 2) 프로젝트 clone
+git clone https://github.com/woos2324/newsboard.git
+cd newsboard
+
+# 3) Windows 면 Git safe.directory 등록 (NTFS dubious ownership 회피)
+git config --global --add safe.directory $(pwd)
+
+# 4) 의존성 설치
+npm install
+pip install -r requirements.txt
+
+# 5) .env.local 만들기 (이전 PC 에서 가져온 값 또는 새로 채움)
+cp .env.local.example .env.local
+# → 편집기로 .env.local 열어서 값 채움
+
+# 6) 동작 검증
+python -m scripts.collect_publications --dry-run     # DB + AI 호출 둘 다 확인
+npm run dev                                            # http://localhost:3001
+
+# 7) (선택) Vercel CLI 연결 — 새 PC 에서 배포하려면
+vercel login                                          # 브라우저 OAuth
+vercel link --yes                                     # 기존 woos2324/newsboard 프로젝트 link
+# .vercel/project.json 자동 생성
+```
+
+### Claude Code 에 작업 이어가달라고 할 때
+
+새 세션에서 이렇게 한 줄만 보내면 충분:
+
+```
+d:\newsboard 작업 이어가자. CLAUDE.md "현재 진행 상태" + "재개 지점"
+확인하고 남은 로드맵 (D 스포츠 0 진단 / P3 댓글 수집) 중 추천 것부터.
+```
+
+Claude Code 가 자동으로:
+- CLAUDE.md 읽어서 진행 상태 파악
+- 마이그레이션·시드·env 다 적용된 라이브 DB 와 동기화 가정
+- 메모리 (`~/.claude/projects/d--newsboard/memory/`) 의 마일스톤 보고 패턴, 판단 사항 누적 컨벤션 적용
+
+### 메모리 폴더 (옵션 — 새 PC 면 비어있음)
+
+이전 PC 의 `C:\Users\<user>\.claude\projects\d--newsboard\memory\` 에 3개 파일이 있었어:
+- `feedback_milestone_reporting.md` — 마일스톤 단위 보고 후 사용자 승인 대기
+- `feedback_judgment_calls.md` — 임의 결정은 "판단 사항"에 누적
+- `reference_state_source.md` — 진행 상태 원천은 CLAUDE.md
+- `MEMORY.md` — 인덱스
+
+새 PC 에서 이대로 작업하려면 폴더 통째로 복사하거나, 빠진대로 진행하고 새 세션에서 Claude Code 가 알아서 같은 패턴 적용 (CLAUDE.md 가 그 가이드 자체임).
 
 ---
 

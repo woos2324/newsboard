@@ -1,9 +1,13 @@
 name: Cluster Articles
 
 on:
+  # ① ranking 워크플로 성공 직후 자동 발동 (chain) — 매시간 fresh 클러스터링
+  workflow_run:
+    workflows: ["Collect Naver Ranking"]
+    types: [completed]
+  # ② 6시간마다 fallback (ranking 실패 / chain 누락 대비)
+  #    UTC 00:30 / 06:30 / 12:30 / 18:30 → KST 09:30 / 15:30 / 21:30 / 03:30
   schedule:
-    # 6시간마다 30분 (수집 직후 마진).
-    # UTC 00:30 / 06:30 / 12:30 / 18:30 → KST 09:30 / 15:30 / 21:30 / 03:30
     - cron: "30 */6 * * *"
   workflow_dispatch:
     inputs:
@@ -24,6 +28,11 @@ jobs:
   cluster:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # workflow_run 으로 트리거된 경우 ranking 이 실제로 성공했을 때만 실행 (실패 시 skip).
+    # schedule / workflow_dispatch 로 트리거된 경우는 항상 실행.
+    if: >
+      ${{ github.event_name != 'workflow_run' ||
+          github.event.workflow_run.conclusion == 'success' }}
     env:
       NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
       SUPABASE_LEGACY_ANON_KEY: ${{ secrets.SUPABASE_LEGACY_ANON_KEY }}

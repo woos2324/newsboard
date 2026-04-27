@@ -2,8 +2,8 @@ name: Collect Naver Ranking
 
 on:
   schedule:
-    # 매시 정각 (UTC 기준, KST 매시 정각과 동일)
-    - cron: "0 * * * *"
+    # 매시 7분 — round 분(:00/:05) 회피로 GitHub Actions schedule 지연/스킵 최소화
+    - cron: "7 * * * *"
   workflow_dispatch:
     inputs:
       media:

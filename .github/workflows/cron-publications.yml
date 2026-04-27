@@ -2,8 +2,8 @@ name: Collect Self Publications
 
 on:
   schedule:
-    # 매시 5분 (UTC) — 매체별 인기 랭킹 cron(매시 정각)과 5분 간격 유지
-    - cron: "5 * * * *"
+    # 30분마다 (:17, :47) — round 분 회피 + 자사 발행 수 누락 보완 강화
+    - cron: "17,47 * * * *"
   workflow_dispatch:
     inputs:
       date:

@@ -20,6 +20,8 @@ type Props = {
   ownDeltaPct: number;
 };
 
+type ChartMetric = "count" | "delta";
+
 type ChartPoint = {
   x: number;
   y: number;
@@ -101,6 +103,7 @@ export function SubscriberComparisonExplorer({
   ownDeltaPct,
 }: Props) {
   const [showAll, setShowAll] = useState(false);
+  const [chartMetric, setChartMetric] = useState<ChartMetric>("count");
   const [selectedMedia, setSelectedMedia] = useState(() =>
     buildInitialSelectedMedia(competitors)
   );
@@ -122,9 +125,20 @@ export function SubscriberComparisonExplorer({
     competitors[0]?.trendSnapshots.map((snapshot) => snapshot.snapshotDate) ??
     [];
 
+  const chartMetricLabel =
+    chartMetric === "count" ? "구독자 수" : "증감수";
+  const chartMetricDescription =
+    chartMetric === "count"
+      ? "선택한 매체의 최근 구독자 수"
+      : "선택한 매체의 최근 일별 증감수";
+
   const chartValues = selectedRows.flatMap((row) =>
     row.trendSnapshots
-      .map((snapshot) => snapshot.dailyDelta)
+      .map((snapshot) =>
+        chartMetric === "count"
+          ? snapshot.subscriberCount
+          : snapshot.dailyDelta
+      )
       .filter((value): value is number => value != null)
   );
 
@@ -148,14 +162,17 @@ export function SubscriberComparisonExplorer({
     chartDates.length > 1 ? plotWidth / (chartDates.length - 1) : plotWidth;
 
   const zeroLineY =
-    yMin <= 0 && yMax >= 0
+    chartMetric === "delta" && yMin <= 0 && yMax >= 0
       ? plotTop + ((yMax - 0) / yRange) * plotHeight
       : null;
 
   const series = selectedRows.map((row, idx) => {
     const color = CHART_COLORS[idx % CHART_COLORS.length];
     const points = row.trendSnapshots.map((snapshot, pointIndex) => {
-      const value = snapshot.dailyDelta;
+      const value =
+        chartMetric === "count"
+          ? snapshot.subscriberCount
+          : snapshot.dailyDelta;
       const x = plotLeft + pointIndex * xStep;
       const y =
         value == null
@@ -198,17 +215,48 @@ export function SubscriberComparisonExplorer({
       <section className="card">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <h2 className="section-title">구독자 변화</h2>
-            <p className="caption mt-0.5">선택한 매체의 최근 일별 증감수</p>
+            <h2 className="section-title">구독자 추이</h2>
+            <p className="caption mt-0.5">{chartMetricDescription}</p>
           </div>
-          <div className="text-right">
-            <p className="text-xl font-semibold tracking-tight">
-              {selectedRows.length}개 선택
-            </p>
-            <p className="caption mt-0.5">
-              자사 7일 변화 {ownDeltaPct >= 0 ? "+" : ""}
-              {ownDeltaPct}% · 총 {ownTotal}
-            </p>
+          <div className="flex flex-col items-end gap-3">
+            <div
+              className="inline-flex rounded-lg border border-border bg-slate-50 p-1"
+              role="tablist"
+              aria-label="구독자 추이 보기 방식"
+            >
+              {([
+                { id: "count", label: "구독자 수" },
+                { id: "delta", label: "증감수" },
+              ] as const).map((option) => {
+                const isActive = chartMetric === option.id;
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={isActive}
+                    onClick={() => setChartMetric(option.id)}
+                    className={`min-w-[88px] rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                      isActive
+                        ? "bg-white text-foreground shadow-sm"
+                        : "text-muted hover:text-foreground"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="text-right">
+              <p className="text-xl font-semibold tracking-tight">
+                {selectedRows.length}개 선택
+              </p>
+              <p className="caption mt-0.5">
+                {chartMetric === "count"
+                  ? `자사 최신 구독자 ${ownTotal}`
+                  : `자사 7일 변화 ${ownDeltaPct >= 0 ? "+" : ""}${ownDeltaPct}% · 총 ${ownTotal}`}
+              </p>
+            </div>
           </div>
         </div>
 
@@ -240,7 +288,7 @@ export function SubscriberComparisonExplorer({
                 viewBox={`0 0 ${chartWidth} ${chartHeight}`}
                 className="aspect-[16/9] w-full"
                 preserveAspectRatio="xMidYMid meet"
-                aria-label="선택한 매체의 구독자 일별 증감수 추이"
+                aria-label={`선택한 매체의 ${chartMetricLabel} 추이`}
               >
                 {yTicks.map((tick) => {
                   const y = plotTop + ((yMax - tick) / yRange) * plotHeight;

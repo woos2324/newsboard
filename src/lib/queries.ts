@@ -57,7 +57,8 @@ export type CompetitorSubscriberView = {
   currentRank: number;
   weekAgoRank: number | null;
   rankDelta: number | null;
-  snapshots: CompetitorSubscriberSnapshotView[];
+  tableSnapshots: CompetitorSubscriberSnapshotView[];
+  trendSnapshots: CompetitorSubscriberSnapshotView[];
   isPinned: boolean;
 };
 
@@ -129,6 +130,8 @@ export type IssueDetail = {
 
 const KST_OFFSET_MIN = 9 * 60;
 const PINNED_SUBSCRIBER_MEDIA = new Set(["세계일보"]);
+const SUBSCRIBER_TABLE_DATE_COUNT = 3;
+const SUBSCRIBER_TREND_DAY_COUNT = 15;
 
 function startOfToday(): string {
   const now = new Date();
@@ -542,8 +545,11 @@ export async function getCompetitorSubscribers(): Promise<CompetitorSubscriberVi
     new Set(filtered.map((row) => row.snapshotDate))
   ).sort((a, b) => b.localeCompare(a));
 
-  const recentDates = snapshotDates.slice(0, 3);
-  if (recentDates.length === 0) return [];
+  const tableDates = snapshotDates.slice(0, SUBSCRIBER_TABLE_DATE_COUNT);
+  const trendDates = snapshotDates
+    .slice(0, SUBSCRIBER_TREND_DAY_COUNT)
+    .reverse();
+  if (tableDates.length === 0) return [];
 
   const weekAgoDate = snapshotDates[6] ?? snapshotDates.at(-1) ?? null;
 
@@ -564,7 +570,7 @@ export async function getCompetitorSubscribers(): Promise<CompetitorSubscriberVi
   const latestRanked = Array.from(rowsByMedia.entries())
     .map(([media, snapshots]) => ({
       media,
-      value: snapshots.get(recentDates[0])?.subscriberCount ?? 0,
+      value: snapshots.get(tableDates[0])?.subscriberCount ?? 0,
     }))
     .sort((a, b) => b.value - a.value);
 
@@ -590,7 +596,7 @@ export async function getCompetitorSubscribers(): Promise<CompetitorSubscriberVi
 
   return Array.from(rowsByMedia.entries())
     .map(([media, snapshots]) => {
-      const latestValue = snapshots.get(recentDates[0])?.subscriberCount ?? 0;
+      const latestValue = snapshots.get(tableDates[0])?.subscriberCount ?? 0;
       const currentRank = currentRankByMedia.get(media) ?? 0;
       const weekAgoRank = weekAgoRankByMedia.get(media) ?? null;
       return {
@@ -604,7 +610,15 @@ export async function getCompetitorSubscribers(): Promise<CompetitorSubscriberVi
         weekAgoRank,
         rankDelta:
           weekAgoRank == null ? null : Number((weekAgoRank - currentRank).toFixed(0)),
-        snapshots: recentDates.map((snapshotDate) => {
+        tableSnapshots: tableDates.map((snapshotDate) => {
+          const snapshot = snapshots.get(snapshotDate);
+          return {
+            snapshotDate,
+            subscriberCount: snapshot?.subscriberCount ?? null,
+            dailyDelta: snapshot?.dailyDelta ?? null,
+          };
+        }),
+        trendSnapshots: trendDates.map((snapshotDate) => {
           const snapshot = snapshots.get(snapshotDate);
           return {
             snapshotDate,

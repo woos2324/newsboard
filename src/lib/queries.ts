@@ -44,10 +44,21 @@ export type SubscriberPointView = {
   daily_delta: number | null;
 };
 
+export type CompetitorSubscriberSnapshotView = {
+  snapshotDate: string;
+  subscriberCount: number | null;
+  dailyDelta: number | null;
+};
+
 export type CompetitorSubscriberView = {
   media: string;
-  value: number;
-  delta: number;
+  latestValue: number;
+  share: number;
+  currentRank: number;
+  weekAgoRank: number | null;
+  rankDelta: number | null;
+  snapshots: CompetitorSubscriberSnapshotView[];
+  isPinned: boolean;
 };
 
 export type TopCommentView = {
@@ -499,35 +510,114 @@ export async function getOurSubscriberSeries(days = 7): Promise<{
 
 export async function getCompetitorSubscribers(): Promise<CompetitorSubscriberView[]> {
   const sb = getSupabase();
-  // 각 경쟁사의 최신 subscriber_snapshot.
   const { data, error } = await sb
     .from("subscriber_snapshot")
     .select(
-      "subscriber_count, seven_day_delta, snapshot_date, media_company:media_company_id(name, is_our_company)"
+      "subscriber_count, daily_delta, snapshot_date, media_company:media_company_id(name, is_our_company)"
     )
     .order("snapshot_date", { ascending: false });
 
   if (error) throw error;
 
-  const latestByMedia = new Map<string, CompetitorSubscriberView>();
-  for (const r of data ?? []) {
+  const filtered = (data ?? []).flatMap((r) => {
     const mc = r.media_company as unknown as
       | { name: string; is_our_company: boolean }
       | null;
-    if (!mc || mc.is_our_company) continue;
-    if (latestByMedia.has(mc.name)) continue;
-    const deltaPct =
-      r.subscriber_count > 0 && r.seven_day_delta
-        ? Number(((r.seven_day_delta / r.subscriber_count) * 100).toFixed(1))
-        : 0;
-    latestByMedia.set(mc.name, {
-      media: mc.name,
-      value: r.subscriber_count,
-      delta: deltaPct,
+    if (!mc || mc.is_our_company) return [];
+    return [
+      {
+        media: mc.name,
+        snapshotDate: r.snapshot_date,
+        subscriberCount: r.subscriber_count,
+        dailyDelta: r.daily_delta,
+      },
+    ];
+  });
+
+  if (filtered.length === 0) return [];
+
+  const snapshotDates = Array.from(
+    new Set(filtered.map((row) => row.snapshotDate))
+  ).sort((a, b) => b.localeCompare(a));
+
+  const recentDates = snapshotDates.slice(0, 3);
+  if (recentDates.length === 0) return [];
+
+  const weekAgoDate = snapshotDates[6] ?? snapshotDates.at(-1) ?? null;
+
+  const rowsByMedia = new Map<
+    string,
+    Map<string, { subscriberCount: number; dailyDelta: number | null }>
+  >();
+
+  for (const row of filtered) {
+    const existing = rowsByMedia.get(row.media) ?? new Map();
+    existing.set(row.snapshotDate, {
+      subscriberCount: row.subscriberCount,
+      dailyDelta: row.dailyDelta,
     });
+    rowsByMedia.set(row.media, existing);
   }
 
-  return Array.from(latestByMedia.values()).sort((a, b) => b.value - a.value);
+  const latestRanked = Array.from(rowsByMedia.entries())
+    .map(([media, snapshots]) => ({
+      media,
+      value: snapshots.get(recentDates[0])?.subscriberCount ?? 0,
+    }))
+    .sort((a, b) => b.value - a.value);
+
+  const currentRankByMedia = new Map(
+    latestRanked.map((row, idx) => [row.media, idx + 1])
+  );
+
+  const totalLatestValue = latestRanked.reduce((acc, row) => acc + row.value, 0);
+
+  const weekAgoRankByMedia = new Map<string, number>();
+  if (weekAgoDate) {
+    Array.from(rowsByMedia.entries())
+      .map(([media, snapshots]) => ({
+        media,
+        value: snapshots.get(weekAgoDate)?.subscriberCount,
+      }))
+      .filter((row): row is { media: string; value: number } => row.value != null)
+      .sort((a, b) => b.value - a.value)
+      .forEach((row, idx) => {
+        weekAgoRankByMedia.set(row.media, idx + 1);
+      });
+  }
+
+  return Array.from(rowsByMedia.entries())
+    .map(([media, snapshots]) => {
+      const latestValue = snapshots.get(recentDates[0])?.subscriberCount ?? 0;
+      const currentRank = currentRankByMedia.get(media) ?? 0;
+      const weekAgoRank = weekAgoRankByMedia.get(media) ?? null;
+      return {
+        media,
+        latestValue,
+        share:
+          totalLatestValue > 0
+            ? Number(((latestValue / totalLatestValue) * 100).toFixed(3))
+            : 0,
+        currentRank,
+        weekAgoRank,
+        rankDelta:
+          weekAgoRank == null ? null : Number((weekAgoRank - currentRank).toFixed(0)),
+        snapshots: recentDates.map((snapshotDate) => {
+          const snapshot = snapshots.get(snapshotDate);
+          return {
+            snapshotDate,
+            subscriberCount: snapshot?.subscriberCount ?? null,
+            dailyDelta: snapshot?.dailyDelta ?? null,
+          };
+        }),
+        isPinned: media === "세계일보",
+      };
+    })
+    .sort((a, b) => {
+      if (a.isPinned && !b.isPinned) return -1;
+      if (!a.isPinned && b.isPinned) return 1;
+      return a.currentRank - b.currentRank;
+    });
 }
 
 // ===================================================================

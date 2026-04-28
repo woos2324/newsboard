@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Pin } from "lucide-react";
 import { PageShell } from "@/components/PageShell";
 import { SubscriberChart } from "@/components/dashboard/SubscriberChart";
 import {
@@ -14,6 +15,19 @@ const WEEKDAY_KR = ["일", "월", "화", "수", "목", "금", "토"];
 function weekdayKr(dateStr: string): string {
   const d = new Date(dateStr + "T00:00:00+09:00");
   return WEEKDAY_KR[d.getUTCDay()];
+}
+
+function formatDateLabel(dateStr: string): string {
+  const [year, month, day] = dateStr.split("-");
+  if (!year || !month || !day) return dateStr;
+  return `${month}/${day}`;
+}
+
+function formatSignedCount(value: number | null): string {
+  if (value == null) return "-";
+  if (value > 0) return `+${value.toLocaleString()}`;
+  if (value < 0) return value.toLocaleString();
+  return "0";
 }
 
 type Props = {
@@ -39,6 +53,7 @@ export default async function SubscribersPage({ searchParams }: Props) {
 
   const visible = showAll ? competitors : competitors.slice(0, TOP_N);
   const remaining = competitors.length - visible.length;
+  const recentDates = competitors[0]?.snapshots.map((snapshot) => snapshot.snapshotDate) ?? [];
 
   return (
     <PageShell
@@ -79,32 +94,122 @@ export default async function SubscribersPage({ searchParams }: Props) {
           {competitors.length === 0 ? (
             <p className="caption">경쟁사 구독자 스냅샷 데이터가 없습니다.</p>
           ) : (
-            <ul className="divide-y divide-border">
-              {visible.map((r, idx) => (
-                <li
-                  key={r.media}
-                  className="flex items-center gap-3 py-3 text-sm"
-                >
-                  <span className="w-6 text-right text-xs font-semibold text-muted">
-                    {idx + 1}
-                  </span>
-                  <span className="flex-1 truncate font-medium">{r.media}</span>
-                  <span className="flex items-center gap-3">
-                    <span className="text-muted">
-                      {r.value.toLocaleString()}
-                    </span>
-                    <span
-                      className={`badge ${
-                        r.delta >= 0 ? "badge-success" : "badge-error"
-                      }`}
-                    >
-                      {r.delta >= 0 ? "+" : ""}
-                      {r.delta}%
-                    </span>
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <div className="overflow-hidden rounded-lg border border-border">
+              <div className="max-h-[560px] overflow-auto">
+                <table className="min-w-[980px] w-full border-separate border-spacing-0 text-sm">
+                  <thead>
+                    <tr>
+                      <th className="sticky top-0 z-20 bg-slate-50 px-3 py-2 text-center text-[11px] font-semibold text-muted">
+                        순위
+                      </th>
+                      <th className="sticky top-0 z-20 border-l border-border bg-slate-50 px-3 py-2 text-center text-[11px] font-semibold text-muted">
+                        1주 전
+                      </th>
+                      <th className="sticky top-0 z-20 border-l border-border bg-slate-50 px-3 py-2 text-left text-[11px] font-semibold text-muted">
+                        언론사
+                      </th>
+                      <th className="sticky top-0 z-20 border-l border-border bg-slate-50 px-3 py-2 text-right text-[11px] font-semibold text-muted">
+                        점유율
+                      </th>
+                      {recentDates.flatMap((snapshotDate) => [
+                        <th
+                          key={`pair-${snapshotDate}-count`}
+                          className="sticky top-0 z-20 border-l border-border bg-slate-50 px-3 py-2 text-right text-[11px] font-semibold text-foreground"
+                        >
+                          {formatDateLabel(snapshotDate)}
+                        </th>,
+                        <th
+                          key={`pair-${snapshotDate}-delta`}
+                          className="sticky top-0 z-20 border-l border-border bg-slate-50 px-3 py-2 text-right text-[11px] font-semibold text-muted"
+                        >
+                          증감수
+                        </th>,
+                      ])}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visible.map((row) => {
+                      const cellBase = row.isPinned
+                        ? "border-b border-border bg-primary-500/[0.06]"
+                        : "border-b border-border bg-white";
+                      const pinnedSticky = row.isPinned ? " sticky top-11 z-10" : "";
+                      const weekRankText =
+                        row.weekAgoRank == null ? "-" : `${row.weekAgoRank}`;
+                      const rankDeltaText =
+                        row.rankDelta == null
+                          ? "-"
+                          : row.rankDelta > 0
+                            ? `+${row.rankDelta}`
+                            : `${row.rankDelta}`;
+
+                      return (
+                        <tr key={row.media}>
+                          <td
+                            className={`${cellBase}${pinnedSticky} px-3 py-3 text-center text-xs font-semibold ${
+                              row.isPinned ? "shadow-[inset_3px_0_0_0_#1E40AF]" : ""
+                            }`}
+                          >
+                            {row.currentRank}
+                          </td>
+                          <td
+                            className={`${cellBase}${pinnedSticky} border-l border-border px-3 py-3 text-center text-xs`}
+                          >
+                            <div className="leading-tight">
+                              <p className="font-medium text-foreground">{weekRankText}</p>
+                              <p className="caption mt-1">{rankDeltaText}</p>
+                            </div>
+                          </td>
+                          <td
+                            className={`${cellBase}${pinnedSticky} border-l border-border px-3 py-3`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-foreground">
+                                {row.media}
+                              </span>
+                              {row.isPinned && (
+                                <span className="badge badge-success">
+                                  <Pin className="h-3 w-3" />
+                                  고정
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td
+                            className={`${cellBase}${pinnedSticky} border-l border-border px-3 py-3 text-right font-medium text-foreground`}
+                          >
+                            {row.share.toFixed(3)}%
+                          </td>
+                          {row.snapshots.flatMap((snapshot) => [
+                            <td
+                              key={`${row.media}-${snapshot.snapshotDate}-count`}
+                              className={`${cellBase}${pinnedSticky} border-l border-border px-3 py-3 text-right font-medium text-foreground`}
+                            >
+                              {snapshot.subscriberCount == null
+                                ? "-"
+                                : snapshot.subscriberCount.toLocaleString()}
+                            </td>,
+                            <td
+                              key={`${row.media}-${snapshot.snapshotDate}-delta`}
+                              className={`${cellBase}${pinnedSticky} border-l border-border px-3 py-3 text-right font-medium ${
+                                snapshot.dailyDelta == null
+                                  ? "text-muted"
+                                  : snapshot.dailyDelta > 0
+                                    ? "text-success"
+                                    : snapshot.dailyDelta < 0
+                                      ? "text-primary-500"
+                                      : "text-foreground"
+                              }`}
+                            >
+                              {formatSignedCount(snapshot.dailyDelta)}
+                            </td>,
+                          ])}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           )}
         </div>
       </div>

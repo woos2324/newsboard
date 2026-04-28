@@ -63,7 +63,7 @@ async def main() -> None:
         "--threshold", type=float, default=0.80, help="같은 클러스터 판정 cosine 임계값"
     )
     parser.add_argument(
-        "--min-size", type=int, default=1, help="클러스터 최소 기사 수 (기본 1)"
+        "--min-size", type=int, default=2, help="클러스터 최소 기사 수 (기본 2)"
     )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()

@@ -90,6 +90,8 @@ export default async function DashboardPage() {
     summary: i.summary ?? "",
     keywords: i.keywords,
     mentions: i.articles,
+    mediaNames: i.mediaNames,
+    mediaCount: i.mediaCount,
     trend: Math.round(i.confidence * 100),
   }));
 
@@ -156,7 +158,9 @@ export default async function DashboardPage() {
             <div className="mb-3 flex items-end justify-between">
               <div>
                 <h2 className="section-title">주요 이슈</h2>
-                <p className="caption">AI가 클러스터링한 오늘의 핵심 이슈</p>
+                <p className="caption">
+                  관련 기사 2건 이상인 오늘의 핵심 이슈
+                </p>
               </div>
               <a
                 href="/issue"
@@ -167,7 +171,9 @@ export default async function DashboardPage() {
             </div>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
               {issueCards.length === 0 ? (
-                <p className="caption col-span-full">이슈 데이터가 없습니다.</p>
+                <p className="caption col-span-full">
+                  관련 기사 2건 이상인 이슈 데이터가 없습니다.
+                </p>
               ) : (
                 issueCards.map((i) => <IssueCard key={i.rank} {...i} />)
               )}

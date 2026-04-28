@@ -11,11 +11,11 @@ export default async function IssuePage() {
   return (
     <PageShell
       title="이슈 분석"
-      description="AI가 클러스터링한 오늘의 핵심 이슈 목록"
+      description="관련 기사 2건 이상인 오늘의 핵심 이슈 목록"
     >
       {issues.length === 0 ? (
         <div className="card">
-          <p className="caption">생성된 이슈 클러스터가 없습니다.</p>
+          <p className="caption">관련 기사 2건 이상인 이슈가 없습니다.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -45,8 +45,18 @@ export default async function IssuePage() {
                   </span>
                 ))}
               </div>
+              <div className="mt-4">
+                <p className="caption">보도 매체</p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {i.mediaNames.map((media) => (
+                    <span key={media} className="badge badge-muted">
+                      {media}
+                    </span>
+                  ))}
+                </div>
+              </div>
               <div className="mt-4 border-t border-border pt-3 text-xs text-muted">
-                관련 기사 {i.articles}건 · {i.cluster_date}
+                관련 기사 {i.articles}건 · 매체 {i.mediaCount}곳 · {i.cluster_date}
               </div>
             </Link>
           ))}

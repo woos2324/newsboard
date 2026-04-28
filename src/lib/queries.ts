@@ -12,6 +12,8 @@ export type IssueView = {
   summary: string | null;
   keywords: string[];
   articles: number;
+  mediaNames: string[];
+  mediaCount: number;
   confidence: number;
   cluster_date: string;
 };
@@ -140,35 +142,83 @@ function gapMinutesFromDetected(detectedAt: string): number {
 // Issue queries
 // ===================================================================
 
-export async function getIssues(limit = 20): Promise<IssueView[]> {
+export async function getIssues(
+  limit = 20,
+  minArticles = 2
+): Promise<IssueView[]> {
   const sb = getSupabase();
+  const fetchLimit = Math.max(limit * 4, 40);
   const { data, error } = await sb
     .from("issue_cluster")
     .select(
-      "issue_cluster_id, cluster_key, representative_title, summary, keywords, confidence_score, cluster_date, issue_cluster_article(count)"
+      "issue_cluster_id, cluster_key, representative_title, summary, keywords, confidence_score, cluster_date"
     )
     .order("cluster_date", { ascending: false })
     .order("confidence_score", { ascending: false })
-    .limit(limit);
+    .limit(fetchLimit);
 
   if (error) throw error;
+  if (!data || data.length === 0) return [];
 
-  return (data ?? []).map((c, i) => {
-    const relatedArr = c.issue_cluster_article as unknown as
-      | { count: number }[]
-      | null;
-    return {
-      cluster_id: c.issue_cluster_id,
-      cluster_key: c.cluster_key,
-      rank: i + 1,
-      title: c.representative_title,
-      summary: c.summary,
-      keywords: c.keywords ?? [],
-      articles: relatedArr?.[0]?.count ?? 0,
-      confidence: Number(c.confidence_score ?? 0),
-      cluster_date: c.cluster_date,
+  const clusterIds = data.map((c) => c.issue_cluster_id);
+  const { data: relatedRows, error: relatedError } = await sb
+    .from("issue_cluster_article")
+    .select(
+      "issue_cluster_id, article:article_id(media_company:media_company_id(name))"
+    )
+    .in("issue_cluster_id", clusterIds);
+
+  if (relatedError) throw relatedError;
+
+  const statsByCluster = new Map<
+    number,
+    { articleCount: number; mediaNames: string[] }
+  >();
+
+  for (const row of relatedRows ?? []) {
+    const existing = statsByCluster.get(row.issue_cluster_id) ?? {
+      articleCount: 0,
+      mediaNames: [],
     };
-  });
+    existing.articleCount += 1;
+
+    const article = row.article as unknown as
+      | { media_company: { name: string } | null }
+      | null;
+    const mediaName = article?.media_company?.name;
+    if (mediaName && !existing.mediaNames.includes(mediaName)) {
+      existing.mediaNames.push(mediaName);
+    }
+    statsByCluster.set(row.issue_cluster_id, existing);
+  }
+
+  return data
+    .map((c) => {
+      const stats = statsByCluster.get(c.issue_cluster_id) ?? {
+        articleCount: 0,
+        mediaNames: [],
+      };
+      return {
+        cluster_id: c.issue_cluster_id,
+        cluster_key: c.cluster_key,
+        title: c.representative_title,
+        summary: c.summary,
+        keywords: c.keywords ?? [],
+        articles: stats.articleCount,
+        mediaNames: stats.mediaNames,
+        mediaCount: stats.mediaNames.length,
+        confidence: Number(c.confidence_score ?? 0),
+        cluster_date: c.cluster_date,
+      };
+    })
+    .filter((c) => c.articles >= minArticles)
+    .slice(0, limit)
+    .map((c, i) => {
+      return {
+        ...c,
+        rank: i + 1,
+      };
+    });
 }
 
 // ===================================================================

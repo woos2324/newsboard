@@ -128,6 +128,7 @@ export type IssueDetail = {
 // ===================================================================
 
 const KST_OFFSET_MIN = 9 * 60;
+const PINNED_SUBSCRIBER_MEDIA = new Set(["세계일보"]);
 
 function startOfToday(): string {
   const now = new Date();
@@ -523,7 +524,8 @@ export async function getCompetitorSubscribers(): Promise<CompetitorSubscriberVi
     const mc = r.media_company as unknown as
       | { name: string; is_our_company: boolean }
       | null;
-    if (!mc || mc.is_our_company) return [];
+    if (!mc) return [];
+    if (mc.is_our_company && !PINNED_SUBSCRIBER_MEDIA.has(mc.name)) return [];
     return [
       {
         media: mc.name,
@@ -610,7 +612,7 @@ export async function getCompetitorSubscribers(): Promise<CompetitorSubscriberVi
             dailyDelta: snapshot?.dailyDelta ?? null,
           };
         }),
-        isPinned: media === "세계일보",
+        isPinned: PINNED_SUBSCRIBER_MEDIA.has(media),
       };
     })
     .sort((a, b) => {

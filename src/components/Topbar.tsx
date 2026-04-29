@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Calendar, Search } from "lucide-react";
+import { Bell, Calendar } from "lucide-react";
 
 export function Topbar() {
   const today = new Date().toLocaleDateString("ko-KR", {
@@ -17,6 +17,7 @@ export function Topbar() {
         <span>{today}</span>
       </div>
 
+      {/* TODO: 검색 기능 미구현 — 향후 이슈/키워드/매체 검색 드롭다운 또는 /search 페이지로 구현 예정
       <div className="relative ml-auto w-full max-w-md">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
         <input
@@ -26,6 +27,7 @@ export function Topbar() {
           className="h-9 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-sm placeholder:text-muted focus:border-primary-500 focus:bg-white"
         />
       </div>
+      */}
 
       <button
         type="button"

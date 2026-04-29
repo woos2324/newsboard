@@ -72,6 +72,7 @@
 - ⚠ **미구현 고도화**: 클러스터 re-absorption (같은 이슈 다른 제목 중복 근본 해결) — memory에 기록됨.
 
 ### 다음 작업 로드맵
+- **(미래) 검색 기능** — Topbar 검색창 UI 주석 처리됨 ([src/components/Topbar.tsx](src/components/Topbar.tsx)). 이슈 클러스터 제목/키워드 검색 + 드롭다운 자동완성 또는 `/search` 페이지로 구현 필요.
 - **(미래) 클러스터 re-absorption** — 동일 이슈 다른 제목 중복 클러스터 근본 해결. cluster_articles.py 에서 기존 클러스터 centroid 와 비교해 threshold 이상이면 병합.
 - **(보너스) 셀렉터 견고화** — Naver UI 변경 대비 [scripts/lib/naver.py](scripts/lib/naver.py) 다중 selector 우선순위 확장.
 - **(보너스) GitHub auto-deploy 연결** — Settings → Git 에서 Vercel ↔ GitHub 연결, push 자동 배포.

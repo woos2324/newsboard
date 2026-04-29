@@ -40,9 +40,15 @@ export function SectionRankingView({
               className="card flex flex-col"
               style={{ borderTop: "3px solid #1E40AF" }}
             >
-              <p className="mb-3 border-b border-border pb-2 text-sm font-semibold text-primary-500">
-                {m.mediaName}
-              </p>
+              <div className="mb-3 flex items-center gap-2 border-b border-border pb-2">
+                <span className="text-sm font-semibold text-primary-500">{m.mediaName}</span>
+                {m.normalizedName === "segye" && (
+                  <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
+                    style={{ background: "#EFF6FF", color: "#1E40AF" }}>
+                    자사
+                  </span>
+                )}
+              </div>
               {!section || section.articles.length === 0 ? (
                 <p className="caption">데이터 없음</p>
               ) : (

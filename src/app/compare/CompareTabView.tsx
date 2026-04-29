@@ -1,19 +1,46 @@
 "use client";
 
 import { useState } from "react";
+import type { CompareMatrix } from "@/lib/queries";
 import type { MediaSectionRanking } from "@/lib/naver-section";
 import { SECTION_ORDER } from "@/lib/naver-section";
 
-type PopularData = {
-  media: string[];
-  rows: { rank: number; cells: Record<string, string | null> }[];
-};
+function MediaCard({
+  mediaName,
+  normalizedName,
+  children,
+}: {
+  mediaName: string;
+  normalizedName: string;
+  children: React.ReactNode;
+}) {
+  const isSegye = normalizedName === "segye";
+  return (
+    <div
+      className="card flex flex-col"
+      style={isSegye ? { borderTop: "3px solid #1E40AF" } : undefined}
+    >
+      <div className="mb-3 flex items-center gap-2 border-b border-border pb-2">
+        <span className="text-sm font-semibold text-primary-500">{mediaName}</span>
+        {isSegye && (
+          <span
+            className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
+            style={{ background: "#EFF6FF", color: "#1E40AF" }}
+          >
+            자사
+          </span>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+}
 
 export function CompareTabView({
   popularData,
   sectionRankings,
 }: {
-  popularData: PopularData;
+  popularData: CompareMatrix;
   sectionRankings: MediaSectionRanking[];
 }) {
   const [activeTab, setActiveTab] = useState<"popular" | "section">("popular");
@@ -40,40 +67,47 @@ export function CompareTabView({
         {tabBtn("section", "섹션별 랭킹")}
       </div>
 
-      {/* 인기 랭킹 */}
+      {/* 인기 랭킹 — 카드 그리드 */}
       <div className={activeTab === "popular" ? "" : "hidden"}>
-        {popularData.media.length === 0 ? (
+        {popularData.cards.length === 0 ? (
           <div className="card">
             <p className="caption">선택된 매체 데이터가 없습니다.</p>
           </div>
         ) : (
-          <div className="card overflow-x-auto">
-            <table className="w-full min-w-[720px] text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-xs text-muted">
-                  <th className="py-2 pr-4 font-medium">순위</th>
-                  {popularData.media.map((m) => (
-                    <th key={m} className="py-2 pr-4 font-medium">
-                      {m}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {popularData.rows.map((row) => (
-                  <tr key={row.rank} className="border-b border-border last:border-0">
-                    <td className="py-3 pr-4 align-top text-xs font-semibold text-primary-500">
-                      #{row.rank}
-                    </td>
-                    {popularData.media.map((m) => (
-                      <td key={m} className="py-3 pr-4 align-top leading-snug">
-                        {row.cells[m] ?? <span className="text-muted">-</span>}
-                      </td>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {popularData.cards.map((m) => (
+              <MediaCard
+                key={m.normalizedName}
+                mediaName={m.mediaName}
+                normalizedName={m.normalizedName}
+              >
+                {m.articles.length === 0 ? (
+                  <p className="caption">데이터 없음</p>
+                ) : (
+                  <ul className="divide-y divide-border">
+                    {m.articles.map((a, i) => (
+                      <li key={i} className="flex items-start gap-2 py-2">
+                        <span
+                          className={`mt-0.5 w-4 shrink-0 text-center text-xs font-semibold ${
+                            i < 2 ? "text-primary-500" : "text-muted"
+                          }`}
+                        >
+                          {i + 1}
+                        </span>
+                        <a
+                          href={a.url ?? "#"}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="line-clamp-2 text-sm leading-snug hover:text-primary-500 hover:underline"
+                        >
+                          {a.title}
+                        </a>
+                      </li>
                     ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                  </ul>
+                )}
+              </MediaCard>
+            ))}
           </div>
         )}
       </div>
@@ -86,7 +120,6 @@ export function CompareTabView({
           </div>
         ) : (
           <>
-            {/* 섹션 탭 */}
             <div className="mb-4 flex flex-wrap gap-1">
               {SECTION_ORDER.map((s) => (
                 <button
@@ -103,29 +136,15 @@ export function CompareTabView({
               ))}
             </div>
 
-            {/* 매체 카드 그리드 */}
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
               {sectionRankings.map((m) => {
                 const section = m.sections.find((s) => s.name === activeSection);
                 return (
-                  <div
+                  <MediaCard
                     key={m.normalizedName}
-                    className="card flex flex-col"
-                    style={{ borderTop: "3px solid #1E40AF" }}
+                    mediaName={m.mediaName}
+                    normalizedName={m.normalizedName}
                   >
-                    <div className="mb-3 flex items-center gap-2 border-b border-border pb-2">
-                      <span className="text-sm font-semibold text-primary-500">
-                        {m.mediaName}
-                      </span>
-                      {m.normalizedName === "segye" && (
-                        <span
-                          className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
-                          style={{ background: "#EFF6FF", color: "#1E40AF" }}
-                        >
-                          자사
-                        </span>
-                      )}
-                    </div>
                     {!section || section.articles.length === 0 ? (
                       <p className="caption">데이터 없음</p>
                     ) : (
@@ -151,7 +170,7 @@ export function CompareTabView({
                         ))}
                       </ul>
                     )}
-                  </div>
+                  </MediaCard>
                 );
               })}
             </div>

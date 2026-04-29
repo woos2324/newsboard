@@ -97,14 +97,16 @@ export type OverviewStats = {
   total_subscribers: number;
 };
 
-export type CompareRow = {
-  rank: number;
-  cells: Record<string, string | null>;
+export type CompareArticle = { title: string; url: string | null };
+
+export type CompareMediaCard = {
+  mediaName: string;
+  normalizedName: string;
+  articles: CompareArticle[];
 };
 
 export type CompareMatrix = {
-  media: string[];
-  rows: CompareRow[];
+  cards: CompareMediaCard[];
 };
 
 export type MediaNaverIdView = {
@@ -371,47 +373,44 @@ export async function getRecentArticles(limit = 8): Promise<RankingArticleView[]
 
 export async function getCompareMatrix(
   normalizedNames: string[] = ["chosun", "joongang", "hani", "mk"],
-  rows = 5
+  limit = 5
 ): Promise<CompareMatrix> {
   const sb = getSupabase();
 
-  // normalized_name -> 한글 name 변환 + 입력 순서 보존
   const { data: mediaList, error: mediaErr } = await sb
     .from("media_company")
     .select("name, normalized_name")
     .in("normalized_name", normalizedNames);
   if (mediaErr) throw mediaErr;
 
-  const nameByNormalized = new Map(
+  const mediaByNorm = new Map(
     (mediaList ?? []).map((m) => [m.normalized_name, m.name])
   );
-  const orderedMedia = normalizedNames
-    .map((n) => nameByNormalized.get(n))
-    .filter((n): n is string => !!n);
 
-  const perMedia = await Promise.all(
-    orderedMedia.map(async (name) => {
-      const { data, error } = await sb
-        .from("article")
-        .select("title, published_at, media_company!inner(name)")
-        .eq("media_company.name", name)
-        .order("published_at", { ascending: false, nullsFirst: false })
-        .limit(rows);
-      if (error) throw error;
-      return { name, titles: (data ?? []).map((a) => a.title as string) };
-    })
+  const cards = await Promise.all(
+    normalizedNames
+      .filter((n) => mediaByNorm.has(n))
+      .map(async (normalizedName) => {
+        const mediaName = mediaByNorm.get(normalizedName)!;
+        const { data, error } = await sb
+          .from("article")
+          .select("title, url, media_company!inner(name)")
+          .eq("media_company.name", mediaName)
+          .order("published_at", { ascending: false, nullsFirst: false })
+          .limit(limit);
+        if (error) throw error;
+        return {
+          mediaName,
+          normalizedName,
+          articles: (data ?? []).map((a) => ({
+            title: a.title as string,
+            url: (a.url as string) ?? null,
+          })),
+        };
+      })
   );
 
-  const out: CompareRow[] = [];
-  for (let i = 0; i < rows; i++) {
-    const cells: Record<string, string | null> = {};
-    for (const m of perMedia) {
-      cells[m.name] = m.titles[i] ?? null;
-    }
-    out.push({ rank: i + 1, cells });
-  }
-
-  return { media: orderedMedia, rows: out };
+  return { cards };
 }
 
 export async function getMediaNaverIds(

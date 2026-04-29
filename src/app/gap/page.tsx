@@ -1,6 +1,7 @@
 import { AlertTriangle, Clock } from "lucide-react";
 import { PageShell } from "@/components/PageShell";
 import { getMissedAlerts } from "@/lib/queries";
+import { ReviewButton } from "./ReviewButton";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,8 @@ const badgeByPriority: Record<
 };
 
 export default async function GapPage() {
-  const alerts = await getMissedAlerts("open", 30);
+  const allAlerts = await getMissedAlerts("all", 50);
+  const alerts = allAlerts.filter((a) => a.status === "open" || a.status === "reviewing");
 
   return (
     <PageShell
@@ -29,15 +31,16 @@ export default async function GapPage() {
         <div className="grid grid-cols-1 gap-3">
           {alerts.map((a) => {
             const badge = badgeByPriority[a.priority];
+            const isReviewing = a.status === "reviewing";
             return (
               <article
                 key={a.alert_id}
-                className={`card ${a.priority === "high" ? "card-alert" : ""}`}
+                className={`card ${a.priority === "high" && !isReviewing ? "card-alert" : ""} ${isReviewing ? "opacity-70" : ""}`}
               >
                 <div className="flex items-start gap-3">
                   <span
                     className={`mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-lg ${
-                      a.priority === "high"
+                      a.priority === "high" && !isReviewing
                         ? "bg-error/10 text-error"
                         : "bg-muted/10 text-muted"
                     }`}
@@ -67,12 +70,7 @@ export default async function GapPage() {
                       </span>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-background"
-                  >
-                    검토 시작
-                  </button>
+                  <ReviewButton alertId={a.alert_id} status={a.status} />
                 </div>
               </article>
             );

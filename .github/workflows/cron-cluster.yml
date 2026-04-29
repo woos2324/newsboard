@@ -54,5 +54,5 @@ jobs:
         run: |
           python -m scripts.cluster_articles \
             --hours "${{ github.event.inputs.hours || '7' }}" \
-            --threshold "${{ github.event.inputs.threshold || '0.80' }}" \
+            --threshold "${{ github.event.inputs.threshold || '0.85' }}" \
             --min-size "${{ github.event.inputs.min_size || '2' }}"

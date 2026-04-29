@@ -60,7 +60,7 @@ async def main() -> None:
         "--hours", type=int, default=24, help="대상 기사 시간 윈도우 (기본 24h)"
     )
     parser.add_argument(
-        "--threshold", type=float, default=0.80, help="같은 클러스터 판정 cosine 임계값"
+        "--threshold", type=float, default=0.85, help="같은 클러스터 판정 cosine 임계값"
     )
     parser.add_argument(
         "--min-size", type=int, default=2, help="클러스터 최소 기사 수 (기본 2)"

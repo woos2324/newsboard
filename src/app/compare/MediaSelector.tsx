@@ -15,13 +15,7 @@ const CHIP_LIST = [
   { id: "ytn", label: "YTN" },
 ];
 
-export function MediaSelector({
-  selected,
-  tab,
-}: {
-  selected: string[];
-  tab: string;
-}) {
+export function MediaSelector({ selected }: { selected: string[] }) {
   const router = useRouter();
 
   function toggle(id: string) {
@@ -30,7 +24,7 @@ export function MediaSelector({
       ? selected.filter((s) => s !== id)
       : [...selected, id];
     const ordered = ["segye", ...next.filter((s) => s !== "segye")];
-    router.push(`/compare?media=${ordered.join(",")}&tab=${tab}`);
+    router.push(`/compare?media=${ordered.join(",")}`);
   }
 
   return (

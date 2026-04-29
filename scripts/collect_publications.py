@@ -1,7 +1,7 @@
-"""자사 매체의 일자별 네이버 발행 기사 수 수집 → daily_publication_count 적재.
+"""자사 매체의 네이버 발행 기사 전체 수집 → article 테이블 적재 + daily_publication_count 갱신.
 
-cron 매시간 실행: 오늘(KST) + 어제(KST) 카운트 갱신.
-오늘은 시간이 지날수록 카운트 증가 / 어제는 안정화되면 더 이상 변동 없음.
+cron 매시간 실행: 오늘(KST) + 어제(KST) 수집.
+기사 제목·URL 을 article 테이블에 저장하여 미보도 탐지(detect_gap.py)에 활용.
 
 사용:
   python -m scripts.collect_publications              # 오늘 KST + 어제 KST
@@ -26,41 +26,49 @@ from scripts.lib.db import get_client
 from scripts.lib.http import fetch_html
 from scripts.lib.naver import (
     PUBLICATION_LIST_URL_TEMPLATE,
-    count_publication_links,
+    PublicationArticle,
+    parse_publication_articles,
 )
 
 KST = timezone(timedelta(hours=9))
-MAX_PAGES = 30  # 안전 가드: 한 매체 한 날짜에 30 페이지 초과 시 중단
+MAX_PAGES = 30
 
 
-async def fetch_publication_count(naver_media_id: str, date_yyyymmdd: str) -> int:
-    """모든 페이지 순회하며 기사 수 합산. 첫 페이지에서 max_page 파악 후 끝까지 fetch."""
-    # 1) 첫 페이지
+async def fetch_all_articles(naver_media_id: str, date_yyyymmdd: str) -> list[PublicationArticle]:
+    """모든 페이지 순회하며 기사 목록 수집. 중복 URL 제거."""
     url = PUBLICATION_LIST_URL_TEMPLATE.format(
         naver_media_id=naver_media_id, date=date_yyyymmdd, page=1
     )
     html = await fetch_html(url)
-    page1_count, max_page = count_publication_links(html)
+    page1_articles, max_page = parse_publication_articles(html)
+
     if max_page <= 1:
-        return page1_count
+        return page1_articles
 
     last_page = min(max_page, MAX_PAGES)
-    # 2) 나머지 페이지 병렬 fetch
-    coros = []
-    for p in range(2, last_page + 1):
-        u = PUBLICATION_LIST_URL_TEMPLATE.format(
-            naver_media_id=naver_media_id, date=date_yyyymmdd, page=p
+    coros = [
+        fetch_html(
+            PUBLICATION_LIST_URL_TEMPLATE.format(
+                naver_media_id=naver_media_id, date=date_yyyymmdd, page=p
+            )
         )
-        coros.append(fetch_html(u))
+        for p in range(2, last_page + 1)
+    ]
     htmls = await asyncio.gather(*coros, return_exceptions=True)
 
-    total = page1_count
+    all_articles = list(page1_articles)
+    seen_urls = {a.url for a in page1_articles}
+
     for h in htmls:
         if isinstance(h, Exception):
             continue
-        c, _ = count_publication_links(h)
-        total += c
-    return total
+        articles, _ = parse_publication_articles(h)
+        for a in articles:
+            if a.url not in seen_urls:
+                seen_urls.add(a.url)
+                all_articles.append(a)
+
+    return all_articles
 
 
 def _our_companies(sb) -> list[dict]:
@@ -74,11 +82,26 @@ def _our_companies(sb) -> list[dict]:
     return [r for r in rows if r.get("naver_media_id")]
 
 
+def _upsert_articles(sb, media: dict, articles: list[PublicationArticle], now_iso: str) -> None:
+    if not articles:
+        return
+    rows = [
+        {
+            "media_company_id": media["media_company_id"],
+            "title": a.title,
+            "url": a.url,
+            "published_at": now_iso,
+            "collected_at": now_iso,
+        }
+        for a in articles
+    ]
+    # ignore_duplicates=True: 같은 url 재수집 시 첫 published_at 보존
+    sb.table("article").upsert(rows, on_conflict="url", ignore_duplicates=True).execute()
+
+
 async def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--date", help="대상 날짜 (YYYYMMDD). 기본: 오늘 KST + 어제 KST"
-    )
+    parser.add_argument("--date", help="대상 날짜 (YYYYMMDD). 기본: 오늘 KST + 어제 KST")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -99,39 +122,39 @@ async def main() -> None:
             yesterday_kst.strftime("%Y%m%d"),
         ]
 
+    now_iso = datetime.now(timezone.utc).isoformat()
     print(f"수집 대상 매체 {len(targets)}개, 날짜 {dates_yyyymmdd}")
 
-    rows: list[dict] = []
     for media in targets:
         for d in dates_yyyymmdd:
+            d_iso = f"{d[0:4]}-{d[4:6]}-{d[6:8]}"
             try:
-                count = await fetch_publication_count(media["naver_media_id"], d)
-                d_iso = f"{d[0:4]}-{d[4:6]}-{d[6:8]}"
+                articles = await fetch_all_articles(media["naver_media_id"], d)
+                count = len(articles)
                 print(f"  ✓ {media['name']:<10} {d_iso}  {count}건")
-                rows.append(
+
+                if args.dry_run:
+                    continue
+
+                # 1) 기사 적재
+                _upsert_articles(sb, media, articles, now_iso)
+
+                # 2) 카운트 갱신
+                sb.table("daily_publication_count").upsert(
                     {
                         "media_company_id": media["media_company_id"],
                         "snapshot_date": d_iso,
                         "publication_count": count,
                         "source": "naver",
-                    }
-                )
+                    },
+                    on_conflict="media_company_id,snapshot_date,source",
+                ).execute()
+
             except Exception as e:  # noqa: BLE001
                 print(f"  ✗ {media['name']:<10} {d}  실패: {e}")
 
-    if not rows:
-        print("적재 데이터 없음")
-        return
     if args.dry_run:
-        print(f"[dry-run] {len(rows)} 행 적재 생략")
-        return
-
-    res = (
-        sb.table("daily_publication_count")
-        .upsert(rows, on_conflict="media_company_id,snapshot_date,source")
-        .execute()
-    )
-    print(f"적재 완료: {len(res.data)} 행")
+        print("[dry-run] DB 쓰기 생략")
 
 
 if __name__ == "__main__":

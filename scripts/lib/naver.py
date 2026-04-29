@@ -100,31 +100,19 @@ def parse_ranking_html(html: str, limit: int = 10) -> list[RankingItem]:
     return []
 
 
-def count_publication_links(html: str) -> tuple[int, int]:
-    """list.naver 페이지 HTML 파싱.
-    returns (count_on_this_page, max_page_seen_in_pagination).
-    count: 페이지 내 unique 기사 URL 수 (n.news.naver.com/mnews/article).
-    max_page: 페이지네이션에서 발견된 최대 정수, 없으면 1.
-    """
-    soup = BeautifulSoup(html, "html.parser")
+@dataclass
+class PublicationArticle:
+    title: str
+    url: str
 
-    # 기사 URL — 사진 dt + 제목 dt 가 같은 href 라 set 으로 중복 제거
-    urls: set[str] = set()
-    for a in soup.select("a[href]"):
-        href = a.get("href") or ""
-        if "n.news.naver.com/mnews/article" in str(href) or (
-            "news.naver.com" in str(href) and "/mnews/article" in str(href)
-        ):
-            urls.add(str(href))
-    count = len(urls)
 
-    # 페이지네이션 — class 후보 다중 시도
-    max_page = 1
+def _parse_max_page(soup) -> int:
     paging = (
         soup.select_one(".paging")
         or soup.select_one(".paginate")
         or soup.select_one('[class*="paging"]')
     )
+    max_page = 1
     if paging:
         for el in paging.select("a, strong, em, span"):
             text = el.get_text(strip=True)
@@ -134,7 +122,45 @@ def count_publication_links(html: str) -> tuple[int, int]:
                     max_page = n
             except ValueError:
                 continue
-    return count, max_page
+    return max_page
+
+
+def parse_publication_articles(html: str) -> tuple[list[PublicationArticle], int]:
+    """list.naver 페이지 HTML에서 기사 제목+URL 목록과 max_page 추출.
+    returns (articles, max_page).
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    seen: set[str] = set()
+    articles: list[PublicationArticle] = []
+
+    # 제목 dt(사진 dt 제외) 의 a 태그에서 title + url 추출
+    for a in soup.select("dt:not(.photo) a[href]"):
+        href = str(a.get("href") or "")
+        if "mnews/article" not in href:
+            continue
+        if href in seen:
+            continue
+        title = a.get_text(strip=True)
+        if title:
+            seen.add(href)
+            articles.append(PublicationArticle(title=title, url=href))
+
+    return articles, _parse_max_page(soup)
+
+
+def count_publication_links(html: str) -> tuple[int, int]:
+    """list.naver 페이지 HTML 파싱.
+    returns (count_on_this_page, max_page_seen_in_pagination).
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    urls: set[str] = set()
+    for a in soup.select("a[href]"):
+        href = a.get("href") or ""
+        if "n.news.naver.com/mnews/article" in str(href) or (
+            "news.naver.com" in str(href) and "/mnews/article" in str(href)
+        ):
+            urls.add(str(href))
+    return len(urls), _parse_max_page(soup)
 
 
 def extract_subscriber_count(data) -> int | None:

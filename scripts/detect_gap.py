@@ -109,6 +109,7 @@ def _detect(
             {
                 "issue_cluster_id": cid,
                 "representative_title": c["representative_title"],
+                "confidence_score": c.get("confidence_score") or 0,
                 "target_media_company_id": our_id,
                 "alert_status": "open",
                 "competitor_article_count": len(competitor_ids),
@@ -119,7 +120,35 @@ def _detect(
     return gaps
 
 
-def _upsert_alerts(sb, gaps: list[dict]) -> tuple[int, int]:
+def _dedup_by_title(gaps: list[dict]) -> list[dict]:
+    """동일 representative_title 이 여러 클러스터에서 탐지될 때 confidence 높은 것 하나만 유지."""
+    best: dict[str, dict] = {}
+    for g in gaps:
+        title = g["representative_title"]
+        if title not in best or g["confidence_score"] > best[title]["confidence_score"]:
+            best[title] = g
+    return list(best.values())
+
+
+def _load_existing_titles(sb, our_id: int) -> set[str]:
+    """DB에 이미 open/reviewing 상태인 알림의 representative_title 집합."""
+    rows = (
+        sb.table("missed_issue_alert")
+        .select("issue_cluster_id, alert_status, issue_cluster:issue_cluster_id(representative_title)")
+        .eq("target_media_company_id", our_id)
+        .in_("alert_status", ["open", "reviewing"])
+        .execute()
+        .data
+    )
+    titles = set()
+    for r in rows:
+        ic = r.get("issue_cluster")
+        if isinstance(ic, dict) and ic.get("representative_title"):
+            titles.add(ic["representative_title"])
+    return titles
+
+
+def _upsert_alerts(sb, gaps: list[dict], existing_titles: set[str]) -> tuple[int, int]:
     inserted = updated = 0
     for g in gaps:
         existing = (
@@ -131,6 +160,7 @@ def _upsert_alerts(sb, gaps: list[dict]) -> tuple[int, int]:
             .execute()
             .data
         )
+        title = g["representative_title"]
         if existing:
             ex = existing[0]
             if ex["alert_status"] in ("reviewing", "resolved", "ignored"):
@@ -143,11 +173,12 @@ def _upsert_alerts(sb, gaps: list[dict]) -> tuple[int, int]:
                     "reason": g["reason"],
                 }
             ).eq("missed_issue_alert_id", ex["missed_issue_alert_id"]).execute()
-            print(
-                f"  UPDATE cluster {g['issue_cluster_id']} "
-                f"score={g['priority_score']:.0f} '{g['representative_title']}'"
-            )
+            print(f"  UPDATE cluster {g['issue_cluster_id']} score={g['priority_score']:.0f} '{title}'")
+            existing_titles.add(title)
             updated += 1
+        elif title in existing_titles:
+            # 같은 제목의 다른 클러스터가 이미 알림으로 등록됨 → 중복 삽입 방지
+            print(f"  SKIP  cluster {g['issue_cluster_id']} (title duplicate) '{title}'")
         else:
             sb.table("missed_issue_alert").insert(
                 {
@@ -159,10 +190,8 @@ def _upsert_alerts(sb, gaps: list[dict]) -> tuple[int, int]:
                     "reason": g["reason"],
                 }
             ).execute()
-            print(
-                f"  INSERT cluster {g['issue_cluster_id']} "
-                f"score={g['priority_score']:.0f} '{g['representative_title']}'"
-            )
+            print(f"  INSERT cluster {g['issue_cluster_id']} score={g['priority_score']:.0f} '{title}'")
+            existing_titles.add(title)
             inserted += 1
     return inserted, updated
 
@@ -191,8 +220,9 @@ def main() -> None:
     cluster_ids = [c["issue_cluster_id"] for c in clusters]
     cluster_media = _load_cluster_media(sb, cluster_ids)
 
-    gaps = _detect(clusters, cluster_media, our["media_company_id"], args.min_competitors)
-    print(f"\n미보도 탐지: {len(gaps)}개 (경쟁사 {args.min_competitors}개 이상 기준)\n")
+    gaps_raw = _detect(clusters, cluster_media, our["media_company_id"], args.min_competitors)
+    gaps = _dedup_by_title(gaps_raw)
+    print(f"\n미보도 탐지: {len(gaps)}개 (경쟁사 {args.min_competitors}개 이상, 제목 중복 제거 후)\n")
 
     if not gaps:
         print("이슈 없음.")
@@ -207,7 +237,8 @@ def main() -> None:
         print("\n[dry-run] DB 쓰기 생략.")
         return
 
-    inserted, updated = _upsert_alerts(sb, gaps)
+    existing_titles = _load_existing_titles(sb, our["media_company_id"])
+    inserted, updated = _upsert_alerts(sb, gaps, existing_titles)
     print(f"\n완료: {inserted}개 신규 / {updated}개 업데이트.")
 
 

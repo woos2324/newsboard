@@ -6,7 +6,7 @@
 
 ---
 
-## 현재 진행 상태 (2026-04-26)
+## 현재 진행 상태 (2026-04-30)
 
 새 세션 시작 시 가장 먼저 확인할 진행 현황 체크포인트.
 
@@ -21,33 +21,39 @@
   - 단순 조회(리스트·상세·집계)는 Next.js Server Component → [src/lib/queries.ts](src/lib/queries.ts) → Supabase JS 직접
   - AI 생성·무거운 파이프라인은 FastAPI 경유 OR GitHub Actions 의 Python scripts 가 직접 Supabase 적재
 
-### 자동화 파이프라인 (GitHub Actions, 5종)
+### 자동화 파이프라인 (GitHub Actions, 8종)
 | 워크플로 | 트리거 | 역할 |
 |---|---|---|
 | [cron-ranking.yml](.github/workflows/cron-ranking.yml) | 매시 정각 (UTC) | 50개 매체 × 5건 인기 랭킹 → article + snapshot |
-| [cron-cluster.yml](.github/workflows/cron-cluster.yml) | **ranking 성공 직후 (workflow_run)** + 6시간 schedule fallback | 미할당 article 임베딩 클러스터링 → issue_cluster |
-| [cron-publications.yml](.github/workflows/cron-publications.yml) | 매시 5분 (UTC) | 자사 발행 기사 카운트 (오늘+어제 KST) → daily_publication_count |
+| [cron-cluster.yml](.github/workflows/cron-cluster.yml) | **ranking 성공 직후 (workflow_run)** + 6시간 fallback | 미할당 article 임베딩 클러스터링 → issue_cluster (threshold=0.85) |
+| [cron-gap.yml](.github/workflows/cron-gap.yml) | **cluster 성공 직후 (workflow_run)** + 6시간 fallback | 클러스터 기반 미보도 탐지 → missed_issue_alert |
+| [cron-publications.yml](.github/workflows/cron-publications.yml) | 매시 5분 (UTC) | 자사 전체 기사 제목·URL → article 적재 + daily_publication_count |
+| [cron-section-ranking.yml](.github/workflows/cron-section-ranking.yml) | **ranking 성공 직후 (workflow_run)** + UTC 02/08/14/20시 | 섹션별 랭킹 → section_ranking_snapshot |
 | [cron-subscribers.yml](.github/workflows/cron-subscribers.yml) | UTC 23:00 (KST 08:00) | followers.json API → subscriber_snapshot |
+| [cron-comments.yml](.github/workflows/cron-comments.yml) | 매시 10분 (UTC) | 자사 기사 댓글 수 → comment_metric |
 | [cron-daily-briefing.yml](.github/workflows/cron-daily-briefing.yml) | UTC 15:00 (KST 00:00) | 오늘 클러스터 → AI 일간 브리핑 → ai_summary |
 
-### DB 스키마 (마이그레이션 2건)
+**cron chain**: `ranking → cluster → gap` (매시 정각 자동 연쇄)
+
+### DB 스키마 (마이그레이션 3건)
 - `0001_init` — 11개 코어 테이블 (media_company, article, issue_cluster 등)
 - `0002_daily_publication_count` — 자사 일일 네이버 발행 수 카운트 테이블
+- `0003_section_ranking` — 섹션별 랭킹 스냅샷 테이블 (`section_ranking_snapshot`)
 - 매체 51개 (시드 9 + 사용자 추가 42, naver_media_id 보유 47개)
 
 ### 완료된 작업
-- [x] **A) AI 요약 파이프라인** — [api/lib/ai.py](api/lib/ai.py) JSON 구조 출력, [api/routes/report.py](api/routes/report.py) 클러스터 기반 upsert, `POST /api/report/daily`, `POST /api/report/issue/{cluster_id}`, [src/components/GenerateReportButton.tsx](src/components/GenerateReportButton.tsx)
-- [x] **B) 이슈 상세 페이지** [src/app/issue/\[cluster_id\]/page.tsx](src/app/issue/[cluster_id]/page.tsx)
-- [x] **C) 시드 확장** — 경쟁사 구독자 스냅샷 7일치 (라이브 데이터로 대체됨)
-- [x] **D-(a) 데이터 수집 스크립트** — `scripts/collect_subscribers.py` (followers.json JSON API 사용), `scripts/collect_ranking.py` (li.as_thumb selector). `published_at = collected_at` fallback 패치 + `ignore_duplicates=True`.
-- [x] **D-(b) AI 클러스터링 파이프라인** — [scripts/cluster_articles.py](scripts/cluster_articles.py), 그리디+centroid running mean, [scripts/lib/cluster.py](scripts/lib/cluster.py)
-- [x] **D-(c) GitHub Actions 자동화** — 5개 cron 워크플로, 모두 검증 완료
-- [x] **자사 매체 = 세계일보 이전** — `is_our_company` 플래그 newsboard → segye, 6일치 backfill
-- [x] **자사 발행 수 측정** — list.naver 페이지 페이지네이션 파싱, daily_publication_count 적재
-- [x] **A) 50매체 UI 대응** — `/compare` 동적 매체 선택 (searchParams + 프리셋), `/analytics/subscribers` TOP 15 + "+N개 더" 토글
-- [x] **B) Vercel 배포** — production https://newsboard-two.vercel.app, env 7개 설정, `vercel.json` runtime 키 제거 (Python 자동 감지)
-- [x] **C) cron chain** — cron-cluster 가 cron-ranking 성공 직후 `workflow_run` 으로 자동 발동
-- [x] **대시보드 레이아웃 개선** — AI 일간 요약 풀 폭 가로 + 주요 이슈 4 카드 grid
+- [x] **AI 요약 파이프라인** — [api/lib/ai.py](api/lib/ai.py), [api/routes/report.py](api/routes/report.py), `POST /api/report/daily`, `POST /api/report/issue/{cluster_id}`
+- [x] **이슈 상세 페이지** — [src/app/issue/\[cluster_id\]/page.tsx](src/app/issue/[cluster_id]/page.tsx)
+- [x] **데이터 수집 스크립트** — ranking, subscribers, publications, section_ranking, comments
+- [x] **AI 클러스터링 파이프라인** — [scripts/cluster_articles.py](scripts/cluster_articles.py), 그리디+centroid
+- [x] **GitHub Actions 자동화** — 8개 cron 워크플로 + chain
+- [x] **자사 매체 = 세계일보** — `is_our_company` 플래그 segye 로 이전
+- [x] **Vercel 배포** — production https://newsboard-two.vercel.app
+- [x] **/compare 경쟁사 비교** — 인기 랭킹 + 섹션별 랭킹 탭, 언론사 칩 선택 UI, 세계일보 고정 강조
+- [x] **구독자 분석** — 표형 UI + 체크박스 → 차트 연동 + 구독자수/증감수 토글
+- [x] **댓글 반응 분석** — 자사/경쟁사 분리, /analytics/comments 페이지
+- [x] **미보도 탐지 파이프라인** — [scripts/detect_gap.py](scripts/detect_gap.py), cron-gap chain, 검토 시작/완료 버튼 ([src/app/gap/actions.ts](src/app/gap/actions.ts))
+- [x] **자사 전체 기사 수집** — [scripts/collect_publications.py](scripts/collect_publications.py) 에서 제목·URL → article 테이블 적재 (낙종 탐지 정확도 향상)
 
 ### ⚠️ 환경변수 (라이브 / .env.local 양쪽)
 **Vercel Production env (이미 설정됨)**:
@@ -58,14 +64,15 @@
 
 **로컬 .env.local 만 있는 것** (gitignore): 위 값 + 옵션 1 (Vercel AI Gateway) 주석 블록
 
-### 재개 지점 (2026-04-26 세션 종료)
-- C) cron chain 완료 + 푸시 (`62dcacb`). 다음 매시 정각 ranking 직후 cluster 자동 발동 검증 대기 중.
-- 대시보드 production 에서 "자사 오늘 기사 (네이버) + 전일 대비 delta" 정상 동작 확인됨.
-- 디자인 미리보기 파일 [_design-preview.html](_design-preview.html) — gitignore 됨, 다른 PC에선 없음.
+### 재개 지점 (2026-04-30 세션 종료)
+- 미보도 탐지 전체 파이프라인 완료 + 배포 (`51cd956`).
+- 검토 시작 → reviewing / 완료 → resolved Server Action 동작 확인.
+- 클러스터 중복 알림 DB 정리 완료 (104개 고유 유지).
+- threshold 0.80 → 0.85 상향 (유사 제목 중복 클러스터 감소 목적).
+- ⚠ **미구현 고도화**: 클러스터 re-absorption (같은 이슈 다른 제목 중복 근본 해결) — memory에 기록됨.
 
 ### 다음 작업 로드맵
-- **D) 스포츠 매체 0 진단** (5분) — 스포츠조선/스포티비뉴스의 followers.json 응답 키 확인. cron-subscribers workflow_dispatch 에 `media: sportschosun spotvnews` + `debug: true`.
-- **P3) 댓글 반응 수집 파이프라인** (30분~) — 자사/전체 분리. 네이버 commonComment/listCount API 활용 가능.
+- **(미래) 클러스터 re-absorption** — 동일 이슈 다른 제목 중복 클러스터 근본 해결. cluster_articles.py 에서 기존 클러스터 centroid 와 비교해 threshold 이상이면 병합.
 - **(보너스) 셀렉터 견고화** — Naver UI 변경 대비 [scripts/lib/naver.py](scripts/lib/naver.py) 다중 selector 우선순위 확장.
 - **(보너스) GitHub auto-deploy 연결** — Settings → Git 에서 Vercel ↔ GitHub 연결, push 자동 배포.
 - **(미래) 본문 임베딩** — `article.body` 채워지면 클러스터링 입력을 `title + body[:500]` 으로 확장.
@@ -113,12 +120,20 @@
 - 세계일보 7일치 subscriber backfill 됨 (Naver 라운드값 3,000,000 으로 고정, 차트 평평한 라인). Naver 가 큰 매체는 round 단위로만 노출하는 한계.
 - 시드의 `missed_issue_alert.target_media_company_id` 도 세계일보로 변경됨.
 
-### 판단 사항 (daily_publication_count — 자사 발행 수)
+### 판단 사항 (daily_publication_count + 자사 전체 기사 수집)
 - "오늘 기사 수" 카드는 자사(세계일보) 가 네이버에 송출한 모든 기사 수. cron-ranking 의 인기 5건 만으로는 부족해서 별도 테이블 + 별도 cron.
 - 데이터 출처: `https://news.naver.com/main/list.naver?mode=LPOD&mid=sec&oid={id}&listType=summary&date=YYYYMMDD&page=N` (옛 list URL, HTML 정적 렌더)
-- 카운트 방법: 페이지 1 fetch → max_page 추출 → 2..N 병렬 fetch → `n.news.naver.com/mnews/article` 링크 unique URL 합산.
-- 별도 테이블로 둔 이유: 자사 article 을 모두 article 테이블에 적재하면 클러스터링이 자사 데이터로 편향됨. count 만 저장이 깔끔.
-- KST 기준 today/yesterday 둘 다 매시간 갱신 (오늘은 점점 늘고 어제는 안정화).
+- 파싱: `dt:not(.photo) a[href]` 로 제목+URL 추출 ([scripts/lib/naver.py](scripts/lib/naver.py) `parse_publication_articles`).
+- **2026-04-30 확장**: count 만 저장 → **기사 제목·URL 도 article 테이블에 upsert** (낙종 탐지 시 세계일보 보도 여부 정확히 판단하기 위해). daily_publication_count 는 계속 병행 갱신.
+- KST 기준 today/yesterday 둘 다 매시간 갱신.
+
+### 판단 사항 (미보도 탐지 파이프라인)
+- **탐지 기준**: `issue_cluster` 에서 세계일보(`is_our_company=TRUE`) 기사가 없고, 경쟁사 기사 ≥ 2개 매체인 클러스터 → `missed_issue_alert` 생성.
+- **priority_score**: 경쟁사 2개=50 / 3개=75 / 4개+=100. `≥80=high / ≥50=medium / else=low`.
+- **중복 방지**: `_dedup_by_title()` 로 동일 제목 클러스터 중 confidence 높은 하나만 처리. `_load_existing_titles()` 로 DB 기존 open/reviewing 제목과 비교해 재삽입 방지.
+- **⚠ 미해결**: 제목이 조금 다른 같은 이슈(예: "김예성 횡령 무죄" vs "김예성 2심 무죄") 는 현재 dedup 안 됨. 클러스터 re-absorption 구현 전까지 threshold 0.85 로 발생 빈도 감소만.
+- **검토 상태 흐름**: `open` → (검토 시작 클릭) → `reviewing` → (완료 클릭) → `resolved`. `resolved`/`ignored` 는 /gap 페이지에서 제외.
+- **cron chain**: `ranking → cluster → gap` (매시 정각 자동 연쇄). cluster 실패 시 gap 미실행 — 6시간 fallback 으로 보완.
 
 ### 판단 사항 (workflow_run cron chain)
 - ranking 성공 → cluster 자동 발동을 GitHub Actions 의 `workflow_run` trigger 로 구현.
@@ -361,35 +376,31 @@ npm run dev
 - `vercel.json` 대신 `vercel.ts`로 이동 가능 (향후 과제).
 ---
 
-## Recent Updates (2026-04-28 ~ 2026-04-29)
+## Recent Updates (2026-04-29 ~ 2026-04-30)
 
-### 주요 이슈
-- 주요 이슈 노출 기준을 **관련 기사 2건 이상**으로 조정.
-- 이슈 카드와 이슈 목록에 **보도 매체 목록**을 함께 표시하도록 변경.
-- 단일 기사만 묶인 클러스터는 주요 이슈 영역에서 제외.
+### 미보도 탐지 파이프라인 (신규)
+- [scripts/detect_gap.py](scripts/detect_gap.py) — 클러스터 기반 미보도 탐지 → `missed_issue_alert` 적재
+- [.github/workflows/cron-gap.yml](.github/workflows/cron-gap.yml) — `Cluster Articles` 성공 직후 chain + 6시간 fallback
+- [src/app/gap/actions.ts](src/app/gap/actions.ts) — `markReviewing` / `markResolved` Server Action
+- [src/app/gap/ReviewButton.tsx](src/app/gap/ReviewButton.tsx) — 검토 시작 → 검토 중 + 완료 버튼 (상태별 UI)
+- 중복 알림 방지: `_dedup_by_title()` + `_load_existing_titles()` 적용
+- 클러스터링 threshold 0.80 → **0.85** 상향 (유사 제목 중복 클러스터 감소)
 
-### 구독자 분석
-- `경쟁사 구독자 규모` 영역을 카드형 목록에서 **표형 UI**로 개편.
-- `세계일보`는 경쟁사 표에서 **순위와 무관하게 항상 첫 행**에 보이도록 정렬.
-- `세계일보` 행은 강조 배경 + `고정` 배지를 사용하지만, sticky 행은 아니며 스크롤 시 함께 이동.
-- 순위 왼쪽에 **체크박스**를 추가하고, 체크한 매체만 왼쪽 차트에 반영되도록 연결.
-- 표 하단 토글은 `+N개 더` 링크 대신 **`More` 버튼**으로 변경.
-- 왼쪽 차트는 `구독자 변화`에서 **`구독자 추이`**로 정리.
-- 차트 헤더에 **`구독자 수 / 증감수` 세그먼트 토글**을 추가해서 같은 선택 매체 기준으로 지표 전환 가능.
+### 자사 전체 기사 수집 확장
+- [scripts/lib/naver.py](scripts/lib/naver.py) — `PublicationArticle` dataclass + `parse_publication_articles()` 추가
+- [scripts/collect_publications.py](scripts/collect_publications.py) — 카운트만 저장 → **기사 제목·URL 전체 article 테이블 upsert** 로 확장
 
-### 구현 메모
-- [src/lib/queries.ts](src/lib/queries.ts)
-  - 경쟁사 구독자 조회 결과를 표용 최근 3일(`tableSnapshots`)과 차트용 최근 15일(`trendSnapshots`)로 분리.
-  - `세계일보`는 DB 상 `is_our_company = true` 이지만, 경쟁사 비교 표에서는 예외적으로 포함.
-- [src/components/analytics/SubscriberComparisonExplorer.tsx](src/components/analytics/SubscriberComparisonExplorer.tsx)
-  - 구독자 분석 전용 클라이언트 컴포넌트 추가.
-  - 체크박스 선택, 표 UI, 차트 지표 토글(`구독자 수 / 증감수`)을 한 곳에서 관리.
-- [src/app/analytics/subscribers/page.tsx](src/app/analytics/subscribers/page.tsx)
-  - 서버에서 데이터만 조회하고 전용 컴포넌트에 전달하는 구조로 단순화.
+### /compare 경쟁사 비교 개편
+- 인기 랭킹 + 섹션별 랭킹 탭 (클라이언트 state, 즉시 전환)
+- 섹션별 랭킹 DB 저장 파이프라인: [scripts/collect_section_ranking.py](scripts/collect_section_ranking.py) + `section_ranking_snapshot` 테이블
+- 언론사 칩 선택 UI ([src/app/compare/MediaSelector.tsx](src/app/compare/MediaSelector.tsx)), 세계일보 항상 고정 + 강조
 
 ### 배포 메모
 - 최근 변경은 모두 `main` 브랜치에 반영.
 - Vercel production: `https://newsboard-two.vercel.app`
-- 관련 최근 커밋:
-  - `479dcf8 feat(subscribers): connect chart selection to comparison table`
-  - `0a72793 feat(subscribers): add chart metric toggle`
+- 최근 주요 커밋:
+  - `51cd956 feat(gap): 검토 시작/완료 버튼 기능 구현`
+  - `064f4f2 fix(cluster): threshold 0.85 상향`
+  - `dcc3b44 fix(gap): 중복 알림 방지`
+  - `378545a feat(publications): 자사 전체 기사 article 테이블 적재`
+  - `89754e6 feat(gap): 미보도 탐지 파이프라인 구현`

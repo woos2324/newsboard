@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { PageShell } from "@/components/PageShell";
-import { getCompareMatrix } from "@/lib/queries";
+import { getCompareMatrix, getMediaNaverIds } from "@/lib/queries";
+import { fetchMediaSectionRankings } from "@/lib/naver-section";
+import { SectionRankingView } from "./SectionRankingView";
 
 export const dynamic = "force-dynamic";
 
@@ -14,11 +16,11 @@ const PRESETS: { label: string; ids: string[] }[] = [
 ];
 
 type Props = {
-  searchParams: Promise<{ media?: string }>;
+  searchParams: Promise<{ media?: string; tab?: string }>;
 };
 
 export default async function ComparePage({ searchParams }: Props) {
-  const { media: mediaParam } = await searchParams;
+  const { media: mediaParam, tab = "popular" } = await searchParams;
   const mediaIds = mediaParam
     ? mediaParam
         .split(",")
@@ -26,13 +28,29 @@ export default async function ComparePage({ searchParams }: Props) {
         .filter(Boolean)
     : DEFAULT_MEDIA;
 
-  const { media, rows } = await getCompareMatrix(mediaIds, 5);
+  const mediaQuery = `media=${mediaIds.join(",")}`;
+
+  const [{ media, rows }, sectionRankings] = await Promise.all([
+    getCompareMatrix(mediaIds, 5),
+    tab === "section"
+      ? getMediaNaverIds(mediaIds).then((list) =>
+          fetchMediaSectionRankings(
+            list.map((m) => ({
+              mediaName: m.name,
+              normalizedName: m.normalizedName,
+              naverMediaId: m.naverMediaId,
+            }))
+          )
+        )
+      : Promise.resolve(null),
+  ]);
 
   return (
     <PageShell
       title="경쟁사 비교"
       description="매체별 랭킹 뉴스를 나란히 비교해 포지셔닝을 확인하세요."
     >
+      {/* 프리셋 */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <span className="caption">프리셋:</span>
         {PRESETS.map((p) => {
@@ -53,7 +71,40 @@ export default async function ComparePage({ searchParams }: Props) {
         })}
       </div>
 
-      {media.length === 0 ? (
+      {/* 랭킹 유형 탭 */}
+      <div className="mb-5 flex gap-0.5 rounded-lg bg-background p-1 w-fit border border-border">
+        <Link
+          href={`/compare?${mediaQuery}&tab=popular`}
+          className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
+            tab === "popular"
+              ? "bg-white text-primary-500 shadow-sm"
+              : "text-muted hover:text-foreground"
+          }`}
+        >
+          인기 랭킹
+        </Link>
+        <Link
+          href={`/compare?${mediaQuery}&tab=section`}
+          className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
+            tab === "section"
+              ? "bg-white text-primary-500 shadow-sm"
+              : "text-muted hover:text-foreground"
+          }`}
+        >
+          섹션별 랭킹
+        </Link>
+      </div>
+
+      {/* 콘텐츠 */}
+      {tab === "section" ? (
+        sectionRankings && sectionRankings.length > 0 ? (
+          <SectionRankingView rankings={sectionRankings} />
+        ) : (
+          <div className="card">
+            <p className="caption">섹션별 랭킹 데이터를 불러오지 못했습니다.</p>
+          </div>
+        )
+      ) : media.length === 0 ? (
         <div className="card">
           <p className="caption">
             선택된 매체가 없거나 해당 normalized_name 매체를 찾지 못했습니다.

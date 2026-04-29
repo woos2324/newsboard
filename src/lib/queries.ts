@@ -106,6 +106,12 @@ export type CompareMatrix = {
   rows: CompareRow[];
 };
 
+export type MediaNaverIdView = {
+  name: string;
+  normalizedName: string;
+  naverMediaId: string | null;
+};
+
 export type IssueArticleView = {
   article_id: number;
   title: string;
@@ -405,6 +411,26 @@ export async function getCompareMatrix(
   }
 
   return { media: orderedMedia, rows: out };
+}
+
+export async function getMediaNaverIds(
+  normalizedNames: string[]
+): Promise<MediaNaverIdView[]> {
+  const sb = getSupabase();
+  const { data, error } = await sb
+    .from("media_company")
+    .select("name, normalized_name, naver_media_id")
+    .in("normalized_name", normalizedNames);
+  if (error) throw error;
+  const map = new Map((data ?? []).map((m) => [m.normalized_name, m]));
+  return normalizedNames
+    .map((n) => map.get(n))
+    .filter((m): m is NonNullable<typeof m> => !!m)
+    .map((m) => ({
+      name: m.name,
+      normalizedName: m.normalized_name,
+      naverMediaId: m.naver_media_id ?? null,
+    }));
 }
 
 // ===================================================================

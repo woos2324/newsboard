@@ -18,7 +18,7 @@ import {
   getRecentArticles,
   getMissedAlerts,
   getOurSubscriberSeries,
-  getTopComments,
+  getOurTopComments,
   getLatestDailySummary,
 } from "@/lib/queries";
 
@@ -49,7 +49,7 @@ export default async function DashboardPage() {
       getRecentArticles(8),
       getMissedAlerts("open", 5),
       getOurSubscriberSeries(7),
-      getTopComments(4),
+      getOurTopComments(4),
       getLatestDailySummary(),
     ]);
 

@@ -72,6 +72,11 @@ export type TopCommentView = {
   source: string;
 };
 
+export type CompetitorCommentMedia = {
+  media: string;
+  articles: TopCommentView[];
+};
+
 export type AISummaryView = {
   summary_id: number;
   type: "daily" | "weekly" | "issue" | "competitor";
@@ -670,6 +675,88 @@ export async function getTopComments(limit = 10): Promise<TopCommentView[]> {
       source: r.source,
     };
   });
+}
+
+export async function getOurTopComments(limit = 4): Promise<TopCommentView[]> {
+  const sb = getSupabase();
+  const { data, error } = await sb
+    .from("comment_metric")
+    .select(
+      "comment_count, like_count, engagement_score, source, article:article_id!inner(article_id, title, media_company:media_company_id!inner(name, is_our_company))"
+    )
+    .eq("article.media_company.is_our_company", true)
+    .order("comment_count", { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+
+  return (data ?? []).map((r) => {
+    const art = r.article as unknown as
+      | {
+          article_id: number;
+          title: string;
+          media_company: { name: string; is_our_company: boolean } | null;
+        }
+      | null;
+    return {
+      article_id: art?.article_id ?? 0,
+      title: art?.title ?? "(기사 없음)",
+      media: art?.media_company?.name ?? "-",
+      comments: r.comment_count,
+      likes: r.like_count,
+      engagement: r.engagement_score == null ? null : Number(r.engagement_score),
+      source: r.source,
+    };
+  });
+}
+
+const COMPETITOR_NAMES = ["chosun", "joongang", "donga", "mk"] as const;
+
+export async function getCompetitorTopComments(
+  perMedia = 5
+): Promise<CompetitorCommentMedia[]> {
+  const sb = getSupabase();
+  const { data, error } = await sb
+    .from("comment_metric")
+    .select(
+      "comment_count, like_count, engagement_score, source, article:article_id!inner(article_id, title, media_company:media_company_id!inner(name, normalized_name))"
+    )
+    .in("article.media_company.normalized_name", [...COMPETITOR_NAMES])
+    .order("comment_count", { ascending: false })
+    .limit(perMedia * COMPETITOR_NAMES.length);
+
+  if (error) throw error;
+
+  type RawArt = {
+    article_id: number;
+    title: string;
+    media_company: { name: string; normalized_name: string } | null;
+  };
+
+  const grouped = new Map<string, TopCommentView[]>();
+  for (const r of data ?? []) {
+    const art = r.article as unknown as RawArt | null;
+    const name = art?.media_company?.name ?? "-";
+    if (!grouped.has(name)) grouped.set(name, []);
+    const list = grouped.get(name)!;
+    if (list.length < perMedia) {
+      list.push({
+        article_id: art?.article_id ?? 0,
+        title: art?.title ?? "(기사 없음)",
+        media: name,
+        comments: r.comment_count,
+        likes: r.like_count,
+        engagement:
+          r.engagement_score == null ? null : Number(r.engagement_score),
+        source: r.source,
+      });
+    }
+  }
+
+  return Array.from(grouped.entries()).map(([media, articles]) => ({
+    media,
+    articles,
+  }));
 }
 
 // ===================================================================

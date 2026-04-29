@@ -1,6 +1,7 @@
 """네이버 기사별 댓글 수 수집 → comment_metric 적재.
 
 대상: 자사(세계일보) + 경쟁사 4개(조선, 중앙, 동아, 매경)
+Playwright 헤드리스 브라우저로 실제 댓글 수 추출.
 
 사용:
   python -m scripts.collect_comments
@@ -11,10 +12,10 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import math
 import re
 import sys
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 
 if sys.platform == "win32":
@@ -24,61 +25,50 @@ if sys.platform == "win32":
     except (AttributeError, OSError):
         pass
 
-import httpx
+from playwright.async_api import Browser, async_playwright
 
 from scripts.lib.db import get_client
 
 TARGET_MEDIA = ["segye", "chosun", "joongang", "donga", "mk"]
-
-CBOX_URL = "https://apis.naver.com/commentBox/cbox5/web_naver_list_jsonp.json"
 ARTICLE_URL_RE = re.compile(r"n\.news\.naver\.com/(?:mnews/)?article/(\d+)/(\d+)")
-JSONP_RE = re.compile(r"\((\{.+\})\)\s*;?\s*$", re.DOTALL)
+MAX_CONCURRENT = 5
 
-# 동시 요청 수 제한 (Naver rate-limit 회피)
-_SEM = asyncio.Semaphore(10)
+# 댓글 수가 표시되는 셀렉터 우선순위
+COMMENT_COUNT_SELECTORS = [
+    ".u_cbox_count",            # cbox 위젯 안 카운트
+    "._COMMENT_COUNT_VIEW em",  # 기사 헤더 카운트 em
+    "._COMMENT_COUNT em",
+]
 
-UA = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
-)
+
+def _engagement_score(comment_count: int) -> float:
+    return round(min(math.log1p(comment_count) / math.log1p(1000) * 100, 100), 4)
 
 
-async def fetch_comment_count(
-    client: httpx.AsyncClient, oid: str, aid: str
-) -> tuple[int, int | None]:
-    """(comment_count, like_count) 반환. 실패 시 (0, None)."""
-    params = {
-        "ticket": "news",
-        "templateId": "default_society",
-        "pool": "cbox3",
-        "lang": "ko",
-        "objectId": f"news{oid}_{aid}",
-        "pageSize": "1",
-        "listType": "OBJECT",
-        "_callback": "cb",
-    }
-    async with _SEM:
+async def _fetch_one(
+    browser: Browser, url: str, sem: asyncio.Semaphore
+) -> int:
+    """Playwright로 기사 URL에서 댓글 수 추출."""
+    async with sem:
+        page = await browser.new_page()
         try:
-            resp = await client.get(CBOX_URL, params=params, timeout=8.0)
-            resp.raise_for_status()
-            m = JSONP_RE.search(resp.text)
-            if not m:
-                return 0, None
-            data = json.loads(m.group(1))
-            count = data.get("result", {}).get("count", {})
-            comment_count = count.get("totalCount", 0)
-            like_count = count.get("userCount", None)
-            return comment_count, like_count
+            await page.goto(url, wait_until="domcontentloaded", timeout=15_000)
+
+            for selector in COMMENT_COUNT_SELECTORS:
+                try:
+                    await page.wait_for_selector(selector, timeout=6_000)
+                    text = await page.locator(selector).first.inner_text()
+                    cleaned = text.replace(",", "").strip()
+                    if cleaned.isdigit():
+                        return int(cleaned)
+                except Exception:
+                    continue
+
+            return 0
         except Exception:
-            return 0, None
-
-
-def _engagement_score(comment_count: int, like_count: int | None) -> float:
-    c_score = min(math.log1p(comment_count) / math.log1p(1000) * 100, 100)
-    if like_count:
-        l_score = min(math.log1p(like_count) / math.log1p(5000) * 100, 100)
-        return round(c_score * 0.7 + l_score * 0.3, 4)
-    return round(c_score, 4)
+            return 0
+        finally:
+            await page.close()
 
 
 async def main() -> None:
@@ -99,7 +89,7 @@ async def main() -> None:
         .data
     )
     if not media_rows:
-        print("대상 매체 없음 (TARGET_MEDIA 에 일치하는 활성 매체가 없음)")
+        print("대상 매체 없음")
         return
 
     media_ids = [m["media_company_id"] for m in media_rows]
@@ -115,68 +105,64 @@ async def main() -> None:
     )
     print(f"대상 기사 {len(articles)}건 (최근 {args.hours}h, {len(media_rows)}개 매체)")
 
-    parseable: list[tuple[int, int, str, str]] = []
+    # 네이버 URL 기사만 필터
+    targets: list[tuple[int, int, str]] = []
     for art in articles:
         m = ARTICLE_URL_RE.search(art.get("url") or "")
         if m:
-            parseable.append((art["article_id"], art["media_company_id"], m.group(1), m.group(2)))
+            targets.append((art["article_id"], art["media_company_id"], art["url"]))
 
-    skipped = len(articles) - len(parseable)
-    print(f"  URL 파싱 성공 {len(parseable)}건" + (f" (스킵 {skipped}건)" if skipped else ""))
+    skipped = len(articles) - len(targets)
+    print(f"  URL 파싱 성공 {len(targets)}건" + (f" (스킵 {skipped}건)" if skipped else ""))
 
-    if not parseable:
+    if not targets:
         print("수집 가능한 기사 없음 (n.news.naver.com URL 형식 기사가 없음)")
         return
 
+    sem = asyncio.Semaphore(MAX_CONCURRENT)
     now_iso = datetime.now(timezone.utc).isoformat()
 
-    async with httpx.AsyncClient(
-        headers={"User-Agent": UA, "Accept-Language": "ko-KR,ko;q=0.9"},
-        follow_redirects=True,
-    ) as client:
-        tasks = [
-            fetch_comment_count(client, oid, aid)
-            for _, _, oid, aid in parseable
-        ]
-        results = await asyncio.gather(*tasks)
+    print(f"헤드리스 브라우저 시작 (동시 {MAX_CONCURRENT}개)…")
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        counts = await asyncio.gather(
+            *[_fetch_one(browser, url, sem) for _, _, url in targets]
+        )
+        await browser.close()
 
     metric_rows = []
-    for (article_id, media_id, oid, aid), (comment_count, like_count) in zip(
-        parseable, results
-    ):
-        score = _engagement_score(comment_count, like_count)
+    for (article_id, media_id, _), comment_count in zip(targets, counts):
         metric_rows.append(
             {
                 "article_id": article_id,
                 "measured_at": now_iso,
                 "comment_count": comment_count,
-                "like_count": like_count,
-                "engagement_score": score,
+                "like_count": None,
+                "engagement_score": _engagement_score(comment_count),
                 "source": "NAVER",
             }
         )
 
+    nonzero = sum(1 for r in metric_rows if r["comment_count"] > 0)
+    print(f"  댓글 있는 기사: {nonzero}건 / {len(metric_rows)}건")
+
     if args.dry_run:
-        from collections import Counter
-        media_cnt: Counter[int] = Counter(mid for _, mid, _, _ in parseable)
+        media_cnt: Counter[int] = Counter(mid for _, mid, _ in targets)
         for mid, cnt in media_cnt.most_common():
-            # 댓글 있는 기사만 출력 (상위 3개)
-            sample = [
-                (r["comment_count"], r["like_count"])
-                for r, (art_id, m_id, _, _) in zip(metric_rows, parseable)
+            rows_for = [
+                r["comment_count"]
+                for r, (_, m_id, _) in zip(metric_rows, targets)
                 if m_id == mid
             ]
-            sample.sort(reverse=True)
-            top = sample[:3]
-            print(f"  {media_map.get(mid, mid):<10} {cnt}건, 상위댓글: {top}")
+            rows_for.sort(reverse=True)
+            print(f"  {media_map.get(mid, mid):<10} {cnt}건, 상위: {rows_for[:3]}")
         print(f"\n[dry-run] {len(metric_rows)}건 적재 생략")
         return
 
     if metric_rows:
         sb.table("comment_metric").insert(metric_rows).execute()
 
-    from collections import Counter
-    media_cnt = Counter(mid for _, mid, _, _ in parseable)
+    media_cnt = Counter(mid for _, mid, _ in targets)
     print(f"\n적재 완료: {len(metric_rows)}건")
     for mid, cnt in media_cnt.most_common():
         print(f"  {media_map.get(mid, mid)}: {cnt}건")

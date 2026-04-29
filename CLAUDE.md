@@ -359,3 +359,37 @@ npm run dev
 - Vercel AI Gateway: `"provider/model"` 문자열로 AI SDK 호출. Anthropic SDK 직접 의존 금지.
 - Node.js 24 LTS가 현재 기본.
 - `vercel.json` 대신 `vercel.ts`로 이동 가능 (향후 과제).
+---
+
+## Recent Updates (2026-04-28 ~ 2026-04-29)
+
+### 주요 이슈
+- 주요 이슈 노출 기준을 **관련 기사 2건 이상**으로 조정.
+- 이슈 카드와 이슈 목록에 **보도 매체 목록**을 함께 표시하도록 변경.
+- 단일 기사만 묶인 클러스터는 주요 이슈 영역에서 제외.
+
+### 구독자 분석
+- `경쟁사 구독자 규모` 영역을 카드형 목록에서 **표형 UI**로 개편.
+- `세계일보`는 경쟁사 표에서 **순위와 무관하게 항상 첫 행**에 보이도록 정렬.
+- `세계일보` 행은 강조 배경 + `고정` 배지를 사용하지만, sticky 행은 아니며 스크롤 시 함께 이동.
+- 순위 왼쪽에 **체크박스**를 추가하고, 체크한 매체만 왼쪽 차트에 반영되도록 연결.
+- 표 하단 토글은 `+N개 더` 링크 대신 **`More` 버튼**으로 변경.
+- 왼쪽 차트는 `구독자 변화`에서 **`구독자 추이`**로 정리.
+- 차트 헤더에 **`구독자 수 / 증감수` 세그먼트 토글**을 추가해서 같은 선택 매체 기준으로 지표 전환 가능.
+
+### 구현 메모
+- [src/lib/queries.ts](src/lib/queries.ts)
+  - 경쟁사 구독자 조회 결과를 표용 최근 3일(`tableSnapshots`)과 차트용 최근 15일(`trendSnapshots`)로 분리.
+  - `세계일보`는 DB 상 `is_our_company = true` 이지만, 경쟁사 비교 표에서는 예외적으로 포함.
+- [src/components/analytics/SubscriberComparisonExplorer.tsx](src/components/analytics/SubscriberComparisonExplorer.tsx)
+  - 구독자 분석 전용 클라이언트 컴포넌트 추가.
+  - 체크박스 선택, 표 UI, 차트 지표 토글(`구독자 수 / 증감수`)을 한 곳에서 관리.
+- [src/app/analytics/subscribers/page.tsx](src/app/analytics/subscribers/page.tsx)
+  - 서버에서 데이터만 조회하고 전용 컴포넌트에 전달하는 구조로 단순화.
+
+### 배포 메모
+- 최근 변경은 모두 `main` 브랜치에 반영.
+- Vercel production: `https://newsboard-two.vercel.app`
+- 관련 최근 커밋:
+  - `479dcf8 feat(subscribers): connect chart selection to comparison table`
+  - `0a72793 feat(subscribers): add chart metric toggle`

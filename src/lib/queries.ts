@@ -1,4 +1,5 @@
 import { getSupabase } from "./supabase";
+import { SECTION_ORDER, type MediaSectionRanking, type SectionData, type SectionArticle } from "./naver-section";
 
 // ===================================================================
 // View types — 페이지가 소비하는 shape 고정
@@ -431,6 +432,62 @@ export async function getMediaNaverIds(
       normalizedName: m.normalized_name,
       naverMediaId: m.naver_media_id ?? null,
     }));
+}
+
+export async function getSectionRankings(
+  normalizedNames: string[]
+): Promise<MediaSectionRanking[]> {
+  const sb = getSupabase();
+
+  const now = new Date();
+  const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  const todayKst = kst.toISOString().slice(0, 10);
+
+  const { data: mediaList, error: mediaErr } = await sb
+    .from("media_company")
+    .select("media_company_id, name, normalized_name")
+    .in("normalized_name", normalizedNames);
+  if (mediaErr) throw mediaErr;
+  if (!mediaList?.length) return [];
+
+  const mediaIds = mediaList.map((m) => m.media_company_id);
+
+  const { data, error } = await sb
+    .from("section_ranking_snapshot")
+    .select("media_company_id, section_name, rank, title, url")
+    .in("media_company_id", mediaIds)
+    .eq("ranking_date", todayKst)
+    .order("rank");
+  if (error) throw error;
+
+  const mediaById = new Map(mediaList.map((m) => [m.media_company_id, m]));
+
+  return normalizedNames
+    .map((normalizedName) => {
+      const media = mediaList.find((m) => m.normalized_name === normalizedName);
+      if (!media) return null;
+
+      const rows = (data ?? []).filter(
+        (r) => r.media_company_id === media.media_company_id
+      );
+
+      const sectionMap = new Map<string, SectionArticle[]>();
+      for (const row of rows) {
+        if (!sectionMap.has(row.section_name)) sectionMap.set(row.section_name, []);
+        sectionMap.get(row.section_name)!.push({
+          rank: row.rank,
+          title: row.title,
+          url: row.url ?? "",
+        });
+      }
+
+      const sections: SectionData[] = SECTION_ORDER.filter((s) =>
+        sectionMap.has(s)
+      ).map((s) => ({ name: s, articles: sectionMap.get(s)! }));
+
+      return { mediaName: media.name, normalizedName, sections };
+    })
+    .filter((m): m is MediaSectionRanking => !!m);
 }
 
 // ===================================================================

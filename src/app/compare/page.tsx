@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { PageShell } from "@/components/PageShell";
-import { getCompareMatrix, getMediaNaverIds } from "@/lib/queries";
-import { fetchMediaSectionRankings } from "@/lib/naver-section";
+import { getCompareMatrix, getSectionRankings } from "@/lib/queries";
 import { SectionRankingView } from "./SectionRankingView";
 
 export const dynamic = "force-dynamic";
@@ -32,17 +31,7 @@ export default async function ComparePage({ searchParams }: Props) {
 
   const [{ media, rows }, sectionRankings] = await Promise.all([
     getCompareMatrix(mediaIds, 5),
-    tab === "section"
-      ? getMediaNaverIds(mediaIds).then((list) =>
-          fetchMediaSectionRankings(
-            list.map((m) => ({
-              mediaName: m.name,
-              normalizedName: m.normalizedName,
-              naverMediaId: m.naverMediaId,
-            }))
-          )
-        )
-      : Promise.resolve(null),
+    tab === "section" ? getSectionRankings(mediaIds) : Promise.resolve(null),
   ]);
 
   return (

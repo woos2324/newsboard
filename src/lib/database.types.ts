@@ -506,6 +506,47 @@ export type Database = {
           },
         ]
       }
+      section_ranking_snapshot: {
+        Row: {
+          collected_at: string
+          media_company_id: number
+          rank: number
+          ranking_date: string
+          section_name: string
+          snapshot_id: number
+          title: string
+          url: string | null
+        }
+        Insert: {
+          collected_at?: string
+          media_company_id: number
+          rank: number
+          ranking_date: string
+          section_name: string
+          snapshot_id?: number
+          title: string
+          url?: string | null
+        }
+        Update: {
+          collected_at?: string
+          media_company_id?: number
+          rank?: number
+          ranking_date?: string
+          section_name?: string
+          snapshot_id?: number
+          title?: string
+          url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "section_ranking_snapshot_media_company_id_fkey"
+            columns: ["media_company_id"]
+            isOneToOne: false
+            referencedRelation: "media_company"
+            referencedColumns: ["media_company_id"]
+          },
+        ]
+      }
       subscriber_snapshot: {
         Row: {
           created_at: string

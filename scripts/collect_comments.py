@@ -31,7 +31,7 @@ from scripts.lib.db import get_client
 TARGET_MEDIA = ["segye", "chosun", "joongang", "donga", "mk"]
 
 CBOX_URL = "https://apis.naver.com/commentBox/cbox5/web_naver_list_jsonp.json"
-ARTICLE_URL_RE = re.compile(r"n\.news\.naver\.com/mnews/article/(\d+)/(\d+)")
+ARTICLE_URL_RE = re.compile(r"n\.news\.naver\.com/(?:mnews/)?article/(\d+)/(\d+)")
 JSONP_RE = re.compile(r"\((\{.+\})\)\s*;?\s*$", re.DOTALL)
 
 # 동시 요청 수 제한 (Naver rate-limit 회피)

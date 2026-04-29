@@ -77,10 +77,10 @@
 - **(보너스) GitHub auto-deploy 연결** — Settings → Git 에서 Vercel ↔ GitHub 연결, push 자동 배포.
 - **(미래) 본문 임베딩** — `article.body` 채워지면 클러스터링 입력을 `title + body[:500]` 으로 확장.
 
-### 판단 사항 (D-(a) 시점)
-- **네이버 셀렉터 다중 시도**: [scripts/lib/naver.py](scripts/lib/naver.py) 의 `_RANKING_LIST_SELECTORS`, `_TITLE_SELECTORS`, `_SUBSCRIBER_PATTERNS` 는 우선순위 리스트로 실시간 검증 안 된 상태. 첫 실행 시 `--dry-run` 으로 매체별 파싱 결과 확인 후 셀렉터 갱신.
-- **Delta 계산 정책**: `daily_delta` = (오늘 - 가장 최근의 *어제 이전* 스냅샷). `seven_day_delta` = (오늘 - 7일 이전 시점의 가장 가까운 이전 스냅샷). 동일 일자 재실행해도 delta 가 0 으로 깨지지 않도록 `lt(snapshot_date, today)` 사용.
-- **upsert 전략**: 구독자 = `(media_company_id, snapshot_date, source)` UNIQUE 키 활용. 랭킹 = `article.url` UNIQUE 키 활용 + 매 실행마다 새 `ranking_news_snapshot` row 추가 (스냅샷 누적이 의도).
+### 판단 사항 (데이터 수집 전략)
+- **네이버 셀렉터**: [scripts/lib/naver.py](scripts/lib/naver.py) 의 `_RANKING_LIST_SELECTORS`, `_TITLE_SELECTORS` 는 우선순위 리스트. 셀렉터 추가/패치 시 맨 앞에 새 셀렉터 삽입.
+- **Delta 계산 정책**: `daily_delta` = (오늘 - 가장 최근의 *어제 이전* 스냅샷). `seven_day_delta` = (오늘 - 7일 이전 가장 가까운 스냅샷). 동일 일자 재실행해도 delta 가 0 으로 깨지지 않도록 `lt(snapshot_date, today)` 사용.
+- **upsert 전략**: 구독자 = `(media_company_id, snapshot_date, source)` UNIQUE. 랭킹 = `article.url` UNIQUE + 매 실행마다 새 `ranking_news_snapshot` row 추가 (스냅샷 누적이 의도).
 
 ### 판단 사항 (AI 백엔드 — Gateway / OpenAI 직접 분기)
 - [api/lib/ai.py](api/lib/ai.py) 는 `AI_BASE_URL` 환경변수로 백엔드 분기:
@@ -89,19 +89,11 @@
 - API 키 우선순위: `AI_GATEWAY_API_KEY` → `OPENAI_API_KEY`. 둘 중 하나만 있으면 됨. PLACEHOLDER 시작 문자열은 자동 무시.
 - Vercel AI Gateway 의 모델명은 `provider/model` 형태 (`anthropic/claude-opus-4-6`), OpenAI 직접은 prefix 없는 `gpt-4o-mini`. 사용자가 `DEFAULT_AI_MODEL`/`DEFAULT_EMBED_MODEL` 명시하면 그 값을 그대로 사용.
 
-### 판단 사항 (D-(c) 자동화 — GitHub Actions 채택)
-- **Vercel Cron Hobby 일 1회 제한** 우회 위해 GitHub Actions 로 전환. 무료 티어에서 5분 간격까지 가능 + 공개 repo 무제한 / private 도 월 2000분 무료.
-- **장점**:
-  - Vercel 배포 의존성 없이 (Supabase 만 있으면) 자동화 시작 가능
-  - `scripts/` Python 코드를 그대로 호출 (FastAPI 엔드포인트로 wrap 안 해도 됨)
-  - workflow_dispatch 로 수동 트리거 + 인자 오버라이드 가능 → 디버깅 편함
-- **스케줄**: 적극적 옵션 채택 (사용자 선택)
-  - 매시 정각: 랭킹 수집 (`0 * * * *` UTC)
-  - 6시간마다 +30분: 클러스터링 (`30 */6 * * *` UTC, 수집 직후 마진)
-  - 매일 KST 자정: 일간 브리핑 (`0 15 * * *` UTC)
-- **구독자 수집** (`collect_subscribers`) 은 일단 cron 안 함 — 매시간 실행할 정도 데이터가 아님. 필요 시 `cron-subscribers.yml` 추가 (예: 일 1회).
-- **GitHub Secrets 7개 필요**: `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_LEGACY_ANON_KEY`, `OPENAI_API_KEY`, `AI_BASE_URL`, `DEFAULT_AI_MODEL`, `DEFAULT_EMBED_MODEL` (+ 옵션 `SUPABASE_SERVICE_ROLE_KEY`, `AI_GATEWAY_API_KEY`).
-- **시간대 정합성**: GitHub Actions 러너는 UTC, `date.today()` 도 UTC. cluster_date 는 UTC 기준이므로 KST 자정에 트리거되는 일간 브리핑이 cluster_date = today(UTC) 와 자연스럽게 매칭됨.
+### 판단 사항 (GitHub Actions 자동화)
+- **Vercel Cron Hobby 일 1회 제한** 우회 위해 GitHub Actions 채택. `workflow_dispatch` 로 수동 트리거 + 인자 오버라이드 가능.
+- **GitHub Secrets 필요**: `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_LEGACY_ANON_KEY`, `OPENAI_API_KEY`, `AI_BASE_URL`, `DEFAULT_AI_MODEL`, `DEFAULT_EMBED_MODEL` (+ 옵션 `SUPABASE_SERVICE_ROLE_KEY`, `AI_GATEWAY_API_KEY`).
+- **시간대**: GitHub Actions 러너는 UTC. cluster_date 도 UTC 기준 — KST 자정 브리핑이 cluster_date = today(UTC) 와 자연스럽게 매칭됨.
+- **workflow_dispatch 로 트리거된 ranking 은 chain 자동 발동 안 될 수 있음** (GitHub 제약). 자연스러운 schedule 실행에서만 안정적으로 chain.
 
 ### 판단 사항 (Supabase Python 키 호환성)
 - `supabase-py 2.10.0` 은 **JWT(`eyJ...`) 포맷만 인식** — 신규 publishable key (`sb_publishable_*`) 로 호출 시 `Invalid API key` 발생. [scripts/lib/db.py](scripts/lib/db.py)/[api/lib/db.py](api/lib/db.py) 의 `_resolve_key()` 는 JWT 인 키만 채택 (`SUPABASE_LEGACY_ANON_KEY` 우선). Next.js (`@supabase/supabase-js`) 는 publishable 도 OK 라 분리해서 운영. supabase-py 가 publishable key 지원하는 버전(>= 2.13?) 으로 올리면 폴백 단순화 가능.
@@ -116,9 +108,12 @@
 - **비용 가드**: `--dry-run` 은 AI 메타 생성(chat) 도 skip — 임베딩 호출 비용만 발생. 실 적재는 일반 실행에서만.
 
 ### 판단 사항 (자사 매체 = 세계일보)
-- 시드는 가상 매체 "뉴스보드" 가 자사로 들어가지만, 실 운영 시점에 `is_our_company` 플래그를 segye(세계일보) 로 옮김. 시드와 라이브 DB 의 자사 매체가 다르므로 새 환경 셋업 시 동일 UPDATE 필요 (`UPDATE media_company SET is_our_company=TRUE WHERE normalized_name='segye'; UPDATE ... =FALSE WHERE normalized_name='newsboard';`).
-- 세계일보 7일치 subscriber backfill 됨 (Naver 라운드값 3,000,000 으로 고정, 차트 평평한 라인). Naver 가 큰 매체는 round 단위로만 노출하는 한계.
-- 시드의 `missed_issue_alert.target_media_company_id` 도 세계일보로 변경됨.
+- 시드는 가상 매체 "뉴스보드" 가 자사로 들어있어, **새 환경 셋업 시** 아래 UPDATE 필요:
+  ```sql
+  UPDATE media_company SET is_our_company=TRUE WHERE normalized_name='segye';
+  UPDATE media_company SET is_our_company=FALSE WHERE normalized_name='newsboard';
+  ```
+- Naver 가 큰 매체 구독자는 round 단위로만 노출 — 세계일보 차트가 평평한 라인으로 보이는 건 정상.
 
 ### 판단 사항 (daily_publication_count + 자사 전체 기사 수집)
 - "오늘 기사 수" 카드는 자사(세계일보) 가 네이버에 송출한 모든 기사 수. cron-ranking 의 인기 5건 만으로는 부족해서 별도 테이블 + 별도 cron.
@@ -135,12 +130,6 @@
 - **검토 상태 흐름**: `open` → (검토 시작 클릭) → `reviewing` → (완료 클릭) → `resolved`. `resolved`/`ignored` 는 /gap 페이지에서 제외.
 - **cron chain**: `ranking → cluster → gap` (매시 정각 자동 연쇄). cluster 실패 시 gap 미실행 — 6시간 fallback 으로 보완.
 
-### 판단 사항 (workflow_run cron chain)
-- ranking 성공 → cluster 자동 발동을 GitHub Actions 의 `workflow_run` trigger 로 구현.
-- `if` 가드: workflow_run 트리거면 `conclusion=='success'` 일 때만 실행, schedule/manual 은 항상 실행.
-- 6시간 schedule fallback 도 유지 — ranking 모두 실패해도 cluster 단독 발동 보장.
-- ⚠ **`workflow_dispatch` 로 트리거된 ranking 은 chain 자동 발동 안 될 수 있음** (GitHub 제약). 자연스러운 schedule 실행에서만 안정적으로 chain.
-- daily-briefing / publications / subscribers 는 chain 안 함 — 1일 1회 또는 자사 통계라 ranking 과 무관.
 
 ### 판단 사항 (Vercel 배포)
 - **`vercel.json` 의 `functions.runtime` 키 제거** — Vercel 의 새 표준에서 community runtime 모듈 식별자만 받음. 공식 Python 은 자동 감지되므로 키 자체 빼야 함. `maxDuration` 만 유지.
@@ -149,10 +138,8 @@
 - GitHub auto-deploy 미연결 — push 후 매번 `vercel deploy --prod` 수동 호출. 연결하려면 Settings → Git.
 
 ### 판단 사항 (대시보드 레이아웃)
-- AI 일간 요약 카드: 우측 세로 박스 → 상단 풀 폭 가로 박스로 이전. 헤더 한 줄에 라벨+title+updated+button 다 배치. bullets 는 세로 stack 유지 (가독성).
-- 주요 이슈 카드: 3개 → **4개** (`md:grid-cols-2 xl:grid-cols-4`). `getIssues(3) → getIssues(4)`.
-- StatCard 라벨 명시: "오늘 기사 수" → "자사 오늘 기사 (네이버)", "총 구독자" → "자사 총 구독자", "댓글 반응" → "댓글 반응 (전체)" (자사 vs 전체 혼동 회피).
-- 디자인 미리보기 도구: [_design-preview.html](_design-preview.html) (gitignore, 로컬 전용). Tailwind CDN + emoji icons 로 레이아웃 픽셀 미리보기.
+- StatCard 라벨: "자사 오늘 기사 (네이버)" / "자사 총 구독자" / "댓글 반응 (전체)" — 자사 vs 전체 혼동 방지.
+- 디자인 미리보기: [_design-preview.html](_design-preview.html) (gitignore, 로컬 전용). Tailwind CDN + emoji icons 로 레이아웃 픽셀 미리보기.
 
 ### 판단 사항 (네이버 selector — 페이지별로 다름)
 - **인기 랭킹 페이지** (`media.naver.com/press/{id}/ranking?type=popular`): `li.as_thumb > a` + `strong.list_title`. 화이트리스트 URL `n.news.naver.com/mnews/article` 로 garbage(탭 메뉴) 자동 필터.
@@ -223,8 +210,7 @@ vercel link --yes                                     # 기존 woos2324/newsboar
 새 세션에서 이렇게 한 줄만 보내면 충분:
 
 ```
-d:\newsboard 작업 이어가자. CLAUDE.md "현재 진행 상태" + "재개 지점"
-확인하고 남은 로드맵 (D 스포츠 0 진단 / P3 댓글 수집) 중 추천 것부터.
+d:\newsboard 작업 이어가자. CLAUDE.md "현재 진행 상태" + "재개 지점" 확인해줘.
 ```
 
 Claude Code 가 자동으로:
@@ -259,8 +245,14 @@ d:\newsboard\
 │   │   ├── layout.tsx
 │   │   ├── page.tsx          # 대시보드 (Overview)
 │   │   ├── issue/page.tsx
-│   │   ├── compare/page.tsx
-│   │   ├── gap/page.tsx
+│   │   ├── compare/
+│   │   │   ├── page.tsx
+│   │   │   ├── CompareTabView.tsx
+│   │   │   └── MediaSelector.tsx
+│   │   ├── gap/
+│   │   │   ├── page.tsx
+│   │   │   ├── actions.ts    # markReviewing / markResolved Server Action
+│   │   │   └── ReviewButton.tsx
 │   │   ├── analytics/
 │   │   │   ├── subscribers/page.tsx
 │   │   │   └── comments/page.tsx
@@ -270,13 +262,15 @@ d:\newsboard\
 │   │   ├── Topbar.tsx
 │   │   └── dashboard/*
 │   └── lib/
-│       ├── api.ts            # 프론트 → /api 호출 클라이언트
-│       └── supabase.ts       # 브라우저/서버 공용 Supabase JS 클라이언트
+│       ├── queries.ts        # 모든 DB 조회 함수
+│       ├── supabase.ts       # Supabase JS 클라이언트
+│       ├── naver-section.ts  # 섹션 타입 + SECTION_ORDER 상수
+│       └── database.types.ts # Supabase 자동 생성 타입
 ├── api/                      # Python FastAPI (Vercel Fluid Compute)
 │   ├── index.py              # ASGI 엔트리 (FastAPI app)
 │   ├── lib/
 │   │   ├── db.py             # Supabase Python 클라이언트
-│   │   ├── ai.py             # Vercel AI Gateway 래퍼
+│   │   ├── ai.py             # OpenAI / AI Gateway 래퍼
 │   │   └── models.py         # Pydantic 응답 스키마
 │   └── routes/
 │       ├── issues.py
@@ -285,11 +279,25 @@ d:\newsboard\
 │       ├── subscribers.py
 │       ├── comments.py
 │       └── report.py
+├── scripts/                  # GitHub Actions 에서 직접 호출하는 Python 스크립트
+│   ├── collect_ranking.py
+│   ├── collect_publications.py  # 자사 전체 기사 → article + daily_publication_count
+│   ├── collect_section_ranking.py
+│   ├── collect_subscribers.py
+│   ├── collect_comments.py
+│   ├── cluster_articles.py
+│   ├── detect_gap.py         # 미보도 탐지 → missed_issue_alert
+│   └── lib/
+│       ├── db.py
+│       ├── http.py
+│       ├── naver.py
+│       └── cluster.py
+├── .github/workflows/        # GitHub Actions (8종)
 ├── supabase/
-│   ├── migrations/0001_init.sql
+│   ├── migrations/
 │   └── seed.sql
-├── requirements.txt          # Python deps
-├── vercel.json               # Python 런타임 + 라우팅
+├── requirements.txt
+├── vercel.json
 ├── .env.local.example
 └── package.json
 ```
@@ -371,36 +379,5 @@ npm run dev
 
 ## 참고
 
-- Vercel AI Gateway: `"provider/model"` 문자열로 AI SDK 호출. Anthropic SDK 직접 의존 금지.
 - Node.js 24 LTS가 현재 기본.
-- `vercel.json` 대신 `vercel.ts`로 이동 가능 (향후 과제).
----
-
-## Recent Updates (2026-04-29 ~ 2026-04-30)
-
-### 미보도 탐지 파이프라인 (신규)
-- [scripts/detect_gap.py](scripts/detect_gap.py) — 클러스터 기반 미보도 탐지 → `missed_issue_alert` 적재
-- [.github/workflows/cron-gap.yml](.github/workflows/cron-gap.yml) — `Cluster Articles` 성공 직후 chain + 6시간 fallback
-- [src/app/gap/actions.ts](src/app/gap/actions.ts) — `markReviewing` / `markResolved` Server Action
-- [src/app/gap/ReviewButton.tsx](src/app/gap/ReviewButton.tsx) — 검토 시작 → 검토 중 + 완료 버튼 (상태별 UI)
-- 중복 알림 방지: `_dedup_by_title()` + `_load_existing_titles()` 적용
-- 클러스터링 threshold 0.80 → **0.85** 상향 (유사 제목 중복 클러스터 감소)
-
-### 자사 전체 기사 수집 확장
-- [scripts/lib/naver.py](scripts/lib/naver.py) — `PublicationArticle` dataclass + `parse_publication_articles()` 추가
-- [scripts/collect_publications.py](scripts/collect_publications.py) — 카운트만 저장 → **기사 제목·URL 전체 article 테이블 upsert** 로 확장
-
-### /compare 경쟁사 비교 개편
-- 인기 랭킹 + 섹션별 랭킹 탭 (클라이언트 state, 즉시 전환)
-- 섹션별 랭킹 DB 저장 파이프라인: [scripts/collect_section_ranking.py](scripts/collect_section_ranking.py) + `section_ranking_snapshot` 테이블
-- 언론사 칩 선택 UI ([src/app/compare/MediaSelector.tsx](src/app/compare/MediaSelector.tsx)), 세계일보 항상 고정 + 강조
-
-### 배포 메모
-- 최근 변경은 모두 `main` 브랜치에 반영.
-- Vercel production: `https://newsboard-two.vercel.app`
-- 최근 주요 커밋:
-  - `51cd956 feat(gap): 검토 시작/완료 버튼 기능 구현`
-  - `064f4f2 fix(cluster): threshold 0.85 상향`
-  - `dcc3b44 fix(gap): 중복 알림 방지`
-  - `378545a feat(publications): 자사 전체 기사 article 테이블 적재`
-  - `89754e6 feat(gap): 미보도 탐지 파이프라인 구현`
+- AI 백엔드는 OpenAI 직접 (`AI_BASE_URL=https://api.openai.com/v1`). Vercel AI Gateway 전환 시 모델명 `provider/model` 형태로 변경 필요.

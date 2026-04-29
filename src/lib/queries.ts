@@ -65,6 +65,7 @@ export type CompetitorSubscriberView = {
 export type TopCommentView = {
   article_id: number;
   title: string;
+  url: string | null;
   media: string;
   comments: number;
   likes: number | null;
@@ -650,7 +651,7 @@ export async function getTopComments(limit = 10): Promise<TopCommentView[]> {
   const { data, error } = await sb
     .from("comment_metric")
     .select(
-      "comment_metric_id, comment_count, like_count, engagement_score, source, article:article_id(article_id, title, media_company:media_company_id(name))"
+      "comment_metric_id, comment_count, like_count, engagement_score, source, article:article_id(article_id, title, url, media_company:media_company_id(name))"
     )
     .order("comment_count", { ascending: false })
     .limit(limit);
@@ -662,12 +663,14 @@ export async function getTopComments(limit = 10): Promise<TopCommentView[]> {
       | {
           article_id: number;
           title: string;
+          url: string | null;
           media_company: { name: string } | null;
         }
       | null;
     return {
       article_id: art?.article_id ?? 0,
       title: art?.title ?? "(기사 없음)",
+      url: art?.url ?? null,
       media: art?.media_company?.name ?? "-",
       comments: r.comment_count,
       likes: r.like_count,
@@ -682,7 +685,7 @@ export async function getOurTopComments(limit = 4): Promise<TopCommentView[]> {
   const { data, error } = await sb
     .from("comment_metric")
     .select(
-      "comment_count, like_count, engagement_score, source, article:article_id!inner(article_id, title, media_company:media_company_id!inner(name, is_our_company))"
+      "comment_count, like_count, engagement_score, source, article:article_id!inner(article_id, title, url, media_company:media_company_id!inner(name, is_our_company))"
     )
     .eq("article.media_company.is_our_company", true)
     .order("comment_count", { ascending: false })
@@ -695,12 +698,14 @@ export async function getOurTopComments(limit = 4): Promise<TopCommentView[]> {
       | {
           article_id: number;
           title: string;
+          url: string | null;
           media_company: { name: string; is_our_company: boolean } | null;
         }
       | null;
     return {
       article_id: art?.article_id ?? 0,
       title: art?.title ?? "(기사 없음)",
+      url: art?.url ?? null,
       media: art?.media_company?.name ?? "-",
       comments: r.comment_count,
       likes: r.like_count,
@@ -719,7 +724,7 @@ export async function getCompetitorTopComments(
   const { data, error } = await sb
     .from("comment_metric")
     .select(
-      "comment_count, like_count, engagement_score, source, article:article_id!inner(article_id, title, media_company:media_company_id!inner(name, normalized_name))"
+      "comment_count, like_count, engagement_score, source, article:article_id!inner(article_id, title, url, media_company:media_company_id!inner(name, normalized_name))"
     )
     .in("article.media_company.normalized_name", [...COMPETITOR_NAMES])
     .order("comment_count", { ascending: false })
@@ -730,6 +735,7 @@ export async function getCompetitorTopComments(
   type RawArt = {
     article_id: number;
     title: string;
+    url: string | null;
     media_company: { name: string; normalized_name: string } | null;
   };
 
@@ -743,6 +749,7 @@ export async function getCompetitorTopComments(
       list.push({
         article_id: art?.article_id ?? 0,
         title: art?.title ?? "(기사 없음)",
+        url: art?.url ?? null,
         media: name,
         comments: r.comment_count,
         likes: r.like_count,

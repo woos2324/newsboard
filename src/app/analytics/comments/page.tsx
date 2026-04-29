@@ -18,7 +18,12 @@ function engagementBadge(score: number | null): { cls: string; label: string } {
 function OurCommentCard({ item, rank }: { item: TopCommentView; rank: number }) {
   const badge = engagementBadge(item.engagement);
   return (
-    <article className="card card-hover flex h-full flex-col">
+    <a
+      href={item.url ?? "#"}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="card card-hover flex h-full flex-col"
+    >
       <div className="flex items-start gap-2">
         <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-primary-500 text-[11px] font-semibold text-white">
           {rank}
@@ -43,7 +48,7 @@ function OurCommentCard({ item, rank }: { item: TopCommentView; rank: number }) 
           <span className={`badge ${badge.cls} ml-auto`}>{badge.label}</span>
         </div>
       </div>
-    </article>
+    </a>
   );
 }
 
@@ -63,7 +68,14 @@ function CompetitorSection({ media, articles }: { media: string; articles: TopCo
                   {i + 1}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">{row.title}</p>
+                  <a
+                    href={row.url ?? "#"}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="truncate font-medium hover:text-primary-500 hover:underline block"
+                  >
+                    {row.title}
+                  </a>
                   <p className="caption mt-0.5 flex items-center gap-2">
                     <span className="flex items-center gap-1">
                       <MessageSquare className="h-3 w-3" />

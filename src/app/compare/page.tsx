@@ -5,7 +5,7 @@ import { MediaSelector } from "./MediaSelector";
 
 export const dynamic = "force-dynamic";
 
-const DEFAULT_MEDIA = ["chosun", "joongang", "donga", "mk"];
+const DEFAULT_MEDIA: string[] = [];
 
 type Props = {
   searchParams: Promise<{ media?: string }>;

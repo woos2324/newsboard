@@ -57,7 +57,7 @@ export default async function GapPage() {
                     <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted">
                       <span className="inline-flex items-center gap-1">
                         <Clock className="h-3.5 w-3.5" />
-                        격차 {a.gap_minutes}분
+                        탐지 {a.gap_minutes}분 전
                       </span>
                       <span>
                         경쟁사:{" "}

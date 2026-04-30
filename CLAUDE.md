@@ -24,13 +24,13 @@
 ### 자동화 파이프라인 (GitHub Actions, 8종)
 | 워크플로 | 트리거 | 역할 |
 |---|---|---|
-| [cron-ranking.yml](.github/workflows/cron-ranking.yml) | 매시 정각 (UTC) | 50개 매체 × 5건 인기 랭킹 → article + snapshot |
-| [cron-cluster.yml](.github/workflows/cron-cluster.yml) | **ranking 성공 직후 (workflow_run)** + 6시간 fallback | 미할당 article 임베딩 클러스터링 → issue_cluster (threshold=0.85) |
-| [cron-gap.yml](.github/workflows/cron-gap.yml) | **cluster 성공 직후 (workflow_run)** + 6시간 fallback | 클러스터 기반 미보도 탐지 → missed_issue_alert |
-| [cron-publications.yml](.github/workflows/cron-publications.yml) | 매시 5분 (UTC) | 자사 전체 기사 제목·URL → article 적재 + daily_publication_count |
-| [cron-section-ranking.yml](.github/workflows/cron-section-ranking.yml) | **ranking 성공 직후 (workflow_run)** + UTC 02/08/14/20시 | 섹션별 랭킹 → section_ranking_snapshot |
+| [cron-ranking.yml](.github/workflows/cron-ranking.yml) | 매시 7분 (UTC, KST :16) | 50개 매체 × 5건 인기 랭킹 → article + snapshot |
+| [cron-cluster.yml](.github/workflows/cron-cluster.yml) | **ranking 성공 직후 (workflow_run)** + UTC :30 6시간 fallback | 미할당 article 임베딩 클러스터링 → issue_cluster (threshold=0.85) |
+| [cron-gap.yml](.github/workflows/cron-gap.yml) | **cluster 성공 직후 (workflow_run)** + UTC 01/07/13/19시 fallback | 클러스터 기반 미보도 탐지 → missed_issue_alert |
+| [cron-publications.yml](.github/workflows/cron-publications.yml) | 매시 17분·47분 (UTC, KST :26·:56) | 자사 전체 기사 제목·URL → article 적재 + daily_publication_count |
+| [cron-section-ranking.yml](.github/workflows/cron-section-ranking.yml) | **ranking 성공 직후 (workflow_run)** + UTC 02/08/14/20시 fallback | 섹션별 랭킹 → section_ranking_snapshot |
 | [cron-subscribers.yml](.github/workflows/cron-subscribers.yml) | UTC 23:00 (KST 08:00) | followers.json API → subscriber_snapshot |
-| [cron-comments.yml](.github/workflows/cron-comments.yml) | 매시 10분 (UTC) | 자사 기사 댓글 수 → comment_metric |
+| [cron-comments.yml](.github/workflows/cron-comments.yml) | 매시 15분 (UTC, KST :24) | 자사·경쟁사 기사 댓글 수 → comment_metric |
 | [cron-daily-briefing.yml](.github/workflows/cron-daily-briefing.yml) | UTC 15:00 (KST 00:00) | 오늘 클러스터 → AI 일간 브리핑 → ai_summary |
 
 **cron chain**: `ranking → cluster → gap` (매시 정각 자동 연쇄)

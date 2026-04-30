@@ -8,15 +8,14 @@ import {
 
 export const dynamic = "force-dynamic";
 
-function engagementBadge(score: number | null): { cls: string; label: string } {
-  if (score == null) return { cls: "badge-muted", label: "-" };
-  if (score >= 80) return { cls: "badge-error", label: "매우 활발" };
-  if (score >= 60) return { cls: "badge-warning", label: "활발" };
+function engagementBadge(comments: number): { cls: string; label: string } {
+  if (comments >= 500) return { cls: "badge-error", label: "매우 활발" };
+  if (comments >= 200) return { cls: "badge-warning", label: "활발" };
   return { cls: "badge-muted", label: "보통" };
 }
 
 function OurCommentCard({ item, rank }: { item: TopCommentView; rank: number }) {
-  const badge = engagementBadge(item.engagement);
+  const badge = engagementBadge(item.comments);
   return (
     <a
       href={item.url ?? "#"}
@@ -61,7 +60,7 @@ function CompetitorSection({ media, articles }: { media: string; articles: TopCo
       ) : (
         <ul className="divide-y divide-border">
           {articles.map((row, i) => {
-            const badge = engagementBadge(row.engagement);
+            const badge = engagementBadge(row.comments);
             return (
               <li key={row.article_id} className="flex items-center gap-3 py-2.5 text-sm">
                 <span className="w-4 shrink-0 text-center text-xs font-medium text-muted">

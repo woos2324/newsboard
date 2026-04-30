@@ -211,7 +211,7 @@ export function SubscriberComparisonExplorer({
   }
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+    <div className="flex flex-col gap-4">
       <section className="card">
         <div className="flex items-center justify-between gap-4">
           <div>
@@ -381,7 +381,7 @@ export function SubscriberComparisonExplorer({
         )}
       </section>
 
-      <section className="card lg:col-span-2">
+      <section className="card">
         <div className="mb-3 flex items-end justify-between gap-4">
           <div>
             <h2 className="section-title">경쟁사 구독자 규모</h2>

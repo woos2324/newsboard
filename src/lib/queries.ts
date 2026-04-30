@@ -290,8 +290,10 @@ export async function getOverviewStats(): Promise<OverviewStats> {
       .in("snapshot_date", [todayKst, yKst]),
     sb
       .from("comment_metric")
-      .select("comment_count")
-      .gte("measured_at", since),
+      .select("article_id, comment_count")
+      .gte("measured_at", new Date(Date.now() - 25 * 60 * 60_000).toISOString())
+      .order("article_id")
+      .order("comment_count", { ascending: false }),
     sb
       .from("subscriber_snapshot")
       .select(
@@ -322,10 +324,14 @@ export async function getOverviewStats(): Promise<OverviewStats> {
         )
       : 0;
 
-  const today_comments = (commentsRes.data ?? []).reduce(
-    (acc, r) => acc + (r.comment_count ?? 0),
-    0
-  );
+  const seenArticle = new Set<number>();
+  let today_comments = 0;
+  for (const r of commentsRes.data ?? []) {
+    if (!seenArticle.has(r.article_id)) {
+      seenArticle.add(r.article_id);
+      today_comments += r.comment_count ?? 0;
+    }
+  }
 
   const latestSub = subRes.data?.[0];
 

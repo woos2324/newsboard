@@ -19,6 +19,11 @@ export type IssueView = {
   cluster_date: string;
 };
 
+type IssueCandidate = Omit<IssueView, "rank"> & {
+  articleIds: number[];
+  articleFingerprint: string;
+};
+
 export type RankingArticleView = {
   article_id: number;
   title: string;
@@ -148,6 +153,100 @@ const PINNED_SUBSCRIBER_MEDIA = new Set(["세계일보"]);
 const SUBSCRIBER_TABLE_DATE_COUNT = 3;
 const SUBSCRIBER_TREND_DAY_COUNT = 15;
 
+function articleFingerprint(articleIds: number[]): string {
+  return articleIds.slice().sort((a, b) => a - b).join(":");
+}
+
+function normalizeIssueText(value: string): string {
+  return value.toLowerCase().replace(/[^0-9a-z\uac00-\ud7a3]/g, "");
+}
+
+function bigrams(value: string): Set<string> {
+  const normalized = normalizeIssueText(value);
+  const grams = new Set<string>();
+  for (let i = 0; i < normalized.length - 1; i += 1) {
+    grams.add(normalized.slice(i, i + 2));
+  }
+  if (grams.size === 0 && normalized) grams.add(normalized);
+  return grams;
+}
+
+function overlapRatio<T>(left: Iterable<T>, right: Iterable<T>): number {
+  const a = new Set(left);
+  const b = new Set(right);
+  if (a.size === 0 || b.size === 0) return 0;
+  let intersection = 0;
+  for (const item of a) {
+    if (b.has(item)) intersection += 1;
+  }
+  return intersection / Math.min(a.size, b.size);
+}
+
+function textSimilarity(left: string, right: string): number {
+  return overlapRatio(bigrams(left), bigrams(right));
+}
+
+function keywordSimilarity(left: string[], right: string[]): number {
+  const a = new Set(left.map(normalizeIssueText).filter(Boolean));
+  const b = new Set(right.map(normalizeIssueText).filter(Boolean));
+  if (a.size === 0 || b.size === 0) return 0;
+  let intersection = 0;
+  for (const item of a) {
+    if (b.has(item)) intersection += 1;
+  }
+  if (intersection < 2) return 0;
+  return intersection / Math.min(a.size, b.size);
+}
+
+function sameIssue(left: IssueCandidate, right: IssueCandidate): boolean {
+  if (left.articleFingerprint && left.articleFingerprint === right.articleFingerprint) {
+    return true;
+  }
+  if (overlapRatio(left.articleIds, right.articleIds) >= 0.6) {
+    return true;
+  }
+  if (normalizeIssueText(left.title) === normalizeIssueText(right.title)) {
+    return true;
+  }
+  if (textSimilarity(left.title, right.title) >= 0.55) {
+    return true;
+  }
+  return keywordSimilarity(left.keywords, right.keywords) >= 0.4;
+}
+
+function isBetterIssue(left: IssueCandidate, right: IssueCandidate): boolean {
+  if (left.mediaCount !== right.mediaCount) return left.mediaCount > right.mediaCount;
+  if (left.articles !== right.articles) return left.articles > right.articles;
+  return left.confidence > right.confidence;
+}
+
+function dedupeIssues(candidates: IssueCandidate[]): IssueCandidate[] {
+  const deduped: IssueCandidate[] = [];
+  for (const candidate of candidates) {
+    const duplicateIndexes = deduped
+      .map((item, index) => (sameIssue(candidate, item) ? index : -1))
+      .filter((index) => index !== -1);
+
+    if (duplicateIndexes.length === 0) {
+      deduped.push(candidate);
+    } else {
+      const firstIndex = duplicateIndexes[0];
+      const best = [
+        candidate,
+        ...duplicateIndexes.map((index) => deduped[index]),
+      ].reduce((currentBest, item) =>
+        isBetterIssue(item, currentBest) ? item : currentBest
+      );
+
+      for (let i = duplicateIndexes.length - 1; i >= 0; i -= 1) {
+        deduped.splice(duplicateIndexes[i], 1);
+      }
+      deduped.splice(firstIndex, 0, best);
+    }
+  }
+  return deduped;
+}
+
 function startOfToday(): string {
   const now = new Date();
   const utc = now.getTime() + now.getTimezoneOffset() * 60_000;
@@ -194,7 +293,7 @@ export async function getIssues(
   const { data: relatedRows, error: relatedError } = await sb
     .from("issue_cluster_article")
     .select(
-      "issue_cluster_id, article:article_id(media_company:media_company_id(name))"
+      "issue_cluster_id, article_id, article:article_id(media_company:media_company_id(name))"
     )
     .in("issue_cluster_id", clusterIds);
 
@@ -202,15 +301,17 @@ export async function getIssues(
 
   const statsByCluster = new Map<
     number,
-    { articleCount: number; mediaNames: string[] }
+    { articleCount: number; mediaNames: string[]; articleIds: number[] }
   >();
 
   for (const row of relatedRows ?? []) {
     const existing = statsByCluster.get(row.issue_cluster_id) ?? {
       articleCount: 0,
       mediaNames: [],
+      articleIds: [],
     };
     existing.articleCount += 1;
+    existing.articleIds.push(row.article_id);
 
     const article = row.article as unknown as
       | { media_company: { name: string } | null }
@@ -222,11 +323,12 @@ export async function getIssues(
     statsByCluster.set(row.issue_cluster_id, existing);
   }
 
-  return data
+  const candidates: IssueCandidate[] = data
     .map((c) => {
       const stats = statsByCluster.get(c.issue_cluster_id) ?? {
         articleCount: 0,
         mediaNames: [],
+        articleIds: [],
       };
       return {
         cluster_id: c.issue_cluster_id,
@@ -237,13 +339,17 @@ export async function getIssues(
         articles: stats.articleCount,
         mediaNames: stats.mediaNames,
         mediaCount: stats.mediaNames.length,
+        articleIds: stats.articleIds,
+        articleFingerprint: articleFingerprint(stats.articleIds),
         confidence: Number(c.confidence_score ?? 0),
         cluster_date: c.cluster_date,
       };
     })
-    .filter((c) => c.articles >= minArticles)
+    .filter((c) => c.articles >= minArticles && c.mediaCount >= 2);
+
+  return dedupeIssues(candidates)
     .slice(0, limit)
-    .map((c, i) => {
+    .map(({ articleIds: _articleIds, articleFingerprint: _fingerprint, ...c }, i) => {
       return {
         ...c,
         rank: i + 1,
@@ -293,7 +399,8 @@ export async function getOverviewStats(): Promise<OverviewStats> {
       .select("article_id, comment_count")
       .gte("measured_at", new Date(Date.now() - 25 * 60 * 60_000).toISOString())
       .order("article_id")
-      .order("comment_count", { ascending: false }),
+      .order("comment_count", { ascending: false })
+      .limit(3000),
     sb
       .from("subscriber_snapshot")
       .select(
@@ -613,6 +720,7 @@ export async function getCompetitorSubscribers(): Promise<CompetitorSubscriberVi
     .select(
       "subscriber_count, daily_delta, snapshot_date, media_company:media_company_id(name, is_our_company)"
     )
+    .gte("snapshot_date", new Date(Date.now() - (SUBSCRIBER_TREND_DAY_COUNT + 1) * 24 * 60 * 60_000).toISOString().slice(0, 10))
     .order("snapshot_date", { ascending: false });
 
   if (error) throw error;
@@ -776,8 +884,9 @@ export async function getOurTopComments(limit = 4): Promise<TopCommentView[]> {
       "comment_count, like_count, engagement_score, source, article:article_id!inner(article_id, title, url, media_company:media_company_id!inner(name, is_our_company))"
     )
     .eq("article.media_company.is_our_company", true)
+    .gte("measured_at", new Date(Date.now() - 25 * 60 * 60_000).toISOString())
     .order("comment_count", { ascending: false })
-    .limit(limit * 50);
+    .limit(limit * 10);
 
   if (error) throw error;
 
@@ -828,8 +937,9 @@ export async function getCompetitorTopComments(
       "comment_count, like_count, engagement_score, source, article:article_id!inner(article_id, title, url, media_company:media_company_id!inner(name, normalized_name))"
     )
     .in("article.media_company.normalized_name", [...COMPETITOR_NAMES])
+    .gte("measured_at", new Date(Date.now() - 25 * 60 * 60_000).toISOString())
     .order("comment_count", { ascending: false })
-    .limit(perMedia * COMPETITOR_NAMES.length * 50);
+    .limit(perMedia * COMPETITOR_NAMES.length * 10);
 
   if (error) throw error;
 

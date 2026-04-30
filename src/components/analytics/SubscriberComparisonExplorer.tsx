@@ -211,7 +211,7 @@ export function SubscriberComparisonExplorer({
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <section className="card">
         <div className="flex items-center justify-between gap-4">
           <div>
@@ -286,8 +286,7 @@ export function SubscriberComparisonExplorer({
             <div className="mt-4 overflow-hidden rounded-lg border border-border bg-white">
               <svg
                 viewBox={`0 0 ${chartWidth} ${chartHeight}`}
-                className="w-full"
-                style={{ height: "280px" }}
+                className="aspect-[16/9] w-full"
                 preserveAspectRatio="xMidYMid meet"
                 aria-label={`선택한 매체의 ${chartMetricLabel} 추이`}
               >
@@ -382,7 +381,7 @@ export function SubscriberComparisonExplorer({
         )}
       </section>
 
-      <section className="card">
+      <section className="card lg:col-span-2">
         <div className="mb-3 flex items-end justify-between gap-4">
           <div>
             <h2 className="section-title">경쟁사 구독자 규모</h2>

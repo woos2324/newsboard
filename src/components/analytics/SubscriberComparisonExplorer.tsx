@@ -286,7 +286,8 @@ export function SubscriberComparisonExplorer({
             <div className="mt-4 overflow-hidden rounded-lg border border-border bg-white">
               <svg
                 viewBox={`0 0 ${chartWidth} ${chartHeight}`}
-                className="aspect-[16/9] w-full"
+                className="w-full"
+                style={{ height: "280px" }}
                 preserveAspectRatio="xMidYMid meet"
                 aria-label={`선택한 매체의 ${chartMetricLabel} 추이`}
               >

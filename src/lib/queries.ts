@@ -771,11 +771,24 @@ export async function getOurTopComments(limit = 4): Promise<TopCommentView[]> {
     )
     .eq("article.media_company.is_our_company", true)
     .order("comment_count", { ascending: false })
-    .limit(limit);
+    .limit(limit * 50);
 
   if (error) throw error;
 
-  return (data ?? []).map((r) => {
+  type RawRow = typeof data extends (infer T)[] | null ? T : never;
+  const seen = new Set<number>();
+  const deduped: RawRow[] = [];
+  for (const r of data ?? []) {
+    const art = r.article as unknown as { article_id: number } | null;
+    const id = art?.article_id ?? 0;
+    if (!seen.has(id)) {
+      seen.add(id);
+      deduped.push(r);
+      if (deduped.length >= limit) break;
+    }
+  }
+
+  return deduped.map((r) => {
     const art = r.article as unknown as
       | {
           article_id: number;
@@ -810,7 +823,7 @@ export async function getCompetitorTopComments(
     )
     .in("article.media_company.normalized_name", [...COMPETITOR_NAMES])
     .order("comment_count", { ascending: false })
-    .limit(perMedia * COMPETITOR_NAMES.length);
+    .limit(perMedia * COMPETITOR_NAMES.length * 50);
 
   if (error) throw error;
 
@@ -821,15 +834,20 @@ export async function getCompetitorTopComments(
     media_company: { name: string; normalized_name: string } | null;
   };
 
+  const seenByMedia = new Map<string, Set<number>>();
   const grouped = new Map<string, TopCommentView[]>();
   for (const r of data ?? []) {
     const art = r.article as unknown as RawArt | null;
     const name = art?.media_company?.name ?? "-";
+    const articleId = art?.article_id ?? 0;
     if (!grouped.has(name)) grouped.set(name, []);
+    if (!seenByMedia.has(name)) seenByMedia.set(name, new Set());
     const list = grouped.get(name)!;
-    if (list.length < perMedia) {
+    const seen = seenByMedia.get(name)!;
+    if (list.length < perMedia && !seen.has(articleId)) {
+      seen.add(articleId);
       list.push({
-        article_id: art?.article_id ?? 0,
+        article_id: articleId,
         title: art?.title ?? "(기사 없음)",
         url: art?.url ?? null,
         media: name,

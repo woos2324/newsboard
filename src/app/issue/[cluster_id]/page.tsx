@@ -130,7 +130,7 @@ export default async function IssueDetailPage({
                         className="flex gap-2 text-[13px] leading-relaxed text-white/90"
                       >
                         <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-white/70" />
-                        {b}
+                        {b.text}
                       </li>
                     ))}
                   </ul>

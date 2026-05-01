@@ -1,15 +1,14 @@
 import { Sparkles, FileText } from "lucide-react";
-import type { SummarySource } from "@/lib/queries";
+import type { BulletItem } from "@/lib/queries";
 
 type Props = {
   updatedAt: string;
   title?: string;
   summary: string;
-  bullets: string[];
-  sources?: SummarySource[];
+  bullets: BulletItem[];
 };
 
-export function AISummaryCard({ updatedAt, title, summary, bullets, sources = [] }: Props) {
+export function AISummaryCard({ updatedAt, title, summary, bullets }: Props) {
   return (
     <div className="card relative overflow-hidden bg-gradient-to-br from-primary-500 to-primary-600 text-white">
       <div
@@ -37,48 +36,47 @@ export function AISummaryCard({ updatedAt, title, summary, bullets, sources = []
         <p className="mt-3 text-sm font-medium leading-relaxed">{summary}</p>
 
         {bullets.length > 0 && (
-          <ul className="mt-3 space-y-1.5">
-            {bullets.map((b) => (
+          <ul className="mt-3 space-y-2">
+            {bullets.map((b, i) => (
               <li
-                key={b}
-                className="flex gap-2 text-[13px] leading-relaxed text-white/90"
+                key={i}
+                className="flex items-start gap-2 text-[13px] leading-relaxed text-white/90"
               >
-                <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-white/70" />
-                {b}
+                <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-white/70" />
+                <span className="flex-1">{b.text}</span>
+                {b.cluster_id != null ? (
+                  <div className="relative group shrink-0 mt-0.5">
+                    <button
+                      type="button"
+                      className="flex h-5 w-5 items-center justify-center rounded bg-white/20 hover:bg-white/40 transition-colors"
+                    >
+                      <FileText className="h-3 w-3" />
+                    </button>
+                    <div className="absolute right-0 bottom-full pb-2 hidden group-hover:block z-20 pointer-events-auto">
+                      <div className="w-60 rounded-lg bg-white shadow-xl border border-gray-100 overflow-hidden">
+                        <div className="px-3 py-2 bg-gray-50 border-b border-gray-100">
+                          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">관련 이슈</p>
+                        </div>
+                        <a
+                          href={`/issue/${b.cluster_id}`}
+                          className="flex items-center gap-2 px-3 py-2.5 hover:bg-blue-50 transition-colors group/link"
+                        >
+                          <span className="text-[12px] text-gray-800 leading-snug group-hover/link:text-blue-700">
+                            {b.cluster_title}
+                          </span>
+                          <svg className="h-3 w-3 shrink-0 text-gray-300 group-hover/link:text-blue-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                            <path d="M7 17L17 7M7 7h10v10"/>
+                          </svg>
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="shrink-0 w-5 mt-0.5" />
+                )}
               </li>
             ))}
           </ul>
-        )}
-
-        {sources.length > 0 && (
-          <div className="relative mt-3 inline-block group">
-            <button
-              type="button"
-              className="flex items-center gap-1 rounded-md bg-white/15 px-2 py-1 text-[11px] text-white/80 hover:bg-white/25 hover:text-white transition-colors"
-            >
-              <FileText className="h-3 w-3" />
-              <span>참고 이슈 {sources.length}건</span>
-            </button>
-            <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block z-20 w-72">
-              <div className="rounded-lg bg-white shadow-xl border border-border p-2">
-                <p className="mb-1.5 px-1 text-[10px] font-semibold text-muted uppercase tracking-wide">
-                  요약에 사용된 이슈
-                </p>
-                <ul className="space-y-0.5">
-                  {sources.map((s) => (
-                    <li key={s.cluster_id}>
-                      <a
-                        href={`/issue/${s.cluster_id}`}
-                        className="block truncate rounded px-2 py-1.5 text-[12px] text-foreground hover:bg-gray-50 hover:text-primary-500"
-                      >
-                        {s.title}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </div>
         )}
       </div>
     </div>

@@ -32,7 +32,7 @@ def _upsert_summary(
     summary_date: str,
     title: str,
     content: str,
-    bullets: list[str],
+    bullets: list,
     model_version: str,
     source_metadata: dict[str, Any],
     issue_cluster_id: int | None = None,
@@ -139,7 +139,24 @@ async def generate_daily() -> AISummaryOut:
 
     title = result.get("title") or f"{today} 일간 브리핑"
     content = result.get("summary") or ""
-    bullets = result.get("bullets") or []
+    bullets_raw = result.get("bullets") or []
+
+    enriched_bullets: list[dict] = []
+    for b in bullets_raw if isinstance(bullets_raw, list) else []:
+        if isinstance(b, dict):
+            idx = b.get("cluster_index")
+            text = b.get("text", "")
+            if isinstance(idx, int) and 0 <= idx < len(clusters_raw):
+                cr = clusters_raw[idx]
+                enriched_bullets.append({
+                    "text": text,
+                    "cluster_id": cr["issue_cluster_id"],
+                    "cluster_title": cr["representative_title"],
+                })
+            else:
+                enriched_bullets.append({"text": text, "cluster_id": None, "cluster_title": None})
+        elif isinstance(b, str):
+            enriched_bullets.append({"text": b, "cluster_id": None, "cluster_title": None})
 
     saved = _upsert_summary(
         sb,
@@ -147,7 +164,7 @@ async def generate_daily() -> AISummaryOut:
         summary_date=today,
         title=title,
         content=content,
-        bullets=bullets if isinstance(bullets, list) else [],
+        bullets=enriched_bullets,
         model_version=model_used,
         source_metadata={
             "cluster_keys": cluster_keys,

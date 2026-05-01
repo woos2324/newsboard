@@ -89,13 +89,19 @@ export type SummarySource = {
   title: string;
 };
 
+export type BulletItem = {
+  text: string;
+  cluster_id: number | null;
+  cluster_title: string | null;
+};
+
 export type AISummaryView = {
   summary_id: number;
   type: "daily" | "weekly" | "issue" | "competitor";
   summary_date: string;
   title: string;
   content: string;
-  bullets: string[];
+  bullets: BulletItem[];
   model_version: string;
   sources: SummarySource[];
 };
@@ -992,6 +998,23 @@ export async function getCompetitorTopComments(
 // AI summary (reports)
 // ===================================================================
 
+function parseBullets(raw: unknown): BulletItem[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((b) => {
+    if (typeof b === "string") return { text: b, cluster_id: null, cluster_title: null };
+    if (typeof b === "object" && b !== null) {
+      const obj = b as Record<string, unknown>;
+      return {
+        text: typeof obj.text === "string" ? obj.text : "",
+        cluster_id: typeof obj.cluster_id === "number" ? obj.cluster_id : null,
+        cluster_title: typeof obj.cluster_title === "string" ? obj.cluster_title : null,
+      };
+    }
+    return { text: "", cluster_id: null, cluster_title: null };
+  });
+}
+
+
 export async function getReports(
   type: "daily" | "weekly" | "issue" | "competitor" | "all" = "all",
   limit = 10
@@ -1012,14 +1035,13 @@ export async function getReports(
 
   return (data ?? []).map((r) => {
     const meta = (r.source_metadata ?? {}) as Record<string, unknown>;
-    const bulletsRaw = (meta.bullets as string[] | undefined) ?? [];
     return {
       summary_id: r.ai_summary_id,
       type: r.summary_type as AISummaryView["type"],
       summary_date: r.summary_date,
       title: r.title,
       content: r.content,
-      bullets: Array.isArray(bulletsRaw) ? bulletsRaw : [],
+      bullets: parseBullets(meta.bullets),
       model_version: r.model_version,
       sources: [],
     };
@@ -1039,7 +1061,7 @@ export async function getLatestDailySummary(): Promise<AISummaryView | null> {
   if (error || !data) return null;
 
   const meta = (data.source_metadata ?? {}) as Record<string, unknown>;
-  const bulletsRaw = (meta.bullets as string[] | undefined) ?? [];
+  const bullets = parseBullets(meta.bullets);
   const clusterKeys = (meta.cluster_keys as string[] | undefined) ?? [];
 
   let sources: SummarySource[] = [];
@@ -1062,7 +1084,7 @@ export async function getLatestDailySummary(): Promise<AISummaryView | null> {
     summary_date: data.summary_date,
     title: data.title,
     content: data.content,
-    bullets: Array.isArray(bulletsRaw) ? bulletsRaw : [],
+    bullets,
     model_version: data.model_version,
     sources,
   };
@@ -1351,14 +1373,13 @@ export async function getIssueAISummary(
   if (!data) return null;
 
   const meta = (data.source_metadata ?? {}) as Record<string, unknown>;
-  const bulletsRaw = (meta.bullets as string[] | undefined) ?? [];
   return {
     summary_id: data.ai_summary_id,
     type: data.summary_type as AISummaryView["type"],
     summary_date: data.summary_date,
     title: data.title,
     content: data.content,
-    bullets: Array.isArray(bulletsRaw) ? bulletsRaw : [],
+    bullets: parseBullets(meta.bullets),
     model_version: data.model_version,
     sources: [],
   };

@@ -101,15 +101,19 @@ def _extract_json(raw: str) -> dict:
 async def generate_daily_briefing(
     clusters: list[dict],
 ) -> tuple[dict, str]:
-    """이슈 클러스터 리스트 -> {title, summary, bullets} + model_version."""
+    """이슈 클러스터 리스트 -> {title, summary, bullets} + model_version.
+
+    bullets 각 항목은 {text, cluster_index} 형태로 반환됨.
+    cluster_index 는 입력 clusters 배열의 0-based 인덱스.
+    """
     if not clusters:
         raise ValueError("clusters 가 비어 있음")
 
     cluster_lines = []
-    for c in clusters:
+    for i, c in enumerate(clusters):
         kw = ", ".join(c.get("keywords") or [])
         cluster_lines.append(
-            f"- [{c.get('representative_title')}] "
+            f"[{i}] [{c.get('representative_title')}] "
             f"(기사 {c.get('article_count', 0)}건, 키워드: {kw}): "
             f"{c.get('summary') or ''}"
         )
@@ -120,14 +124,15 @@ async def generate_daily_briefing(
         "출력은 항상 JSON 객체 하나로만 반환한다."
     )
     user = (
-        "아래는 오늘의 주요 이슈 클러스터 목록이다. "
+        "아래는 오늘의 주요 이슈 클러스터 목록이다. (각 클러스터는 [인덱스]로 식별)\n"
         "편집자를 위한 일간 브리핑을 한국어 JSON 으로 작성하라.\n\n"
         "출력 JSON 스키마:\n"
         '{ "title": "...", "summary": "2-3문장 개관", '
-        '"bullets": ["핵심 포인트 1", "핵심 포인트 2", "핵심 포인트 3"] }\n\n'
+        '"bullets": [{"text": "핵심 포인트", "cluster_index": 0}, ...] }\n\n'
         "규칙:\n"
         "- summary 는 2-3문장, 전체 흐름을 짚는다.\n"
         "- bullets 는 3-5개, 각 bullet 은 한 문장.\n"
+        "- 각 bullet 의 cluster_index 는 해당 내용이 주로 근거한 클러스터의 인덱스.\n"
         "- title 은 20자 이내로 오늘을 대표하는 카피.\n"
         "- JSON 외 텍스트/마크다운 금지.\n\n"
         f"클러스터 목록:\n{clusters_text}"

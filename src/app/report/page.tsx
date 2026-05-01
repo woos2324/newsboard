@@ -80,7 +80,7 @@ export default async function ReportPage() {
                   {r.bullets.map((b, idx) => (
                     <li key={idx} className="flex gap-2">
                       <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary-500" />
-                      <span>{b}</span>
+                      <span>{b.text}</span>
                     </li>
                   ))}
                 </ul>

@@ -68,7 +68,7 @@ class AISummaryOut(BaseModel):
     summary_date: date
     title: str
     content: str
-    bullets: list[str] = []
+    bullets: list = []
     model_version: str = ""
     quality_score: float | None = None
 

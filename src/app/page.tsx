@@ -4,6 +4,7 @@ import {
   MessageSquare,
   Users,
 } from "lucide-react";
+import Link from "next/link";
 import { Sidebar } from "@/components/Sidebar";
 import { Topbar } from "@/components/Topbar";
 import { StatCard } from "@/components/dashboard/StatCard";
@@ -85,6 +86,7 @@ export default async function DashboardPage() {
   ];
 
   const issueCards = issues.map((i) => ({
+    cluster_id: i.cluster_id,
     rank: i.rank,
     title: i.title,
     summary: i.summary ?? "",
@@ -175,7 +177,11 @@ export default async function DashboardPage() {
                   관련 기사 2건 이상인 이슈 데이터가 없습니다.
                 </p>
               ) : (
-                issueCards.map((i) => <IssueCard key={i.rank} {...i} />)
+                issueCards.map((i) => (
+                  <Link key={i.rank} href={`/issue/${i.cluster_id}`} className="block">
+                    <IssueCard {...i} />
+                  </Link>
+                ))
               )}
             </div>
           </section>

@@ -11,6 +11,7 @@ import {
   MessageSquare,
   FileText,
   Sparkles,
+  Newspaper,
 } from "lucide-react";
 
 const nav = [
@@ -18,6 +19,7 @@ const nav = [
   { href: "/issue", label: "이슈 분석", icon: Layers },
   { href: "/compare", label: "경쟁사 비교", icon: GitCompare },
   { href: "/gap", label: "미보도 탐지", icon: AlertTriangle },
+  { href: "/articles", label: "자사 기사 현황", icon: Newspaper },
   { href: "/analytics/subscribers", label: "구독자 분석", icon: Users },
   { href: "/analytics/comments", label: "독자 반응", icon: MessageSquare },
   { href: "/report", label: "AI 리포트", icon: FileText },

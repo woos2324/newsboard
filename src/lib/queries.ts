@@ -1098,6 +1098,138 @@ export async function getIssueDetail(
   };
 }
 
+// ===================================================================
+// 자사 기사 현황
+// ===================================================================
+
+export type OurArticleItem = {
+  article_id: number;
+  title: string;
+  url: string | null;
+  category: string | null;
+  published_at: string | null;
+  cluster_id: number | null;
+};
+
+export type OurArticlePageData = {
+  articles: OurArticleItem[];
+  total: number;
+  issueLinked: number;
+  sectionCounts: { section: string; count: number }[];
+  trend: { date: string; count: number }[];
+  prevDayTotal: number;
+};
+
+const SECTION_LABEL: Record<string, string> = {
+  politics: "정치",
+  economy: "경제",
+  society: "사회",
+  culture: "생활/문화",
+  it: "IT/과학",
+  world: "세계",
+  entertainment: "연예",
+  sports: "스포츠",
+};
+
+export function sectionLabel(category: string | null): string {
+  if (!category) return "기타";
+  return SECTION_LABEL[category] ?? category;
+}
+
+export async function getOurArticlesPage(
+  date: string,
+  page: number,
+  perPage = 10
+): Promise<OurArticlePageData> {
+  const sb = getSupabase();
+
+  const ourCompany = await sb
+    .from("media_company")
+    .select("media_company_id")
+    .eq("is_our_company", true)
+    .maybeSingle();
+  const mediaId = ourCompany.data?.media_company_id;
+  if (!mediaId) return { articles: [], total: 0, issueLinked: 0, sectionCounts: [], trend: [], prevDayTotal: 0 };
+
+  const nextDate = new Date(date);
+  nextDate.setDate(nextDate.getDate() + 1);
+  const nextDateStr = nextDate.toISOString().slice(0, 10);
+
+  const prevDate = new Date(date);
+  prevDate.setDate(prevDate.getDate() - 1);
+  const prevDateStr = prevDate.toISOString().slice(0, 10);
+
+  // 병렬 조회
+  const [allArticlesRes, trendRes, prevRes] = await Promise.all([
+    sb
+      .from("article")
+      .select("article_id, title, url, category, published_at")
+      .eq("media_company_id", mediaId)
+      .gte("published_at", date + "T00:00:00+09:00")
+      .lt("published_at", nextDateStr + "T00:00:00+09:00")
+      .order("published_at", { ascending: false }),
+    sb
+      .from("daily_publication_count")
+      .select("snapshot_date, publication_count")
+      .eq("media_company_id", mediaId)
+      .gte("snapshot_date", new Date(Date.now() - 7 * 24 * 60 * 60_000).toISOString().slice(0, 10))
+      .lte("snapshot_date", date)
+      .order("snapshot_date", { ascending: true }),
+    sb
+      .from("daily_publication_count")
+      .select("publication_count")
+      .eq("media_company_id", mediaId)
+      .eq("snapshot_date", prevDateStr)
+      .maybeSingle(),
+  ]);
+
+  const allArticles = allArticlesRes.data ?? [];
+  const articleIds = allArticles.map((a) => a.article_id);
+
+  // 클러스터 연결 조회
+  const clusterMap = new Map<number, number>();
+  if (articleIds.length > 0) {
+    const { data: clusterRows } = await sb
+      .from("issue_cluster_article")
+      .select("article_id, issue_cluster_id")
+      .in("article_id", articleIds);
+    for (const r of clusterRows ?? []) {
+      if (!clusterMap.has(r.article_id)) clusterMap.set(r.article_id, r.issue_cluster_id);
+    }
+  }
+
+  const articles: OurArticleItem[] = allArticles.map((a) => ({
+    article_id: a.article_id,
+    title: a.title,
+    url: a.url,
+    category: a.category,
+    published_at: a.published_at,
+    cluster_id: clusterMap.get(a.article_id) ?? null,
+  }));
+
+  // 섹션별 집계
+  const sectionMap = new Map<string, number>();
+  for (const a of articles) {
+    const key = a.category ?? "기타";
+    sectionMap.set(key, (sectionMap.get(key) ?? 0) + 1);
+  }
+  const sectionCounts = Array.from(sectionMap.entries())
+    .map(([section, count]) => ({ section, count }))
+    .sort((a, b) => b.count - a.count);
+
+  const start = (page - 1) * perPage;
+  const pagedArticles = articles.slice(start, start + perPage);
+
+  return {
+    articles: pagedArticles,
+    total: articles.length,
+    issueLinked: clusterMap.size,
+    sectionCounts,
+    trend: (trendRes.data ?? []).map((r) => ({ date: r.snapshot_date, count: r.publication_count })),
+    prevDayTotal: prevRes.data?.publication_count ?? 0,
+  };
+}
+
 export async function getIssueAISummary(
   clusterId: number
 ): Promise<AISummaryView | null> {

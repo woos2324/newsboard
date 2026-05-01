@@ -55,10 +55,7 @@ function ArticleRow({ num, article, isLeft }: ArticleRowProps) {
           {article.published_at && (
             <span className="text-[11px] text-muted">{formatTime(article.published_at)}</span>
           )}
-          {article.author_name && (
-            <span className="text-[11px] text-muted">{article.author_name} 기자</span>
-          )}
-          {article.category && (
+{article.category && (
             <span className={`badge text-[10px] ${secCls}`}>{sectionLabel(article.category)}</span>
           )}
           {article.cluster_id && (

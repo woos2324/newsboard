@@ -22,17 +22,13 @@ if sys.platform == "win32":
     except (AttributeError, OSError):
         pass
 
-import httpx
-
 from scripts.lib.db import get_client
 from scripts.lib.http import fetch_html
 from scripts.lib.naver import (
     NAVER_SECTIONS,
-    PUBLICATION_LIST_URL_TEMPLATE,
     PUBLICATION_SECTION_URL_TEMPLATE,
     PublicationArticle,
     parse_publication_articles,
-    parse_author_name,
 )
 
 KST = timezone(timedelta(hours=9))
@@ -135,84 +131,6 @@ def _upsert_articles(sb, media: dict, articles: list[PublicationArticle], now_is
         sb.table("article").update({"category": section}).in_("url", urls).is_("category", "null").execute()
 
 
-async def _backfill_author_names(sb, media_id: int, date_iso: str) -> None:
-    """해당 날짜의 author_name IS NULL 기사만 선별해서 기자 이름 수집."""
-    next_date = (
-        datetime.fromisoformat(date_iso) + timedelta(days=1)
-    ).strftime("%Y-%m-%d")
-
-    rows = (
-        sb.table("article")
-        .select("article_id, url")
-        .eq("media_company_id", media_id)
-        .is_("author_name", "null")
-        .gte("published_at", f"{date_iso}T00:00:00+09:00")
-        .lt("published_at", f"{next_date}T00:00:00+09:00")
-        .execute()
-        .data
-    )
-    if not rows:
-        return
-
-    print(f"    기자 이름 수집 대상: {len(rows)}건")
-
-    _ARTICLE_HEADERS = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
-        ),
-        "Referer": "https://news.naver.com/",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "ko-KR,ko;q=0.9",
-    }
-
-    sem = asyncio.Semaphore(8)
-
-    _debug_done = False
-
-    async def fetch_one(row: dict) -> tuple[int, str | None, str | None]:
-        nonlocal _debug_done
-        async with sem:
-            try:
-                async with httpx.AsyncClient(
-                    headers=_ARTICLE_HEADERS, follow_redirects=True, timeout=10.0
-                ) as client:
-                    resp = await client.get(row["url"])
-                    resp.raise_for_status()
-                    name = parse_author_name(resp.text)
-                    sample = None
-                    if name is None and not _debug_done:
-                        _debug_done = True
-                        needle = "journalist_name"
-                        idx = resp.text.find(needle)
-                        if idx >= 0:
-                            sample = f"[found at {idx}] " + resp.text[max(0, idx-50):idx+200].replace("\n", " ")
-                        else:
-                            sample = "[journalist_name 없음] " + resp.text[:200].replace("\n", " ")
-                    return row["article_id"], name, sample
-            except Exception as e:
-                print(f"      [warn] 기자 이름 fetch 실패 {row['url']}: {e}")
-                return row["article_id"], None, None
-
-    results = await asyncio.gather(*[fetch_one(r) for r in rows])
-
-    updated = 0
-    none_count = 0
-    for article_id, name, sample in results:
-        if name:
-            sb.table("article").update({"author_name": name}).eq("article_id", article_id).execute()
-            updated += 1
-        else:
-            none_count += 1
-            if sample is not None:
-                print(f"      [debug] HTML 샘플: {sample}")
-
-    if none_count > 0 and updated == 0:
-        print(f"      [debug] author_name 미추출 {none_count}건")
-
-    print(f"    기자 이름 업데이트: {updated}건")
-
-
 async def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--date", help="대상 날짜 (YYYYMMDD). 기본: 오늘 KST + 어제 KST")
@@ -250,13 +168,8 @@ async def main() -> None:
                 if args.dry_run:
                     continue
 
-                # 1) 기사 적재
                 _upsert_articles(sb, media, articles, now_iso)
 
-                # 2) 기자 이름 수집 (신규 기사 중 author_name 없는 것만)
-                await _backfill_author_names(sb, media["media_company_id"], d_iso)
-
-                # 3) 카운트 갱신
                 sb.table("daily_publication_count").upsert(
                     {
                         "media_company_id": media["media_company_id"],

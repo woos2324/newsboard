@@ -1230,6 +1230,61 @@ export async function getOurArticlesPage(
   };
 }
 
+export async function getArticleList(
+  date: string,
+  page: number,
+  perPage = 10
+): Promise<{ articles: OurArticleItem[]; total: number }> {
+  const sb = getSupabase();
+  const ourCompany = await sb
+    .from("media_company")
+    .select("media_company_id")
+    .eq("is_our_company", true)
+    .maybeSingle();
+  const mediaId = ourCompany.data?.media_company_id;
+  if (!mediaId) return { articles: [], total: 0 };
+
+  const nextDate = new Date(date);
+  nextDate.setDate(nextDate.getDate() + 1);
+  const nextDateStr = nextDate.toISOString().slice(0, 10);
+
+  const { data: allRows } = await sb
+    .from("article")
+    .select("article_id, title, url, category, published_at")
+    .eq("media_company_id", mediaId)
+    .gte("published_at", `${date}T00:00:00+09:00`)
+    .lt("published_at", `${nextDateStr}T00:00:00+09:00`)
+    .order("published_at", { ascending: false });
+
+  const all = allRows ?? [];
+  const total = all.length;
+  const start = (page - 1) * perPage;
+  const sliced = all.slice(start, start + perPage);
+
+  const clusterMap = new Map<number, number>();
+  if (sliced.length > 0) {
+    const { data: clusterRows } = await sb
+      .from("issue_cluster_article")
+      .select("article_id, issue_cluster_id")
+      .in("article_id", sliced.map((a) => a.article_id));
+    for (const r of clusterRows ?? []) {
+      if (!clusterMap.has(r.article_id)) clusterMap.set(r.article_id, r.issue_cluster_id);
+    }
+  }
+
+  return {
+    articles: sliced.map((a) => ({
+      article_id: a.article_id,
+      title: a.title,
+      url: a.url,
+      category: a.category,
+      published_at: a.published_at,
+      cluster_id: clusterMap.get(a.article_id) ?? null,
+    })),
+    total,
+  };
+}
+
 export async function getIssueAISummary(
   clusterId: number
 ): Promise<AISummaryView | null> {

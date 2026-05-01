@@ -102,9 +102,10 @@ export default async function ArticlesPage({ searchParams }: Props) {
             <p className="caption">데이터 없음</p>
           ) : (
             <div className="flex h-28 items-end gap-2">
-              {data.trend.map((t) => {
-                const max = Math.max(...data.trend.map((x) => x.count), 1);
-                const heightPct = Math.round((t.count / max) * 100);
+              {(() => {
+                const CHART_MAX = 600;
+                return data.trend.map((t) => {
+                const heightPct = Math.round((t.count / CHART_MAX) * 100);
                 const isToday = t.date === date;
                 const [, m, d] = t.date.split("-");
                 return (
@@ -119,7 +120,8 @@ export default async function ArticlesPage({ searchParams }: Props) {
                     </span>
                   </div>
                 );
-              })}
+              });
+              })()}
             </div>
           )}
         </div>

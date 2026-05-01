@@ -123,6 +123,14 @@ def _upsert_articles(sb, media: dict, articles: list[PublicationArticle], now_is
     # ignore_duplicates=True: 같은 url 재수집 시 첫 published_at 보존
     sb.table("article").upsert(rows, on_conflict="url", ignore_duplicates=True).execute()
 
+    # 랭킹 크롤러가 먼저 category=null로 삽입한 경우 섹션 정보 backfill
+    by_section: dict[str, list[str]] = {}
+    for a in articles:
+        if a.section:
+            by_section.setdefault(a.section, []).append(a.url)
+    for section, urls in by_section.items():
+        sb.table("article").update({"category": section}).in_("url", urls).is_("category", "null").execute()
+
 
 async def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)

@@ -25,7 +25,9 @@ if sys.platform == "win32":
 from scripts.lib.db import get_client
 from scripts.lib.http import fetch_html
 from scripts.lib.naver import (
+    NAVER_SECTIONS,
     PUBLICATION_LIST_URL_TEMPLATE,
+    PUBLICATION_SECTION_URL_TEMPLATE,
     PublicationArticle,
     parse_publication_articles,
 )
@@ -34,13 +36,13 @@ KST = timezone(timedelta(hours=9))
 MAX_PAGES = 30
 
 
-async def fetch_all_articles(naver_media_id: str, date_yyyymmdd: str) -> list[PublicationArticle]:
-    """모든 페이지 순회하며 기사 목록 수집. 중복 URL 제거."""
-    url = PUBLICATION_LIST_URL_TEMPLATE.format(
-        naver_media_id=naver_media_id, date=date_yyyymmdd, page=1
+async def _fetch_section_articles(naver_media_id: str, date_yyyymmdd: str, sid1: int, section_name: str) -> list[PublicationArticle]:
+    """특정 섹션의 모든 페이지 기사 수집."""
+    url = PUBLICATION_SECTION_URL_TEMPLATE.format(
+        naver_media_id=naver_media_id, date=date_yyyymmdd, sid1=sid1, page=1
     )
     html = await fetch_html(url)
-    page1_articles, max_page = parse_publication_articles(html)
+    page1_articles, max_page = parse_publication_articles(html, section=section_name)
 
     if max_page <= 1:
         return page1_articles
@@ -48,8 +50,8 @@ async def fetch_all_articles(naver_media_id: str, date_yyyymmdd: str) -> list[Pu
     last_page = min(max_page, MAX_PAGES)
     coros = [
         fetch_html(
-            PUBLICATION_LIST_URL_TEMPLATE.format(
-                naver_media_id=naver_media_id, date=date_yyyymmdd, page=p
+            PUBLICATION_SECTION_URL_TEMPLATE.format(
+                naver_media_id=naver_media_id, date=date_yyyymmdd, sid1=sid1, page=p
             )
         )
         for p in range(2, last_page + 1)
@@ -62,8 +64,30 @@ async def fetch_all_articles(naver_media_id: str, date_yyyymmdd: str) -> list[Pu
     for h in htmls:
         if isinstance(h, Exception):
             continue
-        articles, _ = parse_publication_articles(h)
+        articles, _ = parse_publication_articles(h, section=section_name)
         for a in articles:
+            if a.url not in seen_urls:
+                seen_urls.add(a.url)
+                all_articles.append(a)
+
+    return all_articles
+
+
+async def fetch_all_articles(naver_media_id: str, date_yyyymmdd: str) -> list[PublicationArticle]:
+    """섹션별로 수집 후 병합. 중복 URL은 첫 번째 섹션 정보 유지."""
+    section_coros = [
+        _fetch_section_articles(naver_media_id, date_yyyymmdd, sid1, section_name)
+        for sid1, section_name in NAVER_SECTIONS.items()
+    ]
+    results = await asyncio.gather(*section_coros, return_exceptions=True)
+
+    all_articles: list[PublicationArticle] = []
+    seen_urls: set[str] = set()
+
+    for result in results:
+        if isinstance(result, Exception):
+            continue
+        for a in result:
             if a.url not in seen_urls:
                 seen_urls.add(a.url)
                 all_articles.append(a)
@@ -90,6 +114,7 @@ def _upsert_articles(sb, media: dict, articles: list[PublicationArticle], now_is
             "media_company_id": media["media_company_id"],
             "title": a.title,
             "url": a.url,
+            "category": a.section,
             "published_at": now_iso,
             "collected_at": now_iso,
         }

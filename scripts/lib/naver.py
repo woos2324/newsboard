@@ -20,6 +20,23 @@ PUBLICATION_LIST_URL_TEMPLATE = (
     "?mode=LPOD&mid=sec&oid={naver_media_id}&listType=summary"
     "&date={date}&page={page}"
 )
+# 섹션별 기사 목록 (sid1 파라미터 추가)
+PUBLICATION_SECTION_URL_TEMPLATE = (
+    "https://news.naver.com/main/list.naver"
+    "?mode=LPOD&mid=sec&oid={naver_media_id}&listType=summary"
+    "&date={date}&sid1={sid1}&page={page}"
+)
+# 네이버 섹션 코드 → 카테고리 이름
+NAVER_SECTIONS: dict[int, str] = {
+    100: "politics",
+    101: "economy",
+    102: "society",
+    103: "culture",
+    104: "it",
+    105: "world",
+    106: "entertainment",
+    107: "sports",
+}
 
 
 @dataclass
@@ -104,6 +121,7 @@ def parse_ranking_html(html: str, limit: int = 10) -> list[RankingItem]:
 class PublicationArticle:
     title: str
     url: str
+    section: str | None = None
 
 
 def _parse_max_page(soup) -> int:
@@ -125,7 +143,7 @@ def _parse_max_page(soup) -> int:
     return max_page
 
 
-def parse_publication_articles(html: str) -> tuple[list[PublicationArticle], int]:
+def parse_publication_articles(html: str, section: str | None = None) -> tuple[list[PublicationArticle], int]:
     """list.naver 페이지 HTML에서 기사 제목+URL 목록과 max_page 추출.
     returns (articles, max_page).
     """
@@ -143,7 +161,7 @@ def parse_publication_articles(html: str) -> tuple[list[PublicationArticle], int
         title = a.get_text(strip=True)
         if title:
             seen.add(href)
-            articles.append(PublicationArticle(title=title, url=href))
+            articles.append(PublicationArticle(title=title, url=href, section=section))
 
     return articles, _parse_max_page(soup)
 

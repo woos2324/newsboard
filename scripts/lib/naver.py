@@ -69,13 +69,24 @@ _TITLE_SELECTORS: list[str] = [
 # 실제 기사 URL 패턴 (이외는 garbage 로 간주하고 필터)
 _ARTICLE_URL_PATTERNS = (
     "n.news.naver.com/article/",
+    "n.news.naver.com/mnews/article/",
     "news.naver.com/article/",
     "news.naver.com/main/read",
 )
 
+_OID_AID_RE = re.compile(r"n\.news\.naver\.com/(?:mnews/)?article/(\d+)/(\d+)")
+
 
 def _is_article_url(href: str) -> bool:
     return any(p in href for p in _ARTICLE_URL_PATTERNS)
+
+
+def normalize_naver_article_url(url: str) -> str:
+    """oid/aid를 추출해 /mnews/article/ 형식으로 정규화."""
+    m = _OID_AID_RE.search(url)
+    if m:
+        return f"https://n.news.naver.com/mnews/article/{m.group(1)}/{m.group(2)}"
+    return url
 
 
 def parse_ranking_html(html: str, limit: int = 10) -> list[RankingItem]:
@@ -109,7 +120,7 @@ def parse_ranking_html(html: str, limit: int = 10) -> list[RankingItem]:
                 title = node.get_text(" ", strip=True)[:120]
 
             rank += 1
-            items.append(RankingItem(rank=rank, title=title, url=href))
+            items.append(RankingItem(rank=rank, title=title, url=normalize_naver_article_url(href)))
             if rank >= limit:
                 break
         if items:

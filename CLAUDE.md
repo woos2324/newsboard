@@ -72,6 +72,9 @@
 - [x] **기자명 수집 로직 제거** — GitHub Actions 데이터센터 IP에서 Naver가 다른 HTML 반환 → 기자명 요소 absent. [scripts/collect_publications.py](scripts/collect_publications.py) `_backfill_author_names()` 제거. NCP 서버(한국 IP) 구성 후 재추가 예정
 - [x] **클러스터 re-absorption** — [scripts/cluster_articles.py](scripts/cluster_articles.py) 에 이미 구현됨. `_load_recent_clusters` (최근 2일) + `_find_similar_cluster` (제목 바이그램 ≥0.55 또는 공통 키워드 ≥2개+비율 ≥0.4) 로 기존 클러스터에 흡수. 같은 실행 내는 임베딩 유사도(0.85)로, 다른 실행 간은 텍스트 유사도로 병합. "미구현" 표기는 오기였음.
 - [x] **AI 일간 브리핑 불릿 → 이슈 링크 (B안)** — [api/lib/ai.py](api/lib/ai.py) 프롬프트 변경: bullets를 `{text, cluster_index}` 형태로 출력. [api/routes/report.py](api/routes/report.py) cluster_index → cluster_id/cluster_title 매핑 후 source_metadata 저장. [src/lib/queries.ts](src/lib/queries.ts) `BulletItem` 타입 추가 + `parseBullets()` 함수 (string/dict 하위호환). [src/components/dashboard/AISummaryCard.tsx](src/components/dashboard/AISummaryCard.tsx) per-bullet 아이콘 + `pb-2` 툴팁으로 교체 (cluster_id 있을 때만 아이콘 표시, 클릭 시 `/issue/[id]` 이동). 아이콘은 `inline-flex ml-2.5`로 텍스트 직후 인라인 배치 (flex 끝이 아님). production 배포 완료 + `/api/report/daily` POST로 신규 형식 브리핑 생성 확인 (cluster_id 매핑 정상)
+- [x] **generate_daily_briefing.py 이슈 링크 매핑 추가** — GitHub Actions cron용 스크립트에 cluster_index → cluster_id/cluster_title enriched_bullets 로직 추가. FastAPI endpoint와 동일 형식으로 저장.
+- [x] **AI 리포트 날짜 KST 기준 수정** — [api/routes/report.py](api/routes/report.py) + [scripts/generate_daily_briefing.py](scripts/generate_daily_briefing.py): `summary_date`를 KST 오늘 날짜로 저장. 클러스터 조회는 최근 2일치(`gte yesterday_utc`)로 확장해 UTC/KST 날짜 불일치 방지.
+- [x] **GenerateReportButton 성공 상태** — [src/components/GenerateReportButton.tsx](src/components/GenerateReportButton.tsx): 생성 완료 시 "생성 완료!" + CheckCircle 아이콘 3초 표시.
 
 ### ⚠️ 환경변수 (라이브 / .env.local 양쪽)
 **Vercel Production env (이미 설정됨)**:
@@ -82,17 +85,12 @@
 
 **로컬 .env.local 만 있는 것** (gitignore): 위 값 + 옵션 1 (Vercel AI Gateway) 주석 블록
 
-### 재개 지점 (2026-05-01 4차 세션 종료)
-- **AI 일간 브리핑 불릿 → 이슈 링크 B안 완전 구현 + 배포 완료**:
-  - `api/lib/ai.py` 프롬프트: bullets = `[{text, cluster_index}]` 형태로 출력
-  - `api/routes/report.py`: cluster_index → `{text, cluster_id, cluster_title}` 매핑 후 저장
-  - `src/lib/queries.ts`: `BulletItem` 타입 + `parseBullets()` 헬퍼 (string/dict 하위호환)
-  - `AISummaryCard.tsx`: `inline-flex ml-2.5`로 텍스트 직후에 FileText 아이콘, `pb-2` 툴팁 gap 패턴, 클릭 시 `/issue/[id]` 이동
-  - production `/api/report/daily` POST 완료 → cluster_id 5개 모두 정상 매핑 확인 (6112, 6101, 6107, 6105, 6102)
-- 대시보드 NAVER 배지 제거 + 댓글 title dedup 완료
-- URL 정규화 (`normalize_naver_article_url`) 완료
-- 기자명 수집 로직 제거 완료 (GitHub Actions IP 제약)
-- TypeScript 타입 오류 0개 확인
+### 재개 지점 (2026-05-02 5차 세션 종료)
+- **AI 일간 브리핑 불릿 → 이슈 링크 B안 완전 구현 + 배포 완료** (이전 세션)
+- **`scripts/generate_daily_briefing.py` 업데이트** — cluster_index → cluster_id/cluster_title 매핑 로직 추가 (FastAPI endpoint와 동일 로직). GitHub Actions cron도 이슈 링크 포함 bullets 저장.
+- **AI 리포트 날짜 KST 기준으로 수정** — `api/routes/report.py`: `date.today()` → KST 오늘(`datetime.now(KST).date()`), 클러스터는 최근 2일치(`gte(yesterday_utc)`) 조회. `summary_date`를 KST로 저장. `generate_daily_briefing.py` 동일 정책 적용.
+- **GenerateReportButton 성공 상태 추가** — 생성 완료 시 "생성 완료!" + CheckCircle 아이콘 3초 표시. 에러 메시지 단순화.
+- production 배포 완료 (commit `0b825a9`)
 - ⚠ **과거 날짜 category backfill** 미완료: 2026-04-25~29 날짜별로 `python -m scripts.collect_publications --date YYYYMMDD` 수동 실행 필요.
 ### 다음 작업 로드맵
 - **(즉시) 과거 날짜 category backfill** — `python -m scripts.collect_publications --date 20260425` ~ `20260429` 5일치 수동 실행 (2026-04-29 이전 ~90건 기타 원인).
@@ -103,6 +101,12 @@
 - **(보너스) 셀렉터 견고화** — Naver UI 변경 대비 [scripts/lib/naver.py](scripts/lib/naver.py) 다중 selector 우선순위 확장.
 - **(보너스) GitHub auto-deploy 연결** — Settings → Git 에서 Vercel ↔ GitHub 연결, push 자동 배포.
 - **(미래) 본문 임베딩** — `article.body` 채워지면 클러스터링 입력을 `title + body[:500]` 으로 확장.
+
+### 판단 사항 (AI 리포트 날짜 기준 — KST vs UTC)
+- **문제**: FastAPI `date.today()`는 UTC 기준. KST 낮에 버튼 누르면 UTC는 전날이라 기존 브리핑을 update만 하고 KST "오늘" 날짜 리포트가 생기지 않음.
+- **해결**: `summary_date`를 `datetime.now(KST).date()`로 설정. 클러스터 조회는 `gte(yesterday_utc)`로 최근 2일치 포함 (UTC/KST 경계 무관하게 최신 클러스터 항상 포함).
+- **cluster_date는 여전히 UTC 기준**: `cluster_articles.py`는 변경 안 함. 브리핑 날짜만 KST로 보정.
+- **cron 브리핑(UTC 15:00 = KST 00:00)**: `generate_daily_briefing.py`도 동일 KST 정책 적용. `--date` 인자 지정 시 해당 날짜 사용, 미지정 시 KST 오늘.
 
 ### 판단 사항 (미보도·클러스터 개선 설계)
 

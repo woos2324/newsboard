@@ -79,7 +79,7 @@ export default async function ArticlesPage({ searchParams }: Props) {
           {data.trend.length === 0 ? (
             <p className="caption">데이터 없음</p>
           ) : (
-            <div className="flex h-28 items-end gap-2">
+            <div className="flex h-44 items-end gap-2">
               {data.trend.map((t) => {
                 const heightPct = Math.round((t.count / 600) * 100);
                 const isToday = t.date === date;

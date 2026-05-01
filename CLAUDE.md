@@ -6,7 +6,7 @@
 
 ---
 
-## 현재 진행 상태 (2026-04-30)
+## 현재 진행 상태 (2026-05-01)
 
 새 세션 시작 시 가장 먼저 확인할 진행 현황 체크포인트.
 
@@ -35,10 +35,11 @@
 
 **cron chain**: `ranking → cluster → gap` (매시 정각 자동 연쇄)
 
-### DB 스키마 (마이그레이션 3건)
+### DB 스키마 (마이그레이션 4건)
 - `0001_init` — 11개 코어 테이블 (media_company, article, issue_cluster 등)
 - `0002_daily_publication_count` — 자사 일일 네이버 발행 수 카운트 테이블
 - `0003_section_ranking` — 섹션별 랭킹 스냅샷 테이블 (`section_ranking_snapshot`)
+- `0004_perf_indexes` — 성능 인덱스 3개 (comment_metric.comment_count DESC, subscriber_snapshot.snapshot_date DESC, issue_cluster_article.article_id)
 - 매체 51개 (시드 9 + 사용자 추가 42, naver_media_id 보유 47개)
 
 ### 완료된 작업
@@ -54,6 +55,13 @@
 - [x] **댓글 반응 분석** — 자사/경쟁사 분리, /analytics/comments 페이지
 - [x] **미보도 탐지 파이프라인** — [scripts/detect_gap.py](scripts/detect_gap.py), cron-gap chain, 검토 시작/완료 버튼 ([src/app/gap/actions.ts](src/app/gap/actions.ts))
 - [x] **자사 전체 기사 수집** — [scripts/collect_publications.py](scripts/collect_publications.py) 에서 제목·URL → article 테이블 적재 (낙종 탐지 정확도 향상)
+- [x] **댓글 페이지 중복 제거** — `article_id` 기준 Set dedup으로 동일 기사 중복 스냅샷 제거. 배지 기준 `comment_count` 직접 사용 (500↑ 매우활발 / 200↑ 활발 / 미만 보통)
+- [x] **대시보드 댓글 반응 수정** — 25시간 시간 필터 + `limit(3000)` + article_id dedup 으로 0 표시 버그 수정
+- [x] **댓글 수집 cron 매시간으로 변경** — `cron-comments.yml` 4회/일 → `15 * * * *` (UTC, KST :24) 매시 수집
+- [x] **쿼리 성능 개선** — `getOurTopComments` / `getCompetitorTopComments` 25h 필터 + limit×10, `getCompetitorSubscribers` 최근 16일 필터 ([src/lib/queries.ts](src/lib/queries.ts))
+- [x] **DB 인덱스 3개 추가** — `0004_perf_indexes` 마이그레이션 적용 (comment_metric 정렬, subscriber_snapshot 날짜, issue_cluster_article 기사 조회)
+- [x] **전 페이지 loading.tsx 스켈레톤** — 메뉴 클릭 즉시 시각적 피드백. 8개 페이지 animate-pulse 스켈레톤 적용
+- [x] **Topbar 검색창 주석 처리** — 미구현 상태로 UI에서 제거 ([src/components/Topbar.tsx](src/components/Topbar.tsx))
 
 ### ⚠️ 환경변수 (라이브 / .env.local 양쪽)
 **Vercel Production env (이미 설정됨)**:
@@ -64,11 +72,11 @@
 
 **로컬 .env.local 만 있는 것** (gitignore): 위 값 + 옵션 1 (Vercel AI Gateway) 주석 블록
 
-### 재개 지점 (2026-04-30 세션 종료)
-- 미보도 탐지 전체 파이프라인 완료 + 배포 (`51cd956`).
-- 검토 시작 → reviewing / 완료 → resolved Server Action 동작 확인.
-- 클러스터 중복 알림 DB 정리 완료 (104개 고유 유지).
-- threshold 0.80 → 0.85 상향 (유사 제목 중복 클러스터 감소 목적).
+### 재개 지점 (2026-05-01 세션 종료)
+- 댓글 페이지 중복·배지 버그 수정, 대시보드 댓글 반응 0 수정, 댓글 cron 매시간 변경 완료.
+- 쿼리 성능 개선 + DB 인덱스 3개 적용 (`0004_perf_indexes`, MCP로 직접 적용).
+- 전 페이지 loading.tsx 스켈레톤 추가 완료.
+- Supabase MCP 인증 완료 (`.mcp.json` http 방식, 세션마다 OAuth 재인증 필요).
 - ⚠ **미구현 고도화**: 클러스터 re-absorption (같은 이슈 다른 제목 중복 근본 해결) — memory에 기록됨.
 
 ### 다음 작업 로드맵
@@ -149,7 +157,7 @@
 - 셀렉터 추가/패치 시 [scripts/lib/naver.py](scripts/lib/naver.py) 의 `_*_SELECTORS` 우선순위 리스트 맨 앞에 새 셀렉터 추가.
 
 ### 판단 사항 (의식해야 할 디자인 결정)
-- **댓글 sentiment**: DB에 sentiment 컬럼 없음 → `engagement_score` 휴리스틱으로 배지 ("매우 활발 ≥80 / 활발 ≥60 / 보통"). 실 NLP 붙이려면 스키마 + AI 파이프라인 필요.
+- **댓글 sentiment**: DB에 sentiment 컬럼 없음 → `comment_count` 직접 기준 배지 ("매우 활발 ≥500 / 활발 ≥200 / 보통"). 실 NLP 붙이려면 스키마 + AI 파이프라인 필요.
 - **랭킹 변동 지표**: 어제 스냅샷 diff 로직 미구현 → `change: null` (평행). `ranking_news_snapshot` 2회/일 이상 쌓이면 추가.
 - **Gap priority 매핑**: `priority_score ≥80` high / `≥50` medium / else low.
 - **AI JSON 파싱**: 모델이 markdown 펜스나 pre-text로 감싸는 경우 대비 regex 추출 fallback 탑재.

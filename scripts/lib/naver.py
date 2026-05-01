@@ -143,6 +143,28 @@ def _parse_max_page(soup) -> int:
     return max_page
 
 
+_AUTHOR_SELECTORS: list[str] = [
+    "em.media_end_head_journalist_name",
+    "span.byline_s",
+    "em.reporter_name",
+    ".journalist_name em",
+    ".byline em",
+    "div.article_info em",
+]
+
+def parse_author_name(html: str) -> str | None:
+    """네이버 기사 본문 페이지에서 기자 이름 추출."""
+    soup = BeautifulSoup(html, "html.parser")
+    for sel in _AUTHOR_SELECTORS:
+        node = soup.select_one(sel)
+        if node:
+            text = node.get_text(strip=True)
+            text = re.sub(r"\s*기자\s*$", "", text).strip()
+            if text:
+                return text
+    return None
+
+
 def parse_publication_articles(html: str, section: str | None = None) -> tuple[list[PublicationArticle], int]:
     """list.naver 페이지 HTML에서 기사 제목+URL 목록과 max_page 추출.
     returns (articles, max_page).

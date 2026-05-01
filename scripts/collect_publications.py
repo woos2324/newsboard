@@ -30,6 +30,7 @@ from scripts.lib.naver import (
     PUBLICATION_SECTION_URL_TEMPLATE,
     PublicationArticle,
     parse_publication_articles,
+    parse_author_name,
 )
 
 KST = timezone(timedelta(hours=9))
@@ -132,6 +133,48 @@ def _upsert_articles(sb, media: dict, articles: list[PublicationArticle], now_is
         sb.table("article").update({"category": section}).in_("url", urls).is_("category", "null").execute()
 
 
+async def _backfill_author_names(sb, media_id: int, date_iso: str) -> None:
+    """해당 날짜의 author_name IS NULL 기사만 선별해서 기자 이름 수집."""
+    next_date = (
+        datetime.fromisoformat(date_iso) + timedelta(days=1)
+    ).strftime("%Y-%m-%d")
+
+    rows = (
+        sb.table("article")
+        .select("article_id, url")
+        .eq("media_company_id", media_id)
+        .is_("author_name", "null")
+        .gte("published_at", f"{date_iso}T00:00:00+09:00")
+        .lt("published_at", f"{next_date}T00:00:00+09:00")
+        .execute()
+        .data
+    )
+    if not rows:
+        return
+
+    print(f"    기자 이름 수집 대상: {len(rows)}건")
+
+    sem = asyncio.Semaphore(8)
+
+    async def fetch_one(row: dict) -> tuple[int, str | None]:
+        async with sem:
+            try:
+                html = await fetch_html(row["url"], timeout=10.0, retries=2)
+                return row["article_id"], parse_author_name(html)
+            except Exception:
+                return row["article_id"], None
+
+    results = await asyncio.gather(*[fetch_one(r) for r in rows])
+
+    updated = 0
+    for article_id, name in results:
+        if name:
+            sb.table("article").update({"author_name": name}).eq("article_id", article_id).execute()
+            updated += 1
+
+    print(f"    기자 이름 업데이트: {updated}건")
+
+
 async def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--date", help="대상 날짜 (YYYYMMDD). 기본: 오늘 KST + 어제 KST")
@@ -172,7 +215,10 @@ async def main() -> None:
                 # 1) 기사 적재
                 _upsert_articles(sb, media, articles, now_iso)
 
-                # 2) 카운트 갱신
+                # 2) 기자 이름 수집 (신규 기사 중 author_name 없는 것만)
+                await _backfill_author_names(sb, media["media_company_id"], d_iso)
+
+                # 3) 카운트 갱신
                 sb.table("daily_publication_count").upsert(
                     {
                         "media_company_id": media["media_company_id"],

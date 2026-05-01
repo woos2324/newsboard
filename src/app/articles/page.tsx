@@ -81,7 +81,8 @@ export default async function ArticlesPage({ searchParams }: Props) {
           ) : (
             <div className="flex h-44 items-end gap-2">
               {data.trend.map((t) => {
-                const heightPct = Math.round((t.count / 600) * 100);
+                const BAR_MAX_PX = 140;
+                const barPx = Math.max(4, Math.round((t.count / 600) * BAR_MAX_PX));
                 const isToday = t.date === date;
                 const [, m, d] = t.date.split("-");
                 return (
@@ -89,7 +90,7 @@ export default async function ArticlesPage({ searchParams }: Props) {
                     <span className="text-[10px] font-semibold text-muted">{t.count}</span>
                     <div
                       className={`w-full rounded-t-sm ${isToday ? "bg-primary-500" : "bg-blue-200"}`}
-                      style={{ height: `${heightPct}%`, minHeight: 4 }}
+                      style={{ height: barPx }}
                     />
                     <span className={`text-[10px] ${isToday ? "font-bold text-primary-500" : "text-muted"}`}>
                       {parseInt(m)}/{parseInt(d)}

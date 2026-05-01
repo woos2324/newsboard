@@ -70,6 +70,7 @@
 - [x] **대시보드 NAVER 배지 제거 + 댓글 기사 title dedup** — `page.tsx` source 배지 제거, `getOurTopComments` title Set dedup으로 중복 방지
 - [x] **Naver 기사 URL 정규화** — [scripts/lib/naver.py](scripts/lib/naver.py) `normalize_naver_article_url()` 추가. ranking → `/mnews/article/` 통일. 기존 중복은 title dedup으로 처리
 - [x] **기자명 수집 로직 제거** — GitHub Actions 데이터센터 IP에서 Naver가 다른 HTML 반환 → 기자명 요소 absent. [scripts/collect_publications.py](scripts/collect_publications.py) `_backfill_author_names()` 제거. NCP 서버(한국 IP) 구성 후 재추가 예정
+- [x] **클러스터 re-absorption** — [scripts/cluster_articles.py](scripts/cluster_articles.py) 에 이미 구현됨. `_load_recent_clusters` (최근 2일) + `_find_similar_cluster` (제목 바이그램 ≥0.55 또는 공통 키워드 ≥2개+비율 ≥0.4) 로 기존 클러스터에 흡수. 같은 실행 내는 임베딩 유사도(0.85)로, 다른 실행 간은 텍스트 유사도로 병합. "미구현" 표기는 오기였음.
 - [x] **AI 일간 브리핑 불릿 → 이슈 링크 (B안)** — [api/lib/ai.py](api/lib/ai.py) 프롬프트 변경: bullets를 `{text, cluster_index}` 형태로 출력. [api/routes/report.py](api/routes/report.py) cluster_index → cluster_id/cluster_title 매핑 후 source_metadata 저장. [src/lib/queries.ts](src/lib/queries.ts) `BulletItem` 타입 추가 + `parseBullets()` 함수 (string/dict 하위호환). [src/components/dashboard/AISummaryCard.tsx](src/components/dashboard/AISummaryCard.tsx) per-bullet 아이콘 + `pb-2` 툴팁으로 교체 (cluster_id 있을 때만 아이콘 표시, 클릭 시 `/issue/[id]` 이동). 아이콘은 `inline-flex ml-2.5`로 텍스트 직후 인라인 배치 (flex 끝이 아님). production 배포 완료 + `/api/report/daily` POST로 신규 형식 브리핑 생성 확인 (cluster_id 매핑 정상)
 
 ### ⚠️ 환경변수 (라이브 / .env.local 양쪽)
@@ -93,16 +94,19 @@
 - 기자명 수집 로직 제거 완료 (GitHub Actions IP 제약)
 - TypeScript 타입 오류 0개 확인
 - ⚠ **과거 날짜 category backfill** 미완료: 2026-04-25~29 날짜별로 `python -m scripts.collect_publications --date YYYYMMDD` 수동 실행 필요.
-- ⚠ **미구현 고도화**: 클러스터 re-absorption (같은 이슈 다른 제목 중복 근본 해결) — memory에 기록됨.
-
 ### 다음 작업 로드맵
 - **(즉시) 과거 날짜 category backfill** — `python -m scripts.collect_publications --date 20260425` ~ `20260429` 5일치 수동 실행 (2026-04-29 이전 ~90건 기타 원인).
 - **(미래) 검색 기능** — Topbar 검색창 UI 주석 처리됨 ([src/components/Topbar.tsx](src/components/Topbar.tsx)). 이슈 클러스터 제목/키워드 검색 + 드롭다운 자동완성 또는 `/search` 페이지로 구현 필요.
-- **(미래) 기자 이름 기반 통계** — 기자별 기사 수 / 기자별 이슈 연결 현황. `/articles` 페이지 또는 별도 탭으로 확장.
-- **(미래) 클러스터 re-absorption** — 동일 이슈 다른 제목 중복 클러스터 근본 해결. cluster_articles.py 에서 기존 클러스터 centroid 와 비교해 threshold 이상이면 병합.
+- **(미래) 이메일 브리핑 자동 발송** — 매일 KST 9시, GitHub Actions cron으로 주요 지표 + 놓친 이슈 + Top 3 이슈 이메일 발송. 추후 카카오 알림톡 전환 가능.
+- **(미래) 기자 이름 기반 통계** — NCP 한국 IP 서버 구성 후 기자명 수집 재도입 전제. 기자별 기사 수 / 이슈 연결 현황. `/articles` 페이지 확장.
 - **(보너스) 셀렉터 견고화** — Naver UI 변경 대비 [scripts/lib/naver.py](scripts/lib/naver.py) 다중 selector 우선순위 확장.
 - **(보너스) GitHub auto-deploy 연결** — Settings → Git 에서 Vercel ↔ GitHub 연결, push 자동 배포.
 - **(미래) 본문 임베딩** — `article.body` 채워지면 클러스터링 입력을 `title + body[:500]` 으로 확장.
+
+### 판단 사항 (클러스터 re-absorption)
+- **같은 실행 내**: 임베딩 cosine 유사도 ≥0.85 → 같은 그룹으로 묶임. 제목이 달라도 의미가 비슷하면 통과.
+- **다른 실행 간**: `_find_similar_cluster`로 최근 2일 기존 클러스터와 비교. 제목 바이그램 유사도 ≥0.55 OR 공통 키워드 ≥2개+비율 ≥0.4 이면 기존 클러스터에 흡수(`absorbed` 카운트 증가).
+- **AI 생성 제목 의존**: 같은 사건에 AI가 전혀 다른 표현의 제목을 생성하면 유사도 임계값 미달 가능. 실제 중복이 지속 발생하면 threshold 완화(0.50) 또는 임베딩 기반 클러스터 간 비교로 개선 검토.
 
 ### 판단 사항 (AI 일간 브리핑 불릿 → 이슈 링크)
 - **bullets 저장 형식 변경**: 구 형식 `string[]` → 신 형식 `[{text, cluster_id, cluster_title}]`. `parseBullets()` 함수가 두 형식 모두 처리해 하위호환 보장.

@@ -4,4 +4,3 @@ supabase==2.10.0
 httpx>=0.26,<0.28
 python-dotenv==1.0.1
 beautifulsoup4==4.12.3
-playwright==1.51.0

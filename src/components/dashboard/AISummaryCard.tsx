@@ -1,13 +1,15 @@
-import { Sparkles } from "lucide-react";
+import { Sparkles, FileText } from "lucide-react";
+import type { SummarySource } from "@/lib/queries";
 
 type Props = {
   updatedAt: string;
   title?: string;
   summary: string;
   bullets: string[];
+  sources?: SummarySource[];
 };
 
-export function AISummaryCard({ updatedAt, title, summary, bullets }: Props) {
+export function AISummaryCard({ updatedAt, title, summary, bullets, sources = [] }: Props) {
   return (
     <div className="card relative overflow-hidden bg-gradient-to-br from-primary-500 to-primary-600 text-white">
       <div
@@ -46,6 +48,37 @@ export function AISummaryCard({ updatedAt, title, summary, bullets }: Props) {
               </li>
             ))}
           </ul>
+        )}
+
+        {sources.length > 0 && (
+          <div className="relative mt-3 inline-block group">
+            <button
+              type="button"
+              className="flex items-center gap-1 rounded-md bg-white/15 px-2 py-1 text-[11px] text-white/80 hover:bg-white/25 hover:text-white transition-colors"
+            >
+              <FileText className="h-3 w-3" />
+              <span>참고 이슈 {sources.length}건</span>
+            </button>
+            <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block z-20 w-72">
+              <div className="rounded-lg bg-white shadow-xl border border-border p-2">
+                <p className="mb-1.5 px-1 text-[10px] font-semibold text-muted uppercase tracking-wide">
+                  요약에 사용된 이슈
+                </p>
+                <ul className="space-y-0.5">
+                  {sources.map((s) => (
+                    <li key={s.cluster_id}>
+                      <a
+                        href={`/issue/${s.cluster_id}`}
+                        className="block truncate rounded px-2 py-1.5 text-[12px] text-foreground hover:bg-gray-50 hover:text-primary-500"
+                      >
+                        {s.title}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>

@@ -153,6 +153,7 @@ export default async function DashboardPage() {
                 "오늘의 AI 요약이 아직 생성되지 않았습니다."
               }
               bullets={aiSummary?.bullets ?? []}
+              sources={aiSummary?.sources ?? []}
             />
           </section>
 

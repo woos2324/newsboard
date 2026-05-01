@@ -84,6 +84,11 @@ export type CompetitorCommentMedia = {
   articles: TopCommentView[];
 };
 
+export type SummarySource = {
+  cluster_id: number;
+  title: string;
+};
+
 export type AISummaryView = {
   summary_id: number;
   type: "daily" | "weekly" | "issue" | "competitor";
@@ -92,6 +97,7 @@ export type AISummaryView = {
   content: string;
   bullets: string[];
   model_version: string;
+  sources: SummarySource[];
 };
 
 export type OverviewStats = {
@@ -1015,13 +1021,51 @@ export async function getReports(
       content: r.content,
       bullets: Array.isArray(bulletsRaw) ? bulletsRaw : [],
       model_version: r.model_version,
+      sources: [],
     };
   });
 }
 
 export async function getLatestDailySummary(): Promise<AISummaryView | null> {
-  const rows = await getReports("daily", 1);
-  return rows[0] ?? null;
+  const sb = getSupabase();
+  const { data, error } = await sb
+    .from("ai_summary")
+    .select("ai_summary_id, summary_type, summary_date, title, content, source_metadata, model_version")
+    .eq("summary_type", "daily")
+    .order("summary_date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data) return null;
+
+  const meta = (data.source_metadata ?? {}) as Record<string, unknown>;
+  const bulletsRaw = (meta.bullets as string[] | undefined) ?? [];
+  const clusterKeys = (meta.cluster_keys as string[] | undefined) ?? [];
+
+  let sources: SummarySource[] = [];
+  if (clusterKeys.length > 0) {
+    const { data: clusters } = await sb
+      .from("issue_cluster")
+      .select("issue_cluster_id, representative_title")
+      .in("cluster_key", clusterKeys)
+      .order("issue_cluster_id", { ascending: true });
+
+    sources = (clusters ?? []).map((c) => ({
+      cluster_id: c.issue_cluster_id,
+      title: c.representative_title ?? "(제목 없음)",
+    }));
+  }
+
+  return {
+    summary_id: data.ai_summary_id,
+    type: data.summary_type as AISummaryView["type"],
+    summary_date: data.summary_date,
+    title: data.title,
+    content: data.content,
+    bullets: Array.isArray(bulletsRaw) ? bulletsRaw : [],
+    model_version: data.model_version,
+    sources,
+  };
 }
 
 // ===================================================================
@@ -1316,5 +1360,6 @@ export async function getIssueAISummary(
     content: data.content,
     bullets: Array.isArray(bulletsRaw) ? bulletsRaw : [],
     model_version: data.model_version,
+    sources: [],
   };
 }

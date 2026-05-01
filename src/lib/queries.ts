@@ -891,13 +891,13 @@ export async function getOurTopComments(limit = 4): Promise<TopCommentView[]> {
   if (error) throw error;
 
   type RawRow = typeof data extends (infer T)[] | null ? T : never;
-  const seen = new Set<number>();
+  const seenTitles = new Set<string>();
   const deduped: RawRow[] = [];
   for (const r of data ?? []) {
-    const art = r.article as unknown as { article_id: number } | null;
-    const id = art?.article_id ?? 0;
-    if (!seen.has(id)) {
-      seen.add(id);
+    const art = r.article as unknown as { article_id: number; title: string } | null;
+    const title = art?.title ?? "";
+    if (title && !seenTitles.has(title)) {
+      seenTitles.add(title);
       deduped.push(r);
       if (deduped.length >= limit) break;
     }

@@ -33,4 +33,7 @@ venv/
 # PowerShell 리다이렉트 사고로 생긴 $null 파일
 $null
 
+# 디자인 미리보기 파일
+_design-preview.html
+
 .vercel

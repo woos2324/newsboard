@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import re
 import secrets
 import sys
 from datetime import date, datetime, timedelta, timezone
@@ -31,15 +32,14 @@ from scripts.lib.cluster import (
 )
 from scripts.lib.db import get_client
 
+_NORMALIZE_RE = re.compile("[^0-9A-Za-z\uAC00-\uD7A3]+")
+
+
+def _chunks(values: list[int], size: int = 200) -> list[list[int]]:
+    return [values[i : i + size] for i in range(0, len(values), size)]
+
 
 def _load_unassigned_articles(sb, cutoff_iso: str) -> list[dict]:
-    assigned = {
-        r["article_id"]
-        for r in sb.table("issue_cluster_article")
-        .select("article_id")
-        .execute()
-        .data
-    }
     rows = (
         sb.table("article")
         .select(
@@ -51,7 +51,103 @@ def _load_unassigned_articles(sb, cutoff_iso: str) -> list[dict]:
         .execute()
         .data
     )
+
+    candidate_ids = [r["article_id"] for r in rows]
+    assigned: set[int] = set()
+    for ids in _chunks(candidate_ids):
+        assigned.update(
+            r["article_id"]
+            for r in sb.table("issue_cluster_article")
+            .select("article_id")
+            .in_("article_id", ids)
+            .execute()
+            .data
+        )
+
     return [r for r in rows if r["article_id"] not in assigned]
+
+
+def _distinct_media_count(group: list[int], articles: list[dict]) -> int:
+    names = {
+        (articles[i].get("media_company") or {}).get("name")
+        for i in group
+    }
+    return len({name for name in names if name})
+
+
+def _normalize_text(value: str) -> str:
+    return _NORMALIZE_RE.sub("", value.lower())
+
+
+def _bigrams(value: str) -> set[str]:
+    normalized = _normalize_text(value)
+    grams = {normalized[i : i + 2] for i in range(max(0, len(normalized) - 1))}
+    if not grams and normalized:
+        grams.add(normalized)
+    return grams
+
+
+def _overlap_ratio(left: set[str], right: set[str]) -> float:
+    if not left or not right:
+        return 0.0
+    return len(left & right) / min(len(left), len(right))
+
+
+def _text_similarity(left: str, right: str) -> float:
+    return _overlap_ratio(_bigrams(left), _bigrams(right))
+
+
+def _keyword_overlap(left: list[str], right: list[str]) -> float:
+    left_set = {_normalize_text(k) for k in left if _normalize_text(k)}
+    right_set = {_normalize_text(k) for k in right if _normalize_text(k)}
+    if len(left_set & right_set) < 2:
+        return 0.0
+    return _overlap_ratio(left_set, right_set)
+
+
+def _load_recent_clusters(sb, days: int = 2) -> list[dict]:
+    since = (date.today() - timedelta(days=days - 1)).isoformat()
+    return (
+        sb.table("issue_cluster")
+        .select("issue_cluster_id, representative_title, keywords, confidence_score")
+        .gte("cluster_date", since)
+        .order("cluster_date", desc=True)
+        .order("confidence_score", desc=True)
+        .limit(300)
+        .execute()
+        .data
+    )
+
+
+def _find_similar_cluster(
+    existing_clusters: list[dict],
+    title: str,
+    keywords: list[str],
+) -> dict | None:
+    best: dict | None = None
+    best_score = 0.0
+    normalized_title = _normalize_text(title)
+
+    for cluster in existing_clusters:
+        existing_title = cluster.get("representative_title") or ""
+        title_score = _text_similarity(title, existing_title)
+        keyword_score = _keyword_overlap(keywords, cluster.get("keywords") or [])
+        exact_title = normalized_title == _normalize_text(existing_title)
+
+        if exact_title:
+            score = 1.0
+        elif title_score >= 0.55:
+            score = title_score
+        elif keyword_score >= 0.4:
+            score = keyword_score
+        else:
+            continue
+
+        if score > best_score:
+            best = cluster
+            best_score = score
+
+    return best
 
 
 async def main() -> None:
@@ -64,6 +160,12 @@ async def main() -> None:
     )
     parser.add_argument(
         "--min-size", type=int, default=2, help="클러스터 최소 기사 수 (기본 2)"
+    )
+    parser.add_argument(
+        "--min-media",
+        type=int,
+        default=2,
+        help="클러스터 최소 고유 매체 수 (기본 2)",
     )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
@@ -92,12 +194,22 @@ async def main() -> None:
     groups = greedy_cluster(embeddings, threshold=args.threshold)
     print(f"후보 클러스터 {len(groups)}개 (threshold={args.threshold})")
 
-    kept = [g for g in groups if len(g) >= args.min_size]
+    kept = [
+        g
+        for g in groups
+        if len(g) >= args.min_size
+        and _distinct_media_count(g, articles) >= args.min_media
+    ]
     if len(kept) != len(groups):
-        print(f"min_size={args.min_size} 적용 → {len(kept)}개 채택")
+        print(
+            f"min_size={args.min_size}, min_media={args.min_media} 적용 "
+            f"→ {len(kept)}개 채택"
+        )
 
     today = date.today().isoformat()
+    existing_clusters = _load_recent_clusters(sb)
     created = 0
+    absorbed = 0
 
     for idx, group in enumerate(kept, start=1):
         repr_idx = pick_representative(embeddings, group)
@@ -138,23 +250,43 @@ async def main() -> None:
         if args.dry_run:
             continue
 
-        cluster_key = f"{today}-auto-{secrets.token_hex(4)}"
-        cluster_row = (
-            sb.table("issue_cluster")
-            .insert(
+        similar_cluster = _find_similar_cluster(
+            existing_clusters, repr_title, keywords
+        )
+        if similar_cluster:
+            cluster_row = similar_cluster
+            print(
+                "    ↳ 기존 클러스터 "
+                f"#{cluster_row['issue_cluster_id']}에 흡수"
+            )
+            absorbed += 1
+        else:
+            cluster_key = f"{today}-auto-{secrets.token_hex(4)}"
+            cluster_row = (
+                sb.table("issue_cluster")
+                .insert(
+                    {
+                        "cluster_key": cluster_key,
+                        "representative_title": repr_title,
+                        "keywords": keywords,
+                        "summary": summary,
+                        "cluster_date": today,
+                        "confidence_score": round(intra, 4),
+                        "model_version": f"embed:{embed_model}+meta:{meta_model}",
+                    }
+                )
+                .execute()
+                .data[0]
+            )
+            existing_clusters.append(
                 {
-                    "cluster_key": cluster_key,
+                    "issue_cluster_id": cluster_row["issue_cluster_id"],
                     "representative_title": repr_title,
                     "keywords": keywords,
-                    "summary": summary,
-                    "cluster_date": today,
                     "confidence_score": round(intra, 4),
-                    "model_version": f"embed:{embed_model}+meta:{meta_model}",
                 }
             )
-            .execute()
-            .data[0]
-        )
+            created += 1
 
         link_rows = []
         for a_local_idx, art_global_idx in enumerate(group):
@@ -170,12 +302,11 @@ async def main() -> None:
                 }
             )
         sb.table("issue_cluster_article").insert(link_rows).execute()
-        created += 1
 
     if args.dry_run:
         print(f"\n[dry-run] {len(kept)}개 후보 클러스터 — DB 적재 생략")
     else:
-        print(f"\n신규 클러스터 {created}개 적재 완료")
+        print(f"\n신규 클러스터 {created}개, 기존 흡수 {absorbed}개 완료")
 
 
 if __name__ == "__main__":

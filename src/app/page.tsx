@@ -231,7 +231,6 @@ export default async function DashboardPage() {
                           {row.media} · {row.comments.toLocaleString()}개 댓글
                         </p>
                       </div>
-                      <span className="badge badge-muted">{row.source}</span>
                     </li>
                   ))
                 )}

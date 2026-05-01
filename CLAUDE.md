@@ -62,6 +62,11 @@
 - [x] **DB 인덱스 3개 추가** — `0004_perf_indexes` 마이그레이션 적용 (comment_metric 정렬, subscriber_snapshot 날짜, issue_cluster_article 기사 조회)
 - [x] **전 페이지 loading.tsx 스켈레톤** — 메뉴 클릭 즉시 시각적 피드백. 8개 페이지 animate-pulse 스켈레톤 적용
 - [x] **Topbar 검색창 주석 처리** — 미구현 상태로 UI에서 제거 ([src/components/Topbar.tsx](src/components/Topbar.tsx))
+- [x] **자사 기사 현황 페이지** — `/articles` 페이지: 상단 stat 카드 3개(총 기사 수·섹션 수·기자 수), 7일 트렌드 바차트(600기준 px 계산, 고정 높이), 섹션 분포 뱃지, 2컬럼 equal-height 기사 목록(CSS Grid), 그룹 페이지네이션(5개 단위 ‹ 1 2 3 4 5 ›)
+- [x] **기사 목록 CSR 전환** — [src/app/articles/ArticleListClient.tsx](src/app/articles/ArticleListClient.tsx) Client Component + `/api/articles` route ([src/app/api/articles/route.ts](src/app/api/articles/route.ts)) 추가. 페이지 이동 시 전체 새로고침 없이 기사 목록만 업데이트
+- [x] **기자 이름 수집** — [scripts/lib/naver.py](scripts/lib/naver.py) `parse_author_name()` 5개 selector 우선순위 탐색. [scripts/collect_publications.py](scripts/collect_publications.py) `_backfill_author_names()` — 신규 기사(author_name IS NULL)만 비동기 병렬 수집(Semaphore 8). article 목록 UI에 "기자명 기자" 표시
+- [x] **category null backfill** — `collect_publications.py` 에서 upsert 후 별도 UPDATE 패스 추가. `ignore_duplicates=True` 가 차단하던 기존 기사 카테고리 미채움 문제 해결
+- [x] **댓글 수집 Playwright → httpx 전환** — Naver 댓글 JSONP API 직접 호출. objectId 형식 `news{oid},{aid}` (쉼표, 언더스코어 아님) 수정 — 2일간 0 반환 근본 원인 해결. [scripts/collect_comments.py](scripts/collect_comments.py) 완전 재작성. requirements.txt 및 [cron-comments.yml](.github/workflows/cron-comments.yml) 에서 playwright 제거
 
 ### ⚠️ 환경변수 (라이브 / .env.local 양쪽)
 **Vercel Production env (이미 설정됨)**:
@@ -72,19 +77,35 @@
 
 **로컬 .env.local 만 있는 것** (gitignore): 위 값 + 옵션 1 (Vercel AI Gateway) 주석 블록
 
-### 재개 지점 (2026-05-01 세션 종료)
-- 댓글 페이지 중복·배지 버그 수정, 대시보드 댓글 반응 0 수정, 댓글 cron 매시간 변경 완료.
-- 쿼리 성능 개선 + DB 인덱스 3개 적용 (`0004_perf_indexes`, MCP로 직접 적용).
-- 전 페이지 loading.tsx 스켈레톤 추가 완료.
-- Supabase MCP 인증 완료 (`.mcp.json` http 방식, 세션마다 OAuth 재인증 필요).
+### 재개 지점 (2026-05-01 2차 세션 종료)
+- `/articles` 자사 기사 현황 페이지 완성 — 트렌드 차트(px 기준 600 max), 2컬럼 그리드, 클라이언트 페이지네이션, 그룹 페이지네이션(5개 단위).
+- 기자 이름 수집 + UI 표시, category null backfill 수정 완료.
+- 댓글 수집 Playwright → httpx 전환 완료. objectId 쉼표 형식 수정으로 2일 공백 해소.
+- ⚠ **과거 날짜 category backfill** 미완료: 2026-04-25~29 날짜별로 `python -m scripts.collect_publications --date YYYYMMDD` 수동 실행 필요.
 - ⚠ **미구현 고도화**: 클러스터 re-absorption (같은 이슈 다른 제목 중복 근본 해결) — memory에 기록됨.
 
 ### 다음 작업 로드맵
+- **(즉시) 과거 날짜 category backfill** — `python -m scripts.collect_publications --date 20260425` ~ `20260429` 5일치 수동 실행 (2026-04-29 이전 ~90건 기타 원인).
 - **(미래) 검색 기능** — Topbar 검색창 UI 주석 처리됨 ([src/components/Topbar.tsx](src/components/Topbar.tsx)). 이슈 클러스터 제목/키워드 검색 + 드롭다운 자동완성 또는 `/search` 페이지로 구현 필요.
+- **(미래) 기자 이름 기반 통계** — 기자별 기사 수 / 기자별 이슈 연결 현황. `/articles` 페이지 또는 별도 탭으로 확장.
 - **(미래) 클러스터 re-absorption** — 동일 이슈 다른 제목 중복 클러스터 근본 해결. cluster_articles.py 에서 기존 클러스터 centroid 와 비교해 threshold 이상이면 병합.
 - **(보너스) 셀렉터 견고화** — Naver UI 변경 대비 [scripts/lib/naver.py](scripts/lib/naver.py) 다중 selector 우선순위 확장.
 - **(보너스) GitHub auto-deploy 연결** — Settings → Git 에서 Vercel ↔ GitHub 연결, push 자동 배포.
 - **(미래) 본문 임베딩** — `article.body` 채워지면 클러스터링 입력을 `title + body[:500]` 으로 확장.
+
+### 판단 사항 (댓글 수집 — Naver JSONP API)
+- **objectId 형식**: `news{oid},{aid}` — **쉼표** 구분, 언더스코어 아님. 잘못된 형식이면 API가 오류 없이 count=0 반환 (디버깅 어려움).
+- **API 엔드포인트**: `https://apis.naver.com/commentBox/cbox/web_naver_list_jsonp.json?ticket=news&templateId=default&pool=cbox5&lang=ko&country=KR&objectId=news{oid},{aid}&pageSize=1&sort=NEW&_cv=20140318`
+- **JSONP 파싱**: `re.search(r"\((\{.*\})\)\s*;?\s*$", text, re.DOTALL)` → `result.count.total` (구조: `data.result.count.total`)
+- **Playwright 제거**: GitHub Actions 에서 chromium 설치 실패로 2일 공백 발생 → httpx 직접 호출로 완전 교체. `playwright` 는 requirements.txt 및 cron yml 에서 제거됨.
+- **수집 대상**: [TARGET_MEDIA](scripts/collect_comments.py) `["segye","chosun","joongang","donga","mk"]` 5개 매체, 최근 24h 기사.
+
+### 판단 사항 (자사 기사 현황 페이지 — /articles)
+- **차트 높이 계산**: `height: X%` 는 flex child 의 content 높이(~50px) 기준 상대값 → 항상 낮게 표시됨. 픽셀 직접 계산 필수: `Math.round((count / 600) * 140)` px. 600 = 고정 max 기준값.
+- **Equal-height 컬럼**: CSS `grid grid-cols-2` 로 구성해야 같은 행 좌우 높이 자동 일치. `flex` 2컬럼은 높이 불일치 발생.
+- **Client-side 페이지네이션**: `ArticleListClient.tsx` (`"use client"`) + `/api/articles` route 분리. Server Component `page.tsx` 는 초기 1페이지만 렌더, 이후 클라이언트 fetch로 전환.
+- **그룹 페이지네이션**: 5개 단위 그룹. `currentGroup = Math.ceil(page / GROUP_SIZE)` → `groupStart = (currentGroup-1)*5+1`, `groupEnd = min(currentGroup*5, totalPages)`. ‹ / › 로 그룹 이동.
+- **기자 이름 backfill**: `_backfill_author_names()` 는 `author_name IS NULL` 인 기사만 대상. `upsert(ignore_duplicates=True)` 이후 별도 UPDATE 패스로 category/author_name 채움 (upsert 가 기존 row UPDATE 차단하기 때문).
 
 ### 판단 사항 (데이터 수집 전략)
 - **네이버 셀렉터**: [scripts/lib/naver.py](scripts/lib/naver.py) 의 `_RANKING_LIST_SELECTORS`, `_TITLE_SELECTORS` 는 우선순위 리스트. 셀렉터 추가/패치 시 맨 앞에 새 셀렉터 삽입.

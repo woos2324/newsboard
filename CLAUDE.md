@@ -70,7 +70,7 @@
 - [x] **대시보드 NAVER 배지 제거 + 댓글 기사 title dedup** — `page.tsx` source 배지 제거, `getOurTopComments` title Set dedup으로 중복 방지
 - [x] **Naver 기사 URL 정규화** — [scripts/lib/naver.py](scripts/lib/naver.py) `normalize_naver_article_url()` 추가. ranking → `/mnews/article/` 통일. 기존 중복은 title dedup으로 처리
 - [x] **기자명 수집 로직 제거** — GitHub Actions 데이터센터 IP에서 Naver가 다른 HTML 반환 → 기자명 요소 absent. [scripts/collect_publications.py](scripts/collect_publications.py) `_backfill_author_names()` 제거. NCP 서버(한국 IP) 구성 후 재추가 예정
-- [x] **AI 일간 브리핑 불릿 → 이슈 링크 (B안)** — [api/lib/ai.py](api/lib/ai.py) 프롬프트 변경: bullets를 `{text, cluster_index}` 형태로 출력. [api/routes/report.py](api/routes/report.py) cluster_index → cluster_id/cluster_title 매핑 후 source_metadata 저장. [src/lib/queries.ts](src/lib/queries.ts) `BulletItem` 타입 추가 + `parseBullets()` 함수 (string/dict 하위호환). [src/components/dashboard/AISummaryCard.tsx](src/components/dashboard/AISummaryCard.tsx) per-bullet 아이콘 + `pb-2` 툴팁으로 교체 (cluster_id 있을 때만 아이콘 표시, 클릭 시 `/issue/[id]` 이동)
+- [x] **AI 일간 브리핑 불릿 → 이슈 링크 (B안)** — [api/lib/ai.py](api/lib/ai.py) 프롬프트 변경: bullets를 `{text, cluster_index}` 형태로 출력. [api/routes/report.py](api/routes/report.py) cluster_index → cluster_id/cluster_title 매핑 후 source_metadata 저장. [src/lib/queries.ts](src/lib/queries.ts) `BulletItem` 타입 추가 + `parseBullets()` 함수 (string/dict 하위호환). [src/components/dashboard/AISummaryCard.tsx](src/components/dashboard/AISummaryCard.tsx) per-bullet 아이콘 + `pb-2` 툴팁으로 교체 (cluster_id 있을 때만 아이콘 표시, 클릭 시 `/issue/[id]` 이동). 아이콘은 `inline-flex ml-2.5`로 텍스트 직후 인라인 배치 (flex 끝이 아님). production 배포 완료 + `/api/report/daily` POST로 신규 형식 브리핑 생성 확인 (cluster_id 매핑 정상)
 
 ### ⚠️ 환경변수 (라이브 / .env.local 양쪽)
 **Vercel Production env (이미 설정됨)**:
@@ -81,19 +81,19 @@
 
 **로컬 .env.local 만 있는 것** (gitignore): 위 값 + 옵션 1 (Vercel AI Gateway) 주석 블록
 
-### 재개 지점 (2026-05-01 3차 세션 종료)
-- AI 일간 브리핑 불릿 → 이슈 링크 B안 완전 구현 완료:
+### 재개 지점 (2026-05-01 4차 세션 종료)
+- **AI 일간 브리핑 불릿 → 이슈 링크 B안 완전 구현 + 배포 완료**:
   - `api/lib/ai.py` 프롬프트: bullets = `[{text, cluster_index}]` 형태로 출력
   - `api/routes/report.py`: cluster_index → `{text, cluster_id, cluster_title}` 매핑 후 저장
   - `src/lib/queries.ts`: `BulletItem` 타입 + `parseBullets()` 헬퍼 (string/dict 하위호환)
-  - `AISummaryCard.tsx`: 각 불릿 우측에 FileText 아이콘, 호버 시 이슈 제목 + 화살표, 클릭 시 `/issue/[id]` 이동. `pb-2` 툴팁 gap 패턴.
+  - `AISummaryCard.tsx`: `inline-flex ml-2.5`로 텍스트 직후에 FileText 아이콘, `pb-2` 툴팁 gap 패턴, 클릭 시 `/issue/[id]` 이동
+  - production `/api/report/daily` POST 완료 → cluster_id 5개 모두 정상 매핑 확인 (6112, 6101, 6107, 6105, 6102)
 - 대시보드 NAVER 배지 제거 + 댓글 title dedup 완료
 - URL 정규화 (`normalize_naver_article_url`) 완료
 - 기자명 수집 로직 제거 완료 (GitHub Actions IP 제약)
 - TypeScript 타입 오류 0개 확인
 - ⚠ **과거 날짜 category backfill** 미완료: 2026-04-25~29 날짜별로 `python -m scripts.collect_publications --date YYYYMMDD` 수동 실행 필요.
 - ⚠ **미구현 고도화**: 클러스터 re-absorption (같은 이슈 다른 제목 중복 근본 해결) — memory에 기록됨.
-- ⚠ **새 bullets 형식은 다음 번 `/api/report/daily` POST 호출 시부터 적용** — 기존 DB 행은 string[] 형태이나 `parseBullets()`가 하위호환 처리.
 
 ### 다음 작업 로드맵
 - **(즉시) 과거 날짜 category backfill** — `python -m scripts.collect_publications --date 20260425` ~ `20260429` 5일치 수동 실행 (2026-04-29 이전 ~90건 기타 원인).
@@ -108,7 +108,8 @@
 - **bullets 저장 형식 변경**: 구 형식 `string[]` → 신 형식 `[{text, cluster_id, cluster_title}]`. `parseBullets()` 함수가 두 형식 모두 처리해 하위호환 보장.
 - **cluster_index 매핑**: AI가 `[{text, cluster_index}]` 반환 → `clusters_raw[cluster_index]`에서 `issue_cluster_id`와 `representative_title` 추출 → enriched_bullets 구성. index 범위 초과 시 `cluster_id: null`로 저장 (아이콘 미표시).
 - **툴팁 gap 패턴**: `group-hover:block` 는 마우스가 trigger와 tooltip 사이 공백을 통과하면 닫힘. 해결: tooltip wrapper에 `pb-2` (padding) 적용 — hover 영역을 아래로 확장해 공백 제거. `mb-2` (margin)는 hover 영역 외부이므로 사용 금지.
-- **아이콘 표시 조건**: `cluster_id != null` 인 불릿만 아이콘 표시. `null`인 경우 `w-5` 공간만 확보해 정렬 유지.
+- **아이콘 표시 조건**: `cluster_id != null` 인 불릿만 아이콘 표시. `null`인 경우 아이콘 없이 텍스트만 표시 (공간 확보 불필요 — 인라인 방식이라 레이아웃 영향 없음).
+- **아이콘 위치**: `inline-flex ml-2.5` — 텍스트 span 내부에 인라인으로 배치. flex row 끝(우측 끝)이 아니라 텍스트 바로 오른쪽 10px 위치. `align-middle`로 수직 중앙 정렬. 줄바꿈 발생 시에도 마지막 줄 텍스트 끝에 붙음.
 - **기자명 수집 보류**: GitHub Actions 미국 데이터센터 IP에서 Naver가 SSR 다르게 반환 → `em.media_end_head_journalist_name` 요소 absent. NCP 한국 IP 서버 구성 후 `parse_author_name()` + `_backfill_author_names()` 재추가.
 
 ### 판단 사항 (댓글 수집 — Naver JSONP API)

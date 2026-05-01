@@ -1107,6 +1107,7 @@ export type OurArticleItem = {
   title: string;
   url: string | null;
   category: string | null;
+  author_name: string | null;
   published_at: string | null;
   cluster_id: number | null;
 };
@@ -1163,7 +1164,7 @@ export async function getOurArticlesPage(
   const [allArticlesRes, trendRes, prevRes] = await Promise.all([
     sb
       .from("article")
-      .select("article_id, title, url, category, published_at")
+      .select("article_id, title, url, category, author_name, published_at")
       .eq("media_company_id", mediaId)
       .gte("published_at", date + "T00:00:00+09:00")
       .lt("published_at", nextDateStr + "T00:00:00+09:00")
@@ -1203,6 +1204,7 @@ export async function getOurArticlesPage(
     title: a.title,
     url: a.url,
     category: a.category,
+    author_name: a.author_name ?? null,
     published_at: a.published_at,
     cluster_id: clusterMap.get(a.article_id) ?? null,
   }));
@@ -1250,7 +1252,7 @@ export async function getArticleList(
 
   const { data: allRows } = await sb
     .from("article")
-    .select("article_id, title, url, category, published_at")
+    .select("article_id, title, url, category, author_name, published_at")
     .eq("media_company_id", mediaId)
     .gte("published_at", `${date}T00:00:00+09:00`)
     .lt("published_at", `${nextDateStr}T00:00:00+09:00`)
@@ -1278,6 +1280,7 @@ export async function getArticleList(
       title: a.title,
       url: a.url,
       category: a.category,
+      author_name: a.author_name ?? null,
       published_at: a.published_at,
       cluster_id: clusterMap.get(a.article_id) ?? null,
     })),

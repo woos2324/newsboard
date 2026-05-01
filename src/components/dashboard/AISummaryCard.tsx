@@ -43,37 +43,37 @@ export function AISummaryCard({ updatedAt, title, summary, bullets }: Props) {
                 className="flex items-start gap-2 text-[13px] leading-relaxed text-white/90"
               >
                 <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-white/70" />
-                <span className="flex-1">{b.text}</span>
-                {b.cluster_id != null ? (
-                  <div className="relative group shrink-0 mt-0.5">
-                    <button
-                      type="button"
-                      className="flex h-5 w-5 items-center justify-center rounded bg-white/20 hover:bg-white/40 transition-colors"
-                    >
-                      <FileText className="h-3 w-3" />
-                    </button>
-                    <div className="absolute right-0 bottom-full pb-2 hidden group-hover:block z-20 pointer-events-auto">
-                      <div className="w-60 rounded-lg bg-white shadow-xl border border-gray-100 overflow-hidden">
-                        <div className="px-3 py-2 bg-gray-50 border-b border-gray-100">
-                          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">관련 이슈</p>
-                        </div>
-                        <a
-                          href={`/issue/${b.cluster_id}`}
-                          className="flex items-center gap-2 px-3 py-2.5 hover:bg-blue-50 transition-colors group/link"
-                        >
-                          <span className="text-[12px] text-gray-800 leading-snug group-hover/link:text-blue-700">
-                            {b.cluster_title}
+                <span className="flex-1">
+                  {b.text}
+                  {b.cluster_id != null && (
+                    <span className="relative group inline-flex items-center align-middle ml-2.5">
+                      <button
+                        type="button"
+                        className="flex h-5 w-5 items-center justify-center rounded bg-white/20 hover:bg-white/40 transition-colors"
+                      >
+                        <FileText className="h-3 w-3" />
+                      </button>
+                      <span className="absolute right-0 bottom-full pb-2 hidden group-hover:block z-20 pointer-events-auto">
+                        <span className="w-60 rounded-lg bg-white shadow-xl border border-gray-100 overflow-hidden block">
+                          <span className="px-3 py-2 bg-gray-50 border-b border-gray-100 block">
+                            <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block">관련 이슈</span>
                           </span>
-                          <svg className="h-3 w-3 shrink-0 text-gray-300 group-hover/link:text-blue-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                            <path d="M7 17L17 7M7 7h10v10"/>
-                          </svg>
-                        </a>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="shrink-0 w-5 mt-0.5" />
-                )}
+                          <a
+                            href={`/issue/${b.cluster_id}`}
+                            className="flex items-center gap-2 px-3 py-2.5 hover:bg-blue-50 transition-colors group/link"
+                          >
+                            <span className="text-[12px] text-gray-800 leading-snug group-hover/link:text-blue-700">
+                              {b.cluster_title}
+                            </span>
+                            <svg className="h-3 w-3 shrink-0 text-gray-300 group-hover/link:text-blue-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                              <path d="M7 17L17 7M7 7h10v10"/>
+                            </svg>
+                          </a>
+                        </span>
+                      </span>
+                    </span>
+                  )}
+                </span>
               </li>
             ))}
           </ul>

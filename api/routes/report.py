@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -92,19 +92,23 @@ async def list_reports(summary_type: str = "daily", limit: int = 10) -> list[AIS
     return [_row_to_out(r) for r in rows]
 
 
+_KST = timezone(timedelta(hours=9))
+
+
 @router.post("/report/daily", response_model=AISummaryOut)
 async def generate_daily() -> AISummaryOut:
     sb = get_client()
-    today = date.today().isoformat()
+    today_kst = datetime.now(_KST).date().isoformat()
+    yesterday_utc = (date.today() - timedelta(days=1)).isoformat()
 
-    # 오늘 날짜의 이슈 클러스터 + 관련 기사 수
+    # KST 오늘 날짜 기준, 클러스터는 최근 2일치에서 confidence 상위 10개
     clusters_raw = (
         sb.table("issue_cluster")
         .select(
             "issue_cluster_id, cluster_key, representative_title, summary, keywords, "
             "confidence_score, issue_cluster_article(count)"
         )
-        .eq("cluster_date", today)
+        .gte("cluster_date", yesterday_utc)
         .order("confidence_score", desc=True)
         .limit(10)
         .execute()
@@ -114,7 +118,7 @@ async def generate_daily() -> AISummaryOut:
     if not clusters_raw:
         raise HTTPException(
             status_code=404,
-            detail=f"{today} 날짜의 이슈 클러스터가 없어 요약을 생성할 수 없습니다.",
+            detail=f"최근 이슈 클러스터가 없어 요약을 생성할 수 없습니다.",
         )
 
     clusters = []
@@ -161,7 +165,7 @@ async def generate_daily() -> AISummaryOut:
     saved = _upsert_summary(
         sb,
         summary_type="daily",
-        summary_date=today,
+        summary_date=today_kst,
         title=title,
         content=content,
         bullets=enriched_bullets,

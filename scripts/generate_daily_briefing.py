@@ -12,7 +12,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 if sys.platform == "win32":
@@ -33,7 +33,7 @@ def _upsert_summary(
     summary_date: str,
     title: str,
     content: str,
-    bullets: list[str],
+    bullets: list,
     model_version: str,
     source_metadata: dict[str, Any],
 ) -> dict:
@@ -75,8 +75,12 @@ async def main() -> None:
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
+    _KST = timezone(timedelta(hours=9))
     sb = get_client()
-    target_date = args.date or date.today().isoformat()
+    today_kst = datetime.now(_KST).date().isoformat()
+    target_date = args.date or today_kst
+    yesterday_utc = (date.today() - timedelta(days=1)).isoformat()
+    cluster_from = args.date or yesterday_utc
 
     clusters_raw = (
         sb.table("issue_cluster")
@@ -84,7 +88,7 @@ async def main() -> None:
             "issue_cluster_id, cluster_key, representative_title, summary, "
             "keywords, confidence_score, issue_cluster_article(count)"
         )
-        .eq("cluster_date", target_date)
+        .gte("cluster_date", cluster_from)
         .order("confidence_score", desc=True)
         .limit(10)
         .execute()
@@ -92,10 +96,10 @@ async def main() -> None:
     )
 
     if not clusters_raw:
-        print(f"{target_date} 의 이슈 클러스터가 없어 브리핑을 생성할 수 없습니다.")
+        print(f"최근 이슈 클러스터가 없어 브리핑을 생성할 수 없습니다.")
         return
 
-    print(f"{target_date} 클러스터 {len(clusters_raw)}개 기반으로 브리핑 생성")
+    print(f"KST {target_date} 브리핑 — 클러스터 {len(clusters_raw)}개 기반으로 생성")
 
     clusters: list[dict] = []
     cluster_keys: list[str] = []
@@ -121,13 +125,30 @@ async def main() -> None:
     title = result.get("title") or f"{target_date} 일간 브리핑"
     content = result.get("summary") or ""
     bullets_raw = result.get("bullets") or []
-    bullets = list(bullets_raw) if isinstance(bullets_raw, list) else []
+
+    enriched_bullets: list[dict] = []
+    for b in bullets_raw if isinstance(bullets_raw, list) else []:
+        if isinstance(b, dict):
+            idx = b.get("cluster_index")
+            text = b.get("text", "")
+            if isinstance(idx, int) and 0 <= idx < len(clusters_raw):
+                cr = clusters_raw[idx]
+                enriched_bullets.append({
+                    "text": text,
+                    "cluster_id": cr["issue_cluster_id"],
+                    "cluster_title": cr["representative_title"],
+                })
+            else:
+                enriched_bullets.append({"text": text, "cluster_id": None, "cluster_title": None})
+        elif isinstance(b, str):
+            enriched_bullets.append({"text": b, "cluster_id": None, "cluster_title": None})
 
     print(f"\n생성 결과:")
     print(f"  title  : {title}")
     print(f"  summary: {content}")
-    for b in bullets:
-        print(f"  • {b}")
+    for b in enriched_bullets:
+        cid = b.get("cluster_id")
+        print(f"  • {b['text']}" + (f" [cluster_id={cid}]" if cid else ""))
 
     if args.dry_run:
         print("\n[dry-run] 저장 생략")
@@ -136,10 +157,10 @@ async def main() -> None:
     saved = _upsert_summary(
         sb,
         summary_type="daily",
-        summary_date=target_date,
+        summary_date=target_date,  # KST 기준 날짜
         title=title,
         content=content,
-        bullets=bullets,
+        bullets=enriched_bullets,
         model_version=model_used,
         source_metadata={
             "cluster_keys": cluster_keys,

@@ -22,6 +22,8 @@ if sys.platform == "win32":
     except (AttributeError, OSError):
         pass
 
+import httpx
+
 from scripts.lib.db import get_client
 from scripts.lib.http import fetch_html
 from scripts.lib.naver import (
@@ -154,14 +156,29 @@ async def _backfill_author_names(sb, media_id: int, date_iso: str) -> None:
 
     print(f"    기자 이름 수집 대상: {len(rows)}건")
 
+    _ARTICLE_HEADERS = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+        ),
+        "Referer": "https://news.naver.com/",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "ko-KR,ko;q=0.9",
+    }
+
     sem = asyncio.Semaphore(8)
 
     async def fetch_one(row: dict) -> tuple[int, str | None]:
         async with sem:
             try:
-                html = await fetch_html(row["url"], timeout=10.0, retries=2)
-                return row["article_id"], parse_author_name(html)
-            except Exception:
+                async with httpx.AsyncClient(
+                    headers=_ARTICLE_HEADERS, follow_redirects=True, timeout=10.0
+                ) as client:
+                    resp = await client.get(row["url"])
+                    resp.raise_for_status()
+                    return row["article_id"], parse_author_name(resp.text)
+            except Exception as e:
+                print(f"      [warn] 기자 이름 fetch 실패 {row['url']}: {e}")
                 return row["article_id"], None
 
     results = await asyncio.gather(*[fetch_one(r) for r in rows])

@@ -168,7 +168,10 @@ async def _backfill_author_names(sb, media_id: int, date_iso: str) -> None:
 
     sem = asyncio.Semaphore(8)
 
-    async def fetch_one(row: dict) -> tuple[int, str | None]:
+    _debug_done = False
+
+    async def fetch_one(row: dict) -> tuple[int, str | None, str | None]:
+        nonlocal _debug_done
         async with sem:
             try:
                 async with httpx.AsyncClient(
@@ -176,18 +179,31 @@ async def _backfill_author_names(sb, media_id: int, date_iso: str) -> None:
                 ) as client:
                     resp = await client.get(row["url"])
                     resp.raise_for_status()
-                    return row["article_id"], parse_author_name(resp.text)
+                    name = parse_author_name(resp.text)
+                    sample = None
+                    if name is None and not _debug_done:
+                        _debug_done = True
+                        sample = resp.text[:300].replace("\n", " ")
+                    return row["article_id"], name, sample
             except Exception as e:
                 print(f"      [warn] 기자 이름 fetch 실패 {row['url']}: {e}")
-                return row["article_id"], None
+                return row["article_id"], None, None
 
     results = await asyncio.gather(*[fetch_one(r) for r in rows])
 
     updated = 0
-    for article_id, name in results:
+    none_count = 0
+    for article_id, name, sample in results:
         if name:
             sb.table("article").update({"author_name": name}).eq("article_id", article_id).execute()
             updated += 1
+        else:
+            none_count += 1
+            if sample is not None:
+                print(f"      [debug] HTML 샘플: {sample}")
+
+    if none_count > 0 and updated == 0:
+        print(f"      [debug] author_name 미추출 {none_count}건")
 
     print(f"    기자 이름 업데이트: {updated}건")
 

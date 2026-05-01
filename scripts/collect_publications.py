@@ -183,7 +183,12 @@ async def _backfill_author_names(sb, media_id: int, date_iso: str) -> None:
                     sample = None
                     if name is None and not _debug_done:
                         _debug_done = True
-                        sample = resp.text[:300].replace("\n", " ")
+                        needle = "journalist_name"
+                        idx = resp.text.find(needle)
+                        if idx >= 0:
+                            sample = f"[found at {idx}] " + resp.text[max(0, idx-50):idx+200].replace("\n", " ")
+                        else:
+                            sample = "[journalist_name 없음] " + resp.text[:200].replace("\n", " ")
                     return row["article_id"], name, sample
             except Exception as e:
                 print(f"      [warn] 기자 이름 fetch 실패 {row['url']}: {e}")

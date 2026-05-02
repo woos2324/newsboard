@@ -1,0 +1,33 @@
+name: Cleanup Old Data
+
+on:
+  schedule:
+    # 매일 UTC 01:00 (KST 10:00) — 트래픽 낮은 시간대
+    - cron: "0 1 * * *"
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "보존 기간 (일, 기본 7)"
+        required: false
+        default: "7"
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_LEGACY_ANON_KEY: ${{ secrets.SUPABASE_LEGACY_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install deps
+        run: pip install -r requirements.txt
+      - name: Cleanup old data
+        run: |
+          DAYS="${{ github.event.inputs.days || '7' }}"
+          python -m scripts.cleanup_old_data --days "$DAYS"

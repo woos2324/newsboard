@@ -596,7 +596,11 @@ export async function getSectionRankings(
       );
 
       const sectionMap = new Map<string, SectionArticle[]>();
+      const seen = new Set<string>();
       for (const row of rows) {
+        const key = `${row.section_name}-${row.rank}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
         if (!sectionMap.has(row.section_name)) sectionMap.set(row.section_name, []);
         sectionMap.get(row.section_name)!.push({
           rank: row.rank,

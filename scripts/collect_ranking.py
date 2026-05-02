@@ -96,7 +96,7 @@ def _persist(sb, media: dict, items: list[RankingItem], now_iso: str) -> int:
 async def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--media", nargs="*", help="normalized_name 필터")
-    parser.add_argument("--limit", type=int, default=10, help="매체별 상위 N건")
+    parser.add_argument("--limit", type=int, default=20, help="매체별 상위 N건")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 

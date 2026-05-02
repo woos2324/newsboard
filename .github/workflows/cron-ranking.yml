@@ -13,7 +13,7 @@ on:
       limit:
         description: "매체별 상위 N건"
         required: false
-        default: "5"
+        default: "20"
 
 jobs:
   collect:
@@ -34,7 +34,7 @@ jobs:
       - name: Collect ranking
         run: |
           MEDIA="${{ github.event.inputs.media }}"
-          LIMIT="${{ github.event.inputs.limit || '5' }}"
+          LIMIT="${{ github.event.inputs.limit || '20' }}"
           if [ -n "$MEDIA" ]; then
             python -m scripts.collect_ranking --limit "$LIMIT" --media $MEDIA
           else

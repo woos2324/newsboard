@@ -75,6 +75,7 @@
 - [x] **generate_daily_briefing.py 이슈 링크 매핑 추가** — GitHub Actions cron용 스크립트에 cluster_index → cluster_id/cluster_title enriched_bullets 로직 추가. FastAPI endpoint와 동일 형식으로 저장.
 - [x] **AI 리포트 날짜 KST 기준 수정** — [api/routes/report.py](api/routes/report.py) + [scripts/generate_daily_briefing.py](scripts/generate_daily_briefing.py): `summary_date`를 KST 오늘 날짜로 저장. 클러스터 조회는 최근 2일치(`gte yesterday_utc`)로 확장해 UTC/KST 날짜 불일치 방지.
 - [x] **GenerateReportButton 성공 상태** — [src/components/GenerateReportButton.tsx](src/components/GenerateReportButton.tsx): 생성 완료 시 "생성 완료!" + CheckCircle 아이콘 3초 표시.
+- [x] **섹션별 랭킹 중복 표시 수정** — [src/lib/queries.ts](src/lib/queries.ts) section_name+rank 기준 클라이언트 dedup 추가. [supabase/migrations/0005_section_ranking_unique.sql](supabase/migrations/0005_section_ranking_unique.sql) 작성 완료 (DB 적용은 새 세션에서 MCP로 실행 필요).
 
 ### ⚠️ 환경변수 (라이브 / .env.local 양쪽)
 **Vercel Production env (이미 설정됨)**:
@@ -90,8 +91,10 @@
 - **`scripts/generate_daily_briefing.py` 업데이트** — cluster_index → cluster_id/cluster_title 매핑 로직 추가 (FastAPI endpoint와 동일 로직). GitHub Actions cron도 이슈 링크 포함 bullets 저장.
 - **AI 리포트 날짜 KST 기준으로 수정** — `api/routes/report.py`: `date.today()` → KST 오늘(`datetime.now(KST).date()`), 클러스터는 최근 2일치(`gte(yesterday_utc)`) 조회. `summary_date`를 KST로 저장. `generate_daily_briefing.py` 동일 정책 적용.
 - **GenerateReportButton 성공 상태 추가** — 생성 완료 시 "생성 완료!" + CheckCircle 아이콘 3초 표시. 에러 메시지 단순화.
-- production 배포 완료 (commit `0b825a9`)
+- **섹션별 랭킹 중복 표시 수정** — `queries.ts` section_name+rank 기준 dedup으로 즉시 해결. `supabase/migrations/0005_section_ranking_unique.sql` 작성 완료.
+- production 배포 완료 (commit `04f322f`)
 - ⚠ **과거 날짜 category backfill** 미완료: 2026-04-25~29 날짜별로 `python -m scripts.collect_publications --date YYYYMMDD` 수동 실행 필요.
+- ⚠ **0005_section_ranking_unique.sql migration 미적용** — 새 세션에서 Supabase MCP로 적용 필요. `apply_migration("0005_section_ranking_unique", <SQL>)` 실행하면 기존 중복 row 제거 + UNIQUE 제약 추가.
 ### 다음 작업 로드맵
 - **(즉시) 과거 날짜 category backfill** — `python -m scripts.collect_publications --date 20260425` ~ `20260429` 5일치 수동 실행 (2026-04-29 이전 ~90건 기타 원인).
 - **(미래) 미보도 탐지 + 클러스터 품질 개선** — 설계 완료, 단계적 구현 예정. 상세 내용은 아래 "판단 사항 (미보도·클러스터 개선 설계)" 참조.

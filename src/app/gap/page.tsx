@@ -22,7 +22,12 @@ const verdictConfig: Record<string, { cls: string; label: string }> = {
 
 export default async function GapPage() {
   const allAlerts = await getMissedAlerts("all", 50);
-  const alerts = allAlerts.filter((a) => a.status === "open" || a.status === "reviewing");
+  const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+  const alerts = allAlerts.filter((a) => {
+    if (a.status === "reviewing") return true;
+    if (a.status === "open") return a.detected_at >= twoDaysAgo;
+    return false;
+  });
 
   return (
     <PageShell

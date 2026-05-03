@@ -4,6 +4,7 @@
   - ranking_news_snapshot (→ ranking_news_item CASCADE)
   - section_ranking_snapshot
   - comment_metric
+  - missed_issue_alert (reviewing 제외, open/resolved/ignored)
 
 사용:
   python -m scripts.cleanup_old_data
@@ -69,6 +70,16 @@ def main() -> None:
         .execute()
     )
     print(f"comment_metric 삭제: {len(res.data)}건")
+
+    # 4. missed_issue_alert (reviewing 제외)
+    res = (
+        sb.table("missed_issue_alert")
+        .delete()
+        .lt("detected_at", cutoff)
+        .in_("alert_status", ["open", "resolved", "ignored"])
+        .execute()
+    )
+    print(f"missed_issue_alert 삭제: {len(res.data)}건 (reviewing 제외)")
 
     print("정리 완료")
 

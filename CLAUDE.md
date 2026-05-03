@@ -6,7 +6,7 @@
 
 ---
 
-## 현재 진행 상태 (2026-05-02)
+## 현재 진행 상태 (2026-05-03)
 
 새 세션 시작 시 가장 먼저 확인할 진행 현황 체크포인트.
 
@@ -32,16 +32,17 @@
 | [cron-subscribers.yml](.github/workflows/cron-subscribers.yml) | UTC 23:00 (KST 08:00) | followers.json API → subscriber_snapshot |
 | [cron-comments.yml](.github/workflows/cron-comments.yml) | 매시 15분 (UTC, KST :24) | 자사·경쟁사 기사 댓글 수 → comment_metric |
 | [cron-daily-briefing.yml](.github/workflows/cron-daily-briefing.yml) | UTC 15:00 (KST 00:00) | 오늘 클러스터 → AI 일간 브리핑 → ai_summary |
-| [cron-cleanup.yml](.github/workflows/cron-cleanup.yml) | UTC 15:00 (KST 00:00) | 7일 이전 스냅샷 데이터 삭제 (ranking_news_snapshot CASCADE, section_ranking_snapshot, comment_metric) |
+| [cron-cleanup.yml](.github/workflows/cron-cleanup.yml) | UTC 15:00 (KST 00:00) | 7일 이전 스냅샷 데이터 삭제 (ranking_news_snapshot CASCADE, section_ranking_snapshot, comment_metric, missed_issue_alert) |
 
 **cron chain**: `ranking → cluster → gap` (매시 정각 자동 연쇄)
 
-### DB 스키마 (마이그레이션 5건)
+### DB 스키마 (마이그레이션 6건)
 - `0001_init` — 11개 코어 테이블 (media_company, article, issue_cluster 등)
 - `0002_daily_publication_count` — 자사 일일 네이버 발행 수 카운트 테이블
 - `0003_section_ranking` — 섹션별 랭킹 스냅샷 테이블 (`section_ranking_snapshot`)
 - `0004_perf_indexes` — 성능 인덱스 3개 (comment_metric.comment_count DESC, subscriber_snapshot.snapshot_date DESC, issue_cluster_article.article_id)
 - `0005_section_ranking_unique` — section_ranking_snapshot 중복 row 제거 + UNIQUE 제약 `(media_company_id, section_name, rank, ranking_date)` 추가. DB 적용 완료 (2026-05-02 세션).
+- `0006_gap_verdict` — missed_issue_alert에 `verdict` TEXT + `similar_article_id` BIGINT FK 컬럼 추가. DB 적용 완료 (2026-05-03 세션).
 - 매체 51개 (시드 9 + 사용자 추가 42, naver_media_id 보유 47개)
 
 ### 완료된 작업
@@ -79,10 +80,11 @@
 - [x] **GenerateReportButton 성공 상태** — [src/components/GenerateReportButton.tsx](src/components/GenerateReportButton.tsx): 생성 완료 시 "생성 완료!" + CheckCircle 아이콘 3초 표시.
 - [x] **섹션별 랭킹 중복 표시 수정** — [src/lib/queries.ts](src/lib/queries.ts) section_name+rank 기준 클라이언트 dedup 추가. [supabase/migrations/0005_section_ranking_unique.sql](supabase/migrations/0005_section_ranking_unique.sql) DB 적용 완료 (MCP `apply_migration`, 2026-05-02 세션).
 - [x] **랭킹뉴스 수집 건수 20건으로 확장** — [.github/workflows/cron-ranking.yml](.github/workflows/cron-ranking.yml) default `5` → `20`. [scripts/collect_ranking.py](scripts/collect_ranking.py) `--limit` default `20`. 매체별 최대 20건 수집.
-- [x] **7일 데이터 보존 정책 + cleanup cron** — [scripts/cleanup_old_data.py](scripts/cleanup_old_data.py) 신규 작성 (ranking_news_snapshot CASCADE, section_ranking_snapshot, comment_metric 삭제). [.github/workflows/cron-cleanup.yml](.github/workflows/cron-cleanup.yml) UTC 15:00 (KST 00:00) 일 1회 실행. `--days` 인자로 보존 기간 조정 가능. subscriber_snapshot / daily_publication_count 는 보존 기간 미결정으로 제외.
+- [x] **7일 데이터 보존 정책 + cleanup cron** — [scripts/cleanup_old_data.py](scripts/cleanup_old_data.py) 신규 작성 (ranking_news_snapshot CASCADE, section_ranking_snapshot, comment_metric, missed_issue_alert 삭제). [.github/workflows/cron-cleanup.yml](.github/workflows/cron-cleanup.yml) UTC 15:00 (KST 00:00) 일 1회 실행. `--days` 인자로 보존 기간 조정 가능. subscriber_snapshot / daily_publication_count 는 보존 기간 미결정으로 제외.
 - [x] **모바일 반응형 사이드바 드로어** — [src/components/AppShell.tsx](src/components/AppShell.tsx) 신규. 모바일에서 햄버거 버튼 → 오버레이 슬라이드 사이드바. 데스크탑 레이아웃 동일 유지. [PageShell.tsx](src/components/PageShell.tsx) / 루트 page.tsx / loading.tsx 적용.
 - [x] **이슈 상세 관련 기사 overflow 수정** — [src/app/issue/\[cluster_id\]/page.tsx](src/app/issue/[cluster_id]/page.tsx) 기사 링크 `inline-flex` → `flex w-full`. 제목 truncate 정상화 + 유사도 배지 겹침 해결.
 - [x] **미보도 탐지 개선 (1단계+2단계)** — [scripts/detect_gap.py](scripts/detect_gap.py) 자사 최근 기사와 제목 바이그램+키워드 2차 검증 추가. verdict 분류(미보도/확인필요/유사보도있음) + priority 조정. [supabase/migrations/0006_gap_verdict.sql](supabase/migrations/0006_gap_verdict.sql) `verdict`, `similar_article_id` 컬럼 추가 (DB 적용 완료). [src/app/gap/page.tsx](src/app/gap/page.tsx) verdict 배지 + 경쟁사 기사 클릭 링크 + 자사 유사 기사 링크.
+- [x] **미보도 목록 보존 정책** — DB: reviewing 제외 7일 이전 missed_issue_alert 삭제 (cleanup_old_data.py 추가). UI: open 항목은 최근 2일치만 표시, reviewing은 전체 표시, detected_at DESC 정렬.
 
 ### ⚠️ 환경변수 (라이브 / .env.local 양쪽)
 **Vercel Production env (이미 설정됨)**:
@@ -94,12 +96,10 @@
 **로컬 .env.local 만 있는 것** (gitignore): 위 값 + 옵션 1 (Vercel AI Gateway) 주석 블록
 
 ### 재개 지점 (2026-05-03 7차 세션 종료)
-- **섹션별 랭킹 중복 DB migration 적용** — `0005_section_ranking_unique` Supabase MCP로 적용 완료.
-- **랭킹뉴스 수집 20건으로 확장** — cron-ranking.yml + collect_ranking.py default 20건.
-- **7일 cleanup cron 추가** — scripts/cleanup_old_data.py + cron-cleanup.yml (KST 00:00). 3개 테이블 대상 (subscriber_snapshot / daily_publication_count 제외).
-- **NCP 이전 설계 + 인증 설계 메모리 저장** — memory/project_ncp_migration.md 에 이전 공수·순서 + 인증(PostgreSQL+JWT, role 3종) 설계 기록.
-- **모바일 반응형 사이드바 + 이슈 상세 overflow 수정** — 배포 완료.
-- **미보도 탐지 개선** — verdict 분류 + 경쟁사/유사 기사 링크. migration 0006 적용 완료. 다음 cron부터 자동 적용.
+- **모바일 반응형 사이드바** — AppShell.tsx 신규 + Sidebar/Topbar/PageShell 수정. production 배포 완료.
+- **이슈 상세 기사 overflow 수정** — `flex w-full` 적용. production 배포 완료.
+- **미보도 탐지 개선** — detect_gap.py 2차 검증(바이그램+키워드), verdict/similar_article_id, 0006 마이그레이션 적용, gap/page.tsx UI 개선.
+- **미보도 보존 정책** — DB 7일 삭제(cleanup_old_data.py), UI 최근 2일 open + 전체 reviewing, DESC 정렬.
 - ⚠ **과거 날짜 category backfill** 미완료: 2026-04-25~29 날짜별로 `python -m scripts.collect_publications --date YYYYMMDD` 수동 실행 필요.
 - ⚠ **subscriber_snapshot / daily_publication_count 보존 기간 미결정** — 나중에 결정 후 cron-cleanup.yml에 삭제 로직 추가.
 - ⚠ **미보도 탐지 3단계** (임베딩 기반 2차 검증) — article.body 수집 + NCP 이전 후 작업 예정.
@@ -114,11 +114,27 @@
 - **(미래) 본문 임베딩** — `article.body` 채워지면 클러스터링 입력을 `title + body[:500]` 으로 확장.
 
 ### 판단 사항 (데이터 보존 정책 — 7일 cleanup)
-- **대상**: `ranking_news_snapshot` (→ `ranking_news_item` CASCADE), `section_ranking_snapshot`, `comment_metric` 3테이블. 4개 테이블 효과.
+- **대상**: `ranking_news_snapshot` (→ `ranking_news_item` CASCADE), `section_ranking_snapshot`, `comment_metric`, `missed_issue_alert` 4테이블. ranking_news_item 포함 5개 테이블 효과.
+- **missed_issue_alert 삭제 제외**: `reviewing` 상태는 삭제 제외. 검토 중인 항목을 자동 삭제하면 안 됨.
+- **미보도 UI 표시 정책**: DB 삭제(7일)와 UI 표시(2일)를 분리. `open` 항목은 최근 2일치만 표시(검토 필요성 낮아짐), `reviewing` 항목은 전체 표시(검토 완료 전까지 유지). `detected_at DESC` 정렬.
 - **제외**: `subscriber_snapshot`, `daily_publication_count` — 보존 기간 미결정. 날짜별 1건씩 쌓이므로 용량 부담 적음. 장기 추이 분석용으로 보존 필요할 수 있음.
 - **실행 시점**: UTC 15:00 = KST 00:00. cleanup cron과 cron-daily-briefing이 동시 실행되지만 서로 독립적이라 충돌 없음.
 - **보존 기간 변경**: `workflow_dispatch` 실행 시 `days` 인자로 조정 가능. 기본값 7.
 - **ranking_news_item 별도 삭제 불필요**: `ranking_news_snapshot` 삭제 시 CASCADE로 자동 삭제됨.
+
+### 판단 사항 (모바일 반응형 사이드바)
+- **구조**: `AppShell.tsx` Client Component가 `open` 상태 관리. `Sidebar`·`Topbar`를 props로 연결. 모든 페이지의 공통 래퍼.
+- **모바일 (< lg)**: Sidebar `fixed inset-y-0 left-0 z-40` + `translate-x-0` / `-translate-x-full` 토글. 검정 반투명 backdrop (`fixed inset-0 z-30 bg-black/50`) 클릭 시 닫힘.
+- **데스크탑 (lg+)**: `lg:sticky lg:top-0 lg:h-screen lg:translate-x-0` — 기존 레이아웃 그대로. translate 강제 적용 (`!important` 없이 Tailwind lg: 우선순위로 처리).
+- **PageShell 활용**: 공통 PageShell.tsx가 AppShell을 감싸므로, 모든 서브 페이지는 자동 적용. 루트 page.tsx + loading.tsx에도 별도 적용.
+
+### 판단 사항 (미보도 탐지 — verdict 2차 검증)
+- **2차 검증 시그널**: 제목 바이그램 Jaccard 유사도 + 클러스터 키워드 vs 자사 기사 제목 겹침. NLP 라이브러리 없이 순수 Python.
+- **verdict 기준**: `유사보도있음` — bigram ≥ 0.4 OR kw_overlap ≥ 2 / `확인필요` — bigram ≥ 0.15 OR kw_overlap ≥ 1 / `미보도` — else.
+- **priority 조정**: `유사보도있음` → 15 (낮음), `확인필요` → 기본×0.6, `미보도` → 기본 (경쟁사 25점씩 max 100).
+- **similar_article_id**: 2차 검증 시 가장 유사한 자사 기사 article_id 저장 → gap 페이지에서 클릭 링크로 표시.
+- **경쟁사 링크**: issue_cluster_article → article → url로 매체별 첫 번째 기사 URL 제공. 자사(target_media_company_id) 제외 후 표시.
+- **세계일보 기사 삭제 여부**: cleanup에서 article 테이블 삭제 없음. ranking/snapshot 데이터만 삭제. 기사 원문은 무기한 보존.
 
 ### 판단 사항 (AI 리포트 날짜 기준 — KST vs UTC)
 - **문제**: FastAPI `date.today()`는 UTC 기준. KST 낮에 버튼 누르면 UTC는 전날이라 기존 브리핑을 update만 하고 KST "오늘" 날짜 리포트가 생기지 않음.

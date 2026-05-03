@@ -631,6 +631,7 @@ export async function getMissedAlerts(
   limit = 20
 ): Promise<MissedAlertView[]> {
   const sb = getSupabase();
+  const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
 
   let query = sb
     .from("missed_issue_alert")
@@ -639,10 +640,15 @@ export async function getMissedAlerts(
       "similar_article:similar_article_id(article_id, title, url), " +
       "issue_cluster:issue_cluster_id(issue_cluster_id, representative_title)"
     )
-    .order("priority_score", { ascending: false, nullsFirst: false })
+    .order("detected_at", { ascending: false })
     .limit(limit);
 
   if (status !== "all") query = query.eq("alert_status", status);
+  // open 은 최근 2일치만, reviewing 은 기간 제한 없이 표시
+  if (status === "open") query = query.gte("detected_at", twoDaysAgo);
+  if (status === "all") {
+    // all 조회 시: open은 2일치 + reviewing은 전체 → OR 조건 불가하므로 클라이언트에서 필터
+  }
 
   const { data, error } = await query;
   if (error) throw error;

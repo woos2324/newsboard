@@ -5,8 +5,7 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
-import { Sidebar } from "@/components/Sidebar";
-import { Topbar } from "@/components/Topbar";
+import { AppShell } from "@/components/AppShell";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { IssueCard } from "@/components/dashboard/IssueCard";
 import { RankingList } from "@/components/dashboard/RankingList";
@@ -117,11 +116,8 @@ export default async function DashboardPage() {
   }));
 
   return (
-    <div className="flex min-h-screen">
-      <Sidebar />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar />
-        <main className="flex-1 px-6 py-6">
+    <AppShell>
+      <main className="flex-1 px-6 py-6">
           <div className="mb-6">
             <h1 className="text-xl font-semibold tracking-tight">
               Overview Dashboard
@@ -237,8 +233,7 @@ export default async function DashboardPage() {
               </ul>
             </div>
           </section>
-        </main>
-      </div>
-    </div>
+      </main>
+    </AppShell>
   );
 }

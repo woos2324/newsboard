@@ -1,5 +1,4 @@
-import { Sidebar } from "@/components/Sidebar";
-import { Topbar } from "@/components/Topbar";
+import { AppShell } from "@/components/AppShell";
 
 function Skeleton({ className }: { className?: string }) {
   return <div className={`animate-pulse rounded bg-gray-200 ${className ?? ""}`} />;
@@ -7,11 +6,8 @@ function Skeleton({ className }: { className?: string }) {
 
 export default function DashboardLoading() {
   return (
-    <div className="flex min-h-screen">
-      <Sidebar />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar />
-        <main className="flex-1 px-6 py-6">
+    <AppShell>
+      <main className="flex-1 px-6 py-6">
           {/* StatCards */}
           <div className="mb-6 grid grid-cols-2 gap-4 xl:grid-cols-4">
             {[...Array(4)].map((_, i) => (
@@ -61,8 +57,7 @@ export default function DashboardLoading() {
               ))}
             </div>
           </div>
-        </main>
-      </div>
-    </div>
+      </main>
+    </AppShell>
   );
 }

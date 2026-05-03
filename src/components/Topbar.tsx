@@ -1,8 +1,8 @@
 "use client";
 
-import { Bell, Calendar } from "lucide-react";
+import { Bell, Calendar, Menu } from "lucide-react";
 
-export function Topbar() {
+export function Topbar({ onMenuOpen }: { onMenuOpen?: () => void }) {
   const today = new Date().toLocaleDateString("ko-KR", {
     year: "numeric",
     month: "long",
@@ -12,6 +12,14 @@ export function Topbar() {
 
   return (
     <header className="sticky top-0 z-10 flex h-14 items-center gap-4 border-b border-border bg-white/80 px-6 backdrop-blur">
+      <button
+        type="button"
+        onClick={onMenuOpen}
+        aria-label="메뉴 열기"
+        className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-white hover:bg-background lg:hidden"
+      >
+        <Menu className="h-4 w-4" />
+      </button>
       <div className="flex items-center gap-2 text-sm text-muted">
         <Calendar className="h-4 w-4" />
         <span>{today}</span>

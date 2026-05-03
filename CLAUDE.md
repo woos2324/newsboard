@@ -6,7 +6,7 @@
 
 ---
 
-## 현재 진행 상태 (2026-05-01)
+## 현재 진행 상태 (2026-05-02)
 
 새 세션 시작 시 가장 먼저 확인할 진행 현황 체크포인트.
 
@@ -24,7 +24,7 @@
 ### 자동화 파이프라인 (GitHub Actions, 8종)
 | 워크플로 | 트리거 | 역할 |
 |---|---|---|
-| [cron-ranking.yml](.github/workflows/cron-ranking.yml) | 매시 7분 (UTC, KST :16) | 50개 매체 × 5건 인기 랭킹 → article + snapshot |
+| [cron-ranking.yml](.github/workflows/cron-ranking.yml) | 매시 7분 (UTC, KST :16) | 50개 매체 × **20건** 인기 랭킹 → article + snapshot |
 | [cron-cluster.yml](.github/workflows/cron-cluster.yml) | **ranking 성공 직후 (workflow_run)** + UTC :30 6시간 fallback | 미할당 article 임베딩 클러스터링 → issue_cluster (threshold=0.85) |
 | [cron-gap.yml](.github/workflows/cron-gap.yml) | **cluster 성공 직후 (workflow_run)** + UTC 01/07/13/19시 fallback | 클러스터 기반 미보도 탐지 → missed_issue_alert |
 | [cron-publications.yml](.github/workflows/cron-publications.yml) | 매시 17분·47분 (UTC, KST :26·:56) | 자사 전체 기사 제목·URL → article 적재 + daily_publication_count |
@@ -32,14 +32,16 @@
 | [cron-subscribers.yml](.github/workflows/cron-subscribers.yml) | UTC 23:00 (KST 08:00) | followers.json API → subscriber_snapshot |
 | [cron-comments.yml](.github/workflows/cron-comments.yml) | 매시 15분 (UTC, KST :24) | 자사·경쟁사 기사 댓글 수 → comment_metric |
 | [cron-daily-briefing.yml](.github/workflows/cron-daily-briefing.yml) | UTC 15:00 (KST 00:00) | 오늘 클러스터 → AI 일간 브리핑 → ai_summary |
+| [cron-cleanup.yml](.github/workflows/cron-cleanup.yml) | UTC 15:00 (KST 00:00) | 7일 이전 스냅샷 데이터 삭제 (ranking_news_snapshot CASCADE, section_ranking_snapshot, comment_metric) |
 
 **cron chain**: `ranking → cluster → gap` (매시 정각 자동 연쇄)
 
-### DB 스키마 (마이그레이션 4건)
+### DB 스키마 (마이그레이션 5건)
 - `0001_init` — 11개 코어 테이블 (media_company, article, issue_cluster 등)
 - `0002_daily_publication_count` — 자사 일일 네이버 발행 수 카운트 테이블
 - `0003_section_ranking` — 섹션별 랭킹 스냅샷 테이블 (`section_ranking_snapshot`)
 - `0004_perf_indexes` — 성능 인덱스 3개 (comment_metric.comment_count DESC, subscriber_snapshot.snapshot_date DESC, issue_cluster_article.article_id)
+- `0005_section_ranking_unique` — section_ranking_snapshot 중복 row 제거 + UNIQUE 제약 `(media_company_id, section_name, rank, ranking_date)` 추가. DB 적용 완료 (2026-05-02 세션).
 - 매체 51개 (시드 9 + 사용자 추가 42, naver_media_id 보유 47개)
 
 ### 완료된 작업
@@ -75,7 +77,9 @@
 - [x] **generate_daily_briefing.py 이슈 링크 매핑 추가** — GitHub Actions cron용 스크립트에 cluster_index → cluster_id/cluster_title enriched_bullets 로직 추가. FastAPI endpoint와 동일 형식으로 저장.
 - [x] **AI 리포트 날짜 KST 기준 수정** — [api/routes/report.py](api/routes/report.py) + [scripts/generate_daily_briefing.py](scripts/generate_daily_briefing.py): `summary_date`를 KST 오늘 날짜로 저장. 클러스터 조회는 최근 2일치(`gte yesterday_utc`)로 확장해 UTC/KST 날짜 불일치 방지.
 - [x] **GenerateReportButton 성공 상태** — [src/components/GenerateReportButton.tsx](src/components/GenerateReportButton.tsx): 생성 완료 시 "생성 완료!" + CheckCircle 아이콘 3초 표시.
-- [x] **섹션별 랭킹 중복 표시 수정** — [src/lib/queries.ts](src/lib/queries.ts) section_name+rank 기준 클라이언트 dedup 추가. [supabase/migrations/0005_section_ranking_unique.sql](supabase/migrations/0005_section_ranking_unique.sql) 작성 완료 (DB 적용은 새 세션에서 MCP로 실행 필요).
+- [x] **섹션별 랭킹 중복 표시 수정** — [src/lib/queries.ts](src/lib/queries.ts) section_name+rank 기준 클라이언트 dedup 추가. [supabase/migrations/0005_section_ranking_unique.sql](supabase/migrations/0005_section_ranking_unique.sql) DB 적용 완료 (MCP `apply_migration`, 2026-05-02 세션).
+- [x] **랭킹뉴스 수집 건수 20건으로 확장** — [.github/workflows/cron-ranking.yml](.github/workflows/cron-ranking.yml) default `5` → `20`. [scripts/collect_ranking.py](scripts/collect_ranking.py) `--limit` default `20`. 매체별 최대 20건 수집.
+- [x] **7일 데이터 보존 정책 + cleanup cron** — [scripts/cleanup_old_data.py](scripts/cleanup_old_data.py) 신규 작성 (ranking_news_snapshot CASCADE, section_ranking_snapshot, comment_metric 삭제). [.github/workflows/cron-cleanup.yml](.github/workflows/cron-cleanup.yml) UTC 15:00 (KST 00:00) 일 1회 실행. `--days` 인자로 보존 기간 조정 가능. subscriber_snapshot / daily_publication_count 는 보존 기간 미결정으로 제외.
 
 ### ⚠️ 환경변수 (라이브 / .env.local 양쪽)
 **Vercel Production env (이미 설정됨)**:
@@ -86,15 +90,13 @@
 
 **로컬 .env.local 만 있는 것** (gitignore): 위 값 + 옵션 1 (Vercel AI Gateway) 주석 블록
 
-### 재개 지점 (2026-05-02 5차 세션 종료)
-- **AI 일간 브리핑 불릿 → 이슈 링크 B안 완전 구현 + 배포 완료** (이전 세션)
-- **`scripts/generate_daily_briefing.py` 업데이트** — cluster_index → cluster_id/cluster_title 매핑 로직 추가 (FastAPI endpoint와 동일 로직). GitHub Actions cron도 이슈 링크 포함 bullets 저장.
-- **AI 리포트 날짜 KST 기준으로 수정** — `api/routes/report.py`: `date.today()` → KST 오늘(`datetime.now(KST).date()`), 클러스터는 최근 2일치(`gte(yesterday_utc)`) 조회. `summary_date`를 KST로 저장. `generate_daily_briefing.py` 동일 정책 적용.
-- **GenerateReportButton 성공 상태 추가** — 생성 완료 시 "생성 완료!" + CheckCircle 아이콘 3초 표시. 에러 메시지 단순화.
-- **섹션별 랭킹 중복 표시 수정** — `queries.ts` section_name+rank 기준 dedup으로 즉시 해결. `supabase/migrations/0005_section_ranking_unique.sql` 작성 완료.
-- production 배포 완료 (commit `04f322f`)
+### 재개 지점 (2026-05-02 6차 세션 종료)
+- **섹션별 랭킹 중복 DB migration 적용** — `0005_section_ranking_unique` Supabase MCP로 적용 완료.
+- **랭킹뉴스 수집 20건으로 확장** — cron-ranking.yml + collect_ranking.py default 20건.
+- **7일 cleanup cron 추가** — scripts/cleanup_old_data.py + cron-cleanup.yml (KST 00:00). 3개 테이블 대상 (subscriber_snapshot / daily_publication_count 제외).
+- **NCP 이전 설계 + 인증 설계 메모리 저장** — memory/project_ncp_migration.md 에 이전 공수·순서 + 인증(PostgreSQL+JWT, role 3종) 설계 기록.
 - ⚠ **과거 날짜 category backfill** 미완료: 2026-04-25~29 날짜별로 `python -m scripts.collect_publications --date YYYYMMDD` 수동 실행 필요.
-- ⚠ **0005_section_ranking_unique.sql migration 미적용** — 새 세션에서 Supabase MCP로 적용 필요. `apply_migration("0005_section_ranking_unique", <SQL>)` 실행하면 기존 중복 row 제거 + UNIQUE 제약 추가.
+- ⚠ **subscriber_snapshot / daily_publication_count 보존 기간 미결정** — 나중에 결정 후 cron-cleanup.yml에 삭제 로직 추가.
 ### 다음 작업 로드맵
 - **(즉시) 과거 날짜 category backfill** — `python -m scripts.collect_publications --date 20260425` ~ `20260429` 5일치 수동 실행 (2026-04-29 이전 ~90건 기타 원인).
 - **(미래) 미보도 탐지 + 클러스터 품질 개선** — 설계 완료, 단계적 구현 예정. 상세 내용은 아래 "판단 사항 (미보도·클러스터 개선 설계)" 참조.
@@ -104,6 +106,13 @@
 - **(보너스) 셀렉터 견고화** — Naver UI 변경 대비 [scripts/lib/naver.py](scripts/lib/naver.py) 다중 selector 우선순위 확장.
 - **(보너스) GitHub auto-deploy 연결** — Settings → Git 에서 Vercel ↔ GitHub 연결, push 자동 배포.
 - **(미래) 본문 임베딩** — `article.body` 채워지면 클러스터링 입력을 `title + body[:500]` 으로 확장.
+
+### 판단 사항 (데이터 보존 정책 — 7일 cleanup)
+- **대상**: `ranking_news_snapshot` (→ `ranking_news_item` CASCADE), `section_ranking_snapshot`, `comment_metric` 3테이블. 4개 테이블 효과.
+- **제외**: `subscriber_snapshot`, `daily_publication_count` — 보존 기간 미결정. 날짜별 1건씩 쌓이므로 용량 부담 적음. 장기 추이 분석용으로 보존 필요할 수 있음.
+- **실행 시점**: UTC 15:00 = KST 00:00. cleanup cron과 cron-daily-briefing이 동시 실행되지만 서로 독립적이라 충돌 없음.
+- **보존 기간 변경**: `workflow_dispatch` 실행 시 `days` 인자로 조정 가능. 기본값 7.
+- **ranking_news_item 별도 삭제 불필요**: `ranking_news_snapshot` 삭제 시 CASCADE로 자동 삭제됨.
 
 ### 판단 사항 (AI 리포트 날짜 기준 — KST vs UTC)
 - **문제**: FastAPI `date.today()`는 UTC 기준. KST 낮에 버튼 누르면 UTC는 전날이라 기존 브리핑을 update만 하고 KST "오늘" 날짜 리포트가 생기지 않음.

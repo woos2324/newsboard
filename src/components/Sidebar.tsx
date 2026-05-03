@@ -12,6 +12,7 @@ import {
   FileText,
   Sparkles,
   Newspaper,
+  X,
 } from "lucide-react";
 
 const nav = [
@@ -25,16 +26,33 @@ const nav = [
   { href: "/report", label: "AI 리포트", icon: FileText },
 ];
 
-export function Sidebar() {
+type SidebarProps = {
+  isOpen?: boolean;
+  onClose?: () => void;
+};
+
+export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const pathname = usePathname();
 
   return (
-    <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col border-r border-border bg-white">
+    <aside
+      className={`fixed inset-y-0 left-0 z-40 flex h-full w-60 shrink-0 flex-col border-r border-border bg-white transition-transform duration-200 ease-in-out lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${
+        isOpen ? "translate-x-0" : "-translate-x-full"
+      }`}
+    >
       <div className="flex h-14 items-center gap-2 border-b border-border px-5">
         <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary-500 text-white">
           <Sparkles className="h-4 w-4" />
         </div>
         <span className="text-sm font-semibold tracking-tight">Newsboard</span>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="메뉴 닫기"
+          className="ml-auto flex h-7 w-7 items-center justify-center rounded-lg hover:bg-background lg:hidden"
+        >
+          <X className="h-4 w-4" />
+        </button>
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-4">

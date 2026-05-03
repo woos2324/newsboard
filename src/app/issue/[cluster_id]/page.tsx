@@ -191,7 +191,7 @@ export default async function IssueDetailPage({
                       href={a.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 font-medium hover:underline"
+                      className="flex w-full items-center gap-1 font-medium hover:underline"
                     >
                       <span className="truncate">{a.title}</span>
                       <ExternalLink className="h-3 w-3 shrink-0 text-muted" />

@@ -33,15 +33,19 @@ export type RankingArticleView = {
   url: string;
 };
 
+export type CompetitorItem = { name: string; url: string | null };
+
 export type MissedAlertView = {
   alert_id: number;
   title: string;
-  competitors: string[];
+  competitors: CompetitorItem[];
   priority: "high" | "medium" | "low";
   gap_minutes: number;
   reason: string | null;
   status: string;
   detected_at: string;
+  verdict: string | null;
+  similar_article: { title: string; url: string } | null;
 };
 
 export type SubscriberPointView = {
@@ -631,7 +635,9 @@ export async function getMissedAlerts(
   let query = sb
     .from("missed_issue_alert")
     .select(
-      "missed_issue_alert_id, alert_status, competitor_article_count, priority_score, reason, detected_at, target_media_company_id, issue_cluster:issue_cluster_id(issue_cluster_id, representative_title)"
+      "missed_issue_alert_id, alert_status, competitor_article_count, priority_score, reason, detected_at, target_media_company_id, verdict, " +
+      "similar_article:similar_article_id(article_id, title, url), " +
+      "issue_cluster:issue_cluster_id(issue_cluster_id, representative_title)"
     )
     .order("priority_score", { ascending: false, nullsFirst: false })
     .limit(limit);
@@ -641,9 +647,11 @@ export async function getMissedAlerts(
   const { data, error } = await query;
   if (error) throw error;
 
-  const alerts = data ?? [];
+  // verdict / similar_article_id 는 신규 컬럼이라 생성 타입에 미반영 → any 캐스팅
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const alerts = (data ?? []) as any[];
 
-  // 각 알림의 경쟁사 목록: issue_cluster_article 에서 target_media_company_id 제외한 매체명
+  // 클러스터별 경쟁사 기사 목록 (매체당 첫 번째 기사 URL 사용)
   const clusterIds = alerts
     .map((a) => {
       const ic = a.issue_cluster as unknown as { issue_cluster_id: number } | null;
@@ -651,25 +659,32 @@ export async function getMissedAlerts(
     })
     .filter((x): x is number => typeof x === "number");
 
-  const competitorsByCluster = new Map<number, Map<number, string>>();
+  // Map<cluster_id, Map<media_company_id, { name, url }>>
+  const competitorsByCluster = new Map<number, Map<number, { name: string; url: string | null }>>();
   if (clusterIds.length > 0) {
     const { data: relData, error: relErr } = await sb
       .from("issue_cluster_article")
       .select(
-        "issue_cluster_id, article:article_id(media_company:media_company_id(media_company_id, name))"
+        "issue_cluster_id, article:article_id(article_id, url, media_company:media_company_id(media_company_id, name))"
       )
       .in("issue_cluster_id", clusterIds);
     if (relErr) throw relErr;
 
     for (const r of relData ?? []) {
       const art = r.article as unknown as
-        | { media_company: { media_company_id: number; name: string } | null }
+        | { article_id: number; url: string; media_company: { media_company_id: number; name: string } | null }
         | null;
       const mc = art?.media_company;
       if (!mc) continue;
       const cid = r.issue_cluster_id;
       if (!competitorsByCluster.has(cid)) competitorsByCluster.set(cid, new Map());
-      competitorsByCluster.get(cid)!.set(mc.media_company_id, mc.name);
+      // 매체당 첫 번째 기사 URL만 유지
+      if (!competitorsByCluster.get(cid)!.has(mc.media_company_id)) {
+        competitorsByCluster.get(cid)!.set(mc.media_company_id, {
+          name: mc.name,
+          url: art?.url ?? null,
+        });
+      }
     }
   }
 
@@ -677,10 +692,15 @@ export async function getMissedAlerts(
     const ic = a.issue_cluster as unknown as
       | { issue_cluster_id: number; representative_title: string }
       | null;
+    const simArt = a.similar_article as unknown as
+      | { article_id: number; title: string; url: string }
+      | null;
+
     const competitorMap = ic
       ? competitorsByCluster.get(ic.issue_cluster_id) ?? new Map()
       : new Map();
     competitorMap.delete(a.target_media_company_id);
+
     return {
       alert_id: a.missed_issue_alert_id,
       title: ic?.representative_title ?? "(제목 없음)",
@@ -690,6 +710,8 @@ export async function getMissedAlerts(
       reason: a.reason,
       status: a.alert_status,
       detected_at: a.detected_at,
+      verdict: (a.verdict as string | null) ?? null,
+      similar_article: simArt ? { title: simArt.title, url: simArt.url } : null,
     };
   });
 }

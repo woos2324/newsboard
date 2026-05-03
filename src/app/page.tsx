@@ -105,7 +105,7 @@ export default async function DashboardPage() {
 
   const alertItems = alerts.map((a) => ({
     title: a.title,
-    competitors: a.competitors.length > 0 ? a.competitors : ["경쟁사 미확인"],
+    competitors: a.competitors.length > 0 ? a.competitors.map((c) => c.name) : ["경쟁사 미확인"],
     priority: a.priority,
     gapMinutes: a.gap_minutes,
   }));

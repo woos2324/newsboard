@@ -45,7 +45,7 @@ def _load_our_company(sb) -> dict:
 def _load_clusters(sb, dates: list[str]) -> list[dict]:
     return (
         sb.table("issue_cluster")
-        .select("issue_cluster_id, representative_title, cluster_date, confidence_score")
+        .select("issue_cluster_id, representative_title, cluster_date, confidence_score, keywords")
         .in_("cluster_date", dates)
         .execute()
         .data
@@ -76,16 +76,90 @@ def _load_cluster_media(sb, cluster_ids: list[int]) -> dict[int, list[dict]]:
     return result
 
 
-def _priority_score(competitor_count: int) -> float:
-    # 2개=50(medium) / 3개=75(high) / 4개+=100(high)
-    return min(100.0, competitor_count * 25.0)
+def _load_our_recent_articles(sb, our_id: int, days: int = 3) -> list[dict]:
+    """자사 최근 N일 기사 (article_id, title, url)."""
+    cutoff = (datetime.now(KST) - timedelta(days=days)).isoformat()
+    return (
+        sb.table("article")
+        .select("article_id, title, url")
+        .eq("media_company_id", our_id)
+        .gte("collected_at", cutoff)
+        .limit(500)
+        .execute()
+        .data
+    )
 
+
+# ── 유사도 함수 ────────────────────────────────────────────
+
+def _bigrams(text: str) -> set[str]:
+    t = text.strip()
+    return {t[i : i + 2] for i in range(len(t) - 1)} if len(t) >= 2 else set()
+
+
+def _bigram_similarity(a: str, b: str) -> float:
+    sa, sb_ = _bigrams(a), _bigrams(b)
+    if not sa or not sb_:
+        return 0.0
+    return len(sa & sb_) / len(sa | sb_)
+
+
+def _keyword_overlap(keywords: list[str], title: str) -> int:
+    title_lower = title.lower()
+    return sum(1 for k in keywords if k and k.lower() in title_lower)
+
+
+def _second_check(
+    cluster_title: str,
+    keywords: list[str],
+    our_articles: list[dict],
+) -> tuple[str, dict | None]:
+    """
+    자사 최근 기사와 유사도 비교 → (verdict, best_match_article)
+    - 유사보도있음: 제목 유사도 ≥ 0.4 또는 키워드 2개 이상 겹침
+    - 확인필요:    제목 유사도 ≥ 0.15 또는 키워드 1개 이상 겹침
+    - 미보도:      그 외
+    """
+    best_sim = 0.0
+    best_kw = 0
+    best_article: dict | None = None
+
+    for art in our_articles:
+        title = art.get("title") or ""
+        sim = _bigram_similarity(cluster_title, title)
+        kw = _keyword_overlap(keywords, title)
+
+        if sim > best_sim or (sim == best_sim and kw > best_kw):
+            best_sim = sim
+            best_kw = kw
+            best_article = art
+
+    if best_sim >= 0.4 or best_kw >= 2:
+        return "유사보도있음", best_article
+    if best_sim >= 0.15 or best_kw >= 1:
+        return "확인필요", best_article
+    return "미보도", None
+
+
+# ── 우선순위 ────────────────────────────────────────────────
+
+def _priority_score(competitor_count: int, verdict: str) -> float:
+    base = min(100.0, competitor_count * 25.0)
+    if verdict == "유사보도있음":
+        return 15.0
+    if verdict == "확인필요":
+        return round(base * 0.6, 1)
+    return base  # 미보도
+
+
+# ── 탐지 ────────────────────────────────────────────────────
 
 def _detect(
     clusters: list[dict],
     cluster_media: dict[int, list[dict]],
     our_id: int,
     min_competitors: int,
+    our_articles: list[dict],
 ) -> list[dict]:
     gaps = []
     for c in clusters:
@@ -100,10 +174,25 @@ def _detect(
         if len(competitor_ids) < min_competitors:
             continue
 
+        keywords: list[str] = c.get("keywords") or []
+        verdict, similar_art = _second_check(
+            c["representative_title"], keywords, our_articles
+        )
+
         competitor_names = sorted({m["name"] for m in media_list if not m.get("is_our_company")})
         name_summary = ", ".join(competitor_names[:3]) + ("..." if len(competitor_names) > 3 else "")
-        score = _priority_score(len(competitor_ids))
-        reason = f"경쟁사 {len(competitor_ids)}개 매체 보도 ({name_summary}), 자사 미보도"
+        score = _priority_score(len(competitor_ids), verdict)
+
+        if verdict == "미보도":
+            reason = f"경쟁사 {len(competitor_ids)}개 매체 보도 ({name_summary}), 자사 미보도"
+        elif similar_art:
+            sim = _bigram_similarity(c["representative_title"], similar_art.get("title") or "")
+            reason = (
+                f"경쟁사 {len(competitor_ids)}개 매체 보도. "
+                f"유사 자사 기사: {similar_art['title'][:30]}… (유사도 {sim*100:.0f}%)"
+            )
+        else:
+            reason = f"경쟁사 {len(competitor_ids)}개 매체 보도 ({name_summary})"
 
         gaps.append(
             {
@@ -115,6 +204,8 @@ def _detect(
                 "competitor_article_count": len(competitor_ids),
                 "priority_score": score,
                 "reason": reason,
+                "verdict": verdict,
+                "similar_article_id": similar_art["article_id"] if similar_art else None,
             }
         )
     return gaps
@@ -131,7 +222,6 @@ def _dedup_by_title(gaps: list[dict]) -> list[dict]:
 
 
 def _load_existing_titles(sb, our_id: int) -> set[str]:
-    """DB에 이미 open/reviewing 상태인 알림의 representative_title 집합."""
     rows = (
         sb.table("missed_issue_alert")
         .select("issue_cluster_id, alert_status, issue_cluster:issue_cluster_id(representative_title)")
@@ -171,13 +261,14 @@ def _upsert_alerts(sb, gaps: list[dict], existing_titles: set[str]) -> tuple[int
                     "competitor_article_count": g["competitor_article_count"],
                     "priority_score": g["priority_score"],
                     "reason": g["reason"],
+                    "verdict": g["verdict"],
+                    "similar_article_id": g["similar_article_id"],
                 }
             ).eq("missed_issue_alert_id", ex["missed_issue_alert_id"]).execute()
-            print(f"  UPDATE cluster {g['issue_cluster_id']} score={g['priority_score']:.0f} '{title}'")
+            print(f"  UPDATE cluster {g['issue_cluster_id']} [{g['verdict']}] score={g['priority_score']:.0f} '{title}'")
             existing_titles.add(title)
             updated += 1
         elif title in existing_titles:
-            # 같은 제목의 다른 클러스터가 이미 알림으로 등록됨 → 중복 삽입 방지
             print(f"  SKIP  cluster {g['issue_cluster_id']} (title duplicate) '{title}'")
         else:
             sb.table("missed_issue_alert").insert(
@@ -188,9 +279,11 @@ def _upsert_alerts(sb, gaps: list[dict], existing_titles: set[str]) -> tuple[int
                     "competitor_article_count": g["competitor_article_count"],
                     "priority_score": g["priority_score"],
                     "reason": g["reason"],
+                    "verdict": g["verdict"],
+                    "similar_article_id": g["similar_article_id"],
                 }
             ).execute()
-            print(f"  INSERT cluster {g['issue_cluster_id']} score={g['priority_score']:.0f} '{title}'")
+            print(f"  INSERT cluster {g['issue_cluster_id']} [{g['verdict']}] score={g['priority_score']:.0f} '{title}'")
             existing_titles.add(title)
             inserted += 1
     return inserted, updated
@@ -219,10 +312,22 @@ def main() -> None:
 
     cluster_ids = [c["issue_cluster_id"] for c in clusters]
     cluster_media = _load_cluster_media(sb, cluster_ids)
+    our_articles = _load_our_recent_articles(sb, our["media_company_id"])
+    print(f"자사 최근 기사: {len(our_articles)}건 (3일치)")
 
-    gaps_raw = _detect(clusters, cluster_media, our["media_company_id"], args.min_competitors)
+    gaps_raw = _detect(clusters, cluster_media, our["media_company_id"], args.min_competitors, our_articles)
     gaps = _dedup_by_title(gaps_raw)
-    print(f"\n미보도 탐지: {len(gaps)}개 (경쟁사 {args.min_competitors}개 이상, 제목 중복 제거 후)\n")
+
+    verdict_counts = {"미보도": 0, "확인필요": 0, "유사보도있음": 0}
+    for g in gaps:
+        verdict_counts[g["verdict"]] = verdict_counts.get(g["verdict"], 0) + 1
+
+    print(
+        f"\n탐지: {len(gaps)}개 — "
+        f"미보도 {verdict_counts['미보도']} / "
+        f"확인필요 {verdict_counts['확인필요']} / "
+        f"유사보도있음 {verdict_counts['유사보도있음']}\n"
+    )
 
     if not gaps:
         print("이슈 없음.")
@@ -230,7 +335,7 @@ def main() -> None:
 
     for g in gaps:
         level = "HIGH" if g["priority_score"] >= 80 else "MED " if g["priority_score"] >= 50 else "LOW "
-        print(f"  [{level} {g['priority_score']:.0f}] {g['representative_title']}")
+        print(f"  [{level} {g['priority_score']:.0f}][{g['verdict']}] {g['representative_title']}")
         print(f"         {g['reason']}")
 
     if args.dry_run:

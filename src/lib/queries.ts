@@ -640,6 +640,7 @@ export async function getMissedAlerts(
       "similar_article:similar_article_id(article_id, title, url), " +
       "issue_cluster:issue_cluster_id(issue_cluster_id, representative_title)"
     )
+    .order("priority_score", { ascending: false, nullsFirst: false })
     .order("detected_at", { ascending: false })
     .limit(limit);
 

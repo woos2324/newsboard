@@ -80,6 +80,9 @@
 - [x] **섹션별 랭킹 중복 표시 수정** — [src/lib/queries.ts](src/lib/queries.ts) section_name+rank 기준 클라이언트 dedup 추가. [supabase/migrations/0005_section_ranking_unique.sql](supabase/migrations/0005_section_ranking_unique.sql) DB 적용 완료 (MCP `apply_migration`, 2026-05-02 세션).
 - [x] **랭킹뉴스 수집 건수 20건으로 확장** — [.github/workflows/cron-ranking.yml](.github/workflows/cron-ranking.yml) default `5` → `20`. [scripts/collect_ranking.py](scripts/collect_ranking.py) `--limit` default `20`. 매체별 최대 20건 수집.
 - [x] **7일 데이터 보존 정책 + cleanup cron** — [scripts/cleanup_old_data.py](scripts/cleanup_old_data.py) 신규 작성 (ranking_news_snapshot CASCADE, section_ranking_snapshot, comment_metric 삭제). [.github/workflows/cron-cleanup.yml](.github/workflows/cron-cleanup.yml) UTC 15:00 (KST 00:00) 일 1회 실행. `--days` 인자로 보존 기간 조정 가능. subscriber_snapshot / daily_publication_count 는 보존 기간 미결정으로 제외.
+- [x] **모바일 반응형 사이드바 드로어** — [src/components/AppShell.tsx](src/components/AppShell.tsx) 신규. 모바일에서 햄버거 버튼 → 오버레이 슬라이드 사이드바. 데스크탑 레이아웃 동일 유지. [PageShell.tsx](src/components/PageShell.tsx) / 루트 page.tsx / loading.tsx 적용.
+- [x] **이슈 상세 관련 기사 overflow 수정** — [src/app/issue/\[cluster_id\]/page.tsx](src/app/issue/[cluster_id]/page.tsx) 기사 링크 `inline-flex` → `flex w-full`. 제목 truncate 정상화 + 유사도 배지 겹침 해결.
+- [x] **미보도 탐지 개선 (1단계+2단계)** — [scripts/detect_gap.py](scripts/detect_gap.py) 자사 최근 기사와 제목 바이그램+키워드 2차 검증 추가. verdict 분류(미보도/확인필요/유사보도있음) + priority 조정. [supabase/migrations/0006_gap_verdict.sql](supabase/migrations/0006_gap_verdict.sql) `verdict`, `similar_article_id` 컬럼 추가 (DB 적용 완료). [src/app/gap/page.tsx](src/app/gap/page.tsx) verdict 배지 + 경쟁사 기사 클릭 링크 + 자사 유사 기사 링크.
 
 ### ⚠️ 환경변수 (라이브 / .env.local 양쪽)
 **Vercel Production env (이미 설정됨)**:
@@ -90,13 +93,16 @@
 
 **로컬 .env.local 만 있는 것** (gitignore): 위 값 + 옵션 1 (Vercel AI Gateway) 주석 블록
 
-### 재개 지점 (2026-05-02 6차 세션 종료)
+### 재개 지점 (2026-05-03 7차 세션 종료)
 - **섹션별 랭킹 중복 DB migration 적용** — `0005_section_ranking_unique` Supabase MCP로 적용 완료.
 - **랭킹뉴스 수집 20건으로 확장** — cron-ranking.yml + collect_ranking.py default 20건.
 - **7일 cleanup cron 추가** — scripts/cleanup_old_data.py + cron-cleanup.yml (KST 00:00). 3개 테이블 대상 (subscriber_snapshot / daily_publication_count 제외).
 - **NCP 이전 설계 + 인증 설계 메모리 저장** — memory/project_ncp_migration.md 에 이전 공수·순서 + 인증(PostgreSQL+JWT, role 3종) 설계 기록.
+- **모바일 반응형 사이드바 + 이슈 상세 overflow 수정** — 배포 완료.
+- **미보도 탐지 개선** — verdict 분류 + 경쟁사/유사 기사 링크. migration 0006 적용 완료. 다음 cron부터 자동 적용.
 - ⚠ **과거 날짜 category backfill** 미완료: 2026-04-25~29 날짜별로 `python -m scripts.collect_publications --date YYYYMMDD` 수동 실행 필요.
 - ⚠ **subscriber_snapshot / daily_publication_count 보존 기간 미결정** — 나중에 결정 후 cron-cleanup.yml에 삭제 로직 추가.
+- ⚠ **미보도 탐지 3단계** (임베딩 기반 2차 검증) — article.body 수집 + NCP 이전 후 작업 예정.
 ### 다음 작업 로드맵
 - **(즉시) 과거 날짜 category backfill** — `python -m scripts.collect_publications --date 20260425` ~ `20260429` 5일치 수동 실행 (2026-04-29 이전 ~90건 기타 원인).
 - **(미래) 미보도 탐지 + 클러스터 품질 개선** — 설계 완료, 단계적 구현 예정. 상세 내용은 아래 "판단 사항 (미보도·클러스터 개선 설계)" 참조.

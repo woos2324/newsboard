@@ -103,6 +103,7 @@
 - ⚠ **과거 날짜 category backfill** 미완료: 2026-04-25~29 날짜별로 `python -m scripts.collect_publications --date YYYYMMDD` 수동 실행 필요.
 - ⚠ **subscriber_snapshot / daily_publication_count 보존 기간 미결정** — 나중에 결정 후 cron-cleanup.yml에 삭제 로직 추가.
 - ⚠ **미보도 탐지 3단계** (임베딩 기반 2차 검증) — article.body 수집 + NCP 이전 후 작업 예정.
+- ⚠ **자사 기사 수 집계 오차** — CMS ~208건 vs 대시보드 252건 차이. sid1 없는 URL dedup은 정상이었음(URL에 sid 파라미터 없음 확인). Naver 섹션별 수집이 "no sid1" 통합 뷰보다 더 많은 기사를 잡는 구조적 차이인지, 실제 중복인지 DB 조회로 추가 확인 필요.
 ### 다음 작업 로드맵
 - **(즉시) 과거 날짜 category backfill** — `python -m scripts.collect_publications --date 20260425` ~ `20260429` 5일치 수동 실행 (2026-04-29 이전 ~90건 기타 원인).
 - **(미래) 미보도 탐지 + 클러스터 품질 개선** — 설계 완료, 단계적 구현 예정. 상세 내용은 아래 "판단 사항 (미보도·클러스터 개선 설계)" 참조.

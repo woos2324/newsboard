@@ -189,12 +189,13 @@ def parse_publication_articles(html: str, section: str | None = None) -> tuple[l
         href = str(a.get("href") or "")
         if "mnews/article" not in href:
             continue
-        if href in seen:
+        url = normalize_naver_article_url(href)
+        if url in seen:
             continue
         title = a.get_text(strip=True)
         if title:
-            seen.add(href)
-            articles.append(PublicationArticle(title=title, url=href, section=section))
+            seen.add(url)
+            articles.append(PublicationArticle(title=title, url=url, section=section))
 
     return articles, _parse_max_page(soup)
 

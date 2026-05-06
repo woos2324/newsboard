@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 
 from bs4 import BeautifulSoup
+
+KST = timezone(timedelta(hours=9))
 
 # 매체별 인기 랭킹 (네이버 언론사 페이지)
 RANKING_URL_TEMPLATE = (
@@ -133,6 +136,7 @@ class PublicationArticle:
     title: str
     url: str
     section: str | None = None
+    published_at: datetime | None = None
 
 
 def _parse_max_page(soup) -> int:
@@ -173,6 +177,28 @@ def parse_author_name(html: str) -> str | None:
             text = re.sub(r"\s*기자\s*$", "", text).strip()
             if text:
                 return text
+    return None
+
+
+def parse_article_published_at(html: str) -> datetime | None:
+    """네이버 기사 상세 페이지에서 최초 입력 시각을 KST aware datetime 으로 추출."""
+    soup = BeautifulSoup(html, "html.parser")
+    node = soup.select_one("._ARTICLE_DATE_TIME[data-date-time]")
+    value = str(node.get("data-date-time") or "").strip() if node else ""
+    if value:
+        try:
+            return datetime.strptime(value, "%Y-%m-%d %H:%M:%S").replace(tzinfo=KST)
+        except ValueError:
+            pass
+
+    # 연예/스포츠 모바일 상세는 별도 React 페이지로 리다이렉트되며
+    # data-date-time 속성 대신 본문 스크립트에 ISO-like 문자열을 포함한다.
+    match = re.search(r"\b(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\b", html)
+    if match:
+        try:
+            return datetime.strptime(match.group(1), "%Y-%m-%d %H:%M:%S").replace(tzinfo=KST)
+        except ValueError:
+            return None
     return None
 
 

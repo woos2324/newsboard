@@ -28,6 +28,7 @@ from scripts.lib.naver import (
     NAVER_SECTIONS,
     PUBLICATION_SECTION_URL_TEMPLATE,
     PublicationArticle,
+    parse_article_published_at,
     parse_publication_articles,
 )
 
@@ -94,6 +95,47 @@ async def fetch_all_articles(naver_media_id: str, date_yyyymmdd: str) -> list[Pu
     return all_articles
 
 
+async def _fetch_article_published_at(article: PublicationArticle, sem: asyncio.Semaphore) -> PublicationArticle:
+    async with sem:
+        try:
+            html = await fetch_html(article.url, timeout=10.0, retries=2)
+            return PublicationArticle(
+                title=article.title,
+                url=article.url,
+                section=article.section,
+                published_at=parse_article_published_at(html),
+            )
+        except Exception:  # noqa: BLE001
+            return article
+
+
+async def enrich_published_at(articles: list[PublicationArticle]) -> list[PublicationArticle]:
+    """기사 상세 페이지의 실제 입력 시각을 채운다. 실패 항목은 원본 유지."""
+    if not articles:
+        return articles
+    sem = asyncio.Semaphore(8)
+    return await asyncio.gather(*(_fetch_article_published_at(a, sem) for a in articles))
+
+
+def filter_by_target_date(
+    articles: list[PublicationArticle], date_yyyymmdd: str
+) -> list[PublicationArticle]:
+    """실제 입력일이 확인된 경우 대상 날짜 기사만 남긴다.
+
+    모든 상세 시각 파싱이 실패한 환경에서는 기존 동작을 유지해 count=0 급락을 방지한다.
+    """
+    parsed = [a for a in articles if a.published_at is not None]
+    if not parsed:
+        return articles
+
+    target_date = datetime.strptime(date_yyyymmdd, "%Y%m%d").date()
+    return [
+        a
+        for a in articles
+        if a.published_at is not None and a.published_at.astimezone(KST).date() == target_date
+    ]
+
+
 def _our_companies(sb) -> list[dict]:
     rows = (
         sb.table("media_company")
@@ -114,13 +156,12 @@ def _upsert_articles(sb, media: dict, articles: list[PublicationArticle], now_is
             "title": a.title,
             "url": a.url,
             "category": a.section,
-            "published_at": now_iso,
-            "collected_at": now_iso,
+            "published_at": a.published_at.isoformat() if a.published_at else now_iso,
         }
         for a in articles
     ]
-    # ignore_duplicates=True: 같은 url 재수집 시 첫 published_at 보존
-    sb.table("article").upsert(rows, on_conflict="url", ignore_duplicates=True).execute()
+    # 같은 url 재수집 시 title/category/published_at 은 보정하되 collected_at 은 기존값 보존.
+    sb.table("article").upsert(rows, on_conflict="url").execute()
 
     # 랭킹 크롤러가 먼저 category=null로 삽입한 경우 섹션 정보 backfill
     by_section: dict[str, list[str]] = {}
@@ -162,6 +203,8 @@ async def main() -> None:
             d_iso = f"{d[0:4]}-{d[4:6]}-{d[6:8]}"
             try:
                 articles = await fetch_all_articles(media["naver_media_id"], d)
+                articles = await enrich_published_at(articles)
+                articles = filter_by_target_date(articles, d)
                 count = len(articles)
                 print(f"  ✓ {media['name']:<10} {d_iso}  {count}건")
 

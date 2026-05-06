@@ -1229,6 +1229,7 @@ const SECTION_LABEL: Record<string, string> = {
   world: "세계",
   entertainment: "연예",
   sports: "스포츠",
+  opinion: "오피니언",
 };
 
 export function sectionLabel(category: string | null): string {

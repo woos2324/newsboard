@@ -16,6 +16,7 @@ const SECTION_BAR_COLORS: Record<string, string> = {
   world: "#3B82F6",
   entertainment: "#D946EF",
   sports: "#F97316",
+  opinion: "#64748B",
 };
 
 function todayKST(): string {

@@ -154,7 +154,11 @@ def _parse_max_page(soup) -> int:
                 if n > max_page:
                     max_page = n
             except ValueError:
-                continue
+                pass
+            href = str(el.get("href") or "")
+            match = re.search(r"[?&]page=(\d+)", href)
+            if match:
+                max_page = max(max_page, int(match.group(1)))
     return max_page
 
 
@@ -192,8 +196,13 @@ def parse_article_published_at(html: str) -> datetime | None:
             pass
 
     # 연예/스포츠 모바일 상세는 별도 React 페이지로 리다이렉트되며
-    # data-date-time 속성 대신 본문 스크립트에 ISO-like 문자열을 포함한다.
-    match = re.search(r"\b(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\b", html)
+    # serviceDatetime(입력)과 modifyDatetime(수정)을 스크립트에 포함한다.
+    match = re.search(
+        r'serviceDatetime\\?":\\?"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})',
+        html,
+    )
+    if not match:
+        match = re.search(r"\b(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\b", html)
     if match:
         try:
             return datetime.strptime(match.group(1), "%Y-%m-%d %H:%M:%S").replace(tzinfo=KST)

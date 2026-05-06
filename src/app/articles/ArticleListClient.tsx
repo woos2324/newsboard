@@ -15,6 +15,7 @@ const SECTION_COLORS: Record<string, string> = {
   world: "bg-blue-100 text-blue-700",
   entertainment: "bg-fuchsia-100 text-fuchsia-700",
   sports: "bg-orange-100 text-orange-700",
+  opinion: "bg-slate-100 text-slate-700",
 };
 
 function formatTime(iso: string | null): string {

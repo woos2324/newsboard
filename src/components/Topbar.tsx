@@ -1,14 +1,25 @@
 "use client";
 
 import { Bell, Calendar, Menu } from "lucide-react";
+import { useEffect, useState } from "react";
+
+function formatDateTime(date: Date): string {
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  const weekday = ["일", "월", "화", "수", "목", "금", "토"][date.getDay()];
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${month}월 ${day}일 (${weekday}) ${hours}:${minutes}`;
+}
 
 export function Topbar({ onMenuOpen }: { onMenuOpen?: () => void }) {
-  const today = new Date().toLocaleDateString("ko-KR", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    weekday: "short",
-  });
+  const [datetime, setDatetime] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDatetime(formatDateTime(new Date()));
+    const timer = setInterval(() => setDatetime(formatDateTime(new Date())), 60000);
+    return () => clearInterval(timer);
+  }, []);
 
   return (
     <header className="sticky top-0 z-10 flex h-14 items-center gap-4 border-b border-border bg-white/80 px-6 backdrop-blur">
@@ -22,7 +33,7 @@ export function Topbar({ onMenuOpen }: { onMenuOpen?: () => void }) {
       </button>
       <div className="flex items-center gap-2 text-sm text-muted">
         <Calendar className="h-4 w-4" />
-        <span>{today}</span>
+        <span>{datetime ?? ""}</span>
       </div>
 
       {/* TODO: 검색 기능 미구현 — 향후 이슈/키워드/매체 검색 드롭다운 또는 /search 페이지로 구현 예정

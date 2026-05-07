@@ -14,18 +14,9 @@ def _resolve_key() -> str:
     if service and not service.startswith("PLACEHOLDER") and _is_jwt(service):
         return service
 
-    legacy = os.environ.get("SUPABASE_LEGACY_ANON_KEY", "")
-    if legacy and _is_jwt(legacy):
-        return legacy
-
-    anon = os.environ.get("NEXT_PUBLIC_SUPABASE_ANON_KEY", "")
-    if anon and _is_jwt(anon):
-        return anon
-
     raise RuntimeError(
-        "Supabase JWT key 가 환경변수에 없습니다. "
-        "supabase-py 는 JWT 포맷만 지원하므로 SUPABASE_LEGACY_ANON_KEY 또는 "
-        "JWT 형식의 SUPABASE_SERVICE_ROLE_KEY 가 필요합니다."
+        "SUPABASE_SERVICE_ROLE_KEY 가 환경변수에 없습니다. "
+        "RLS 활성화 후 서버/배치는 service_role 키로만 Supabase 에 접근해야 합니다."
     )
 
 

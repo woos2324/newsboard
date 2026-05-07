@@ -468,29 +468,61 @@ export async function getOverviewStats(): Promise<OverviewStats> {
 }
 
 // ===================================================================
-// Ranking — 대시보드 "오늘의 랭킹" 블록 (최근 기사 TOP N)
+// Ranking — 대시보드 "매체별 랭킹 뉴스" 블록
 // ===================================================================
 
-export async function getRecentArticles(limit = 8): Promise<RankingArticleView[]> {
+export type RankingNewsItem = {
+  rank: number;
+  title: string;
+  media: string;
+  url: string;
+};
+
+export async function getRankingNews(limit = 150): Promise<RankingNewsItem[]> {
   const sb = getSupabase();
+
+  const { data: latest } = await sb
+    .from("ranking_news_snapshot")
+    .select("snapshot_at")
+    .order("snapshot_at", { ascending: false })
+    .limit(1)
+    .single();
+
+  if (!latest) return [];
+
+  const batchStart = new Date(
+    new Date(latest.snapshot_at).getTime() - 30 * 60 * 1000
+  ).toISOString();
+
+  const { data: snapshots } = await sb
+    .from("ranking_news_snapshot")
+    .select("ranking_snapshot_id")
+    .gte("snapshot_at", batchStart);
+
+  if (!snapshots?.length) return [];
+
+  const ids = snapshots.map((s) => s.ranking_snapshot_id);
+
   const { data, error } = await sb
-    .from("article")
+    .from("ranking_news_item")
     .select(
-      "article_id, title, category, published_at, url, media_company!inner(name)"
+      "rank_position, article!inner(title, url), ranking_news_snapshot!inner(media_company!inner(name))"
     )
-    .order("published_at", { ascending: false, nullsFirst: false })
+    .in("ranking_snapshot_id", ids)
+    .order("rank_position", { ascending: true })
     .limit(limit);
 
   if (error) throw error;
 
-  return (data ?? []).map((a) => {
-    const mc = a.media_company as unknown as { name: string } | null;
+  return (data ?? []).map((item) => {
+    const a = item.article as unknown as { title: string; url: string };
+    const snap = item.ranking_news_snapshot as unknown as {
+      media_company: { name: string };
+    };
     return {
-      article_id: a.article_id,
+      rank: item.rank_position,
       title: a.title,
-      media: mc?.name ?? "-",
-      category: a.category,
-      published_at: a.published_at,
+      media: snap.media_company.name,
       url: a.url,
     };
   });

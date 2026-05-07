@@ -15,7 +15,7 @@ import { AISummaryCard } from "@/components/dashboard/AISummaryCard";
 import {
   getOverviewStats,
   getIssues,
-  getRecentArticles,
+  getRankingNews,
   getMissedAlerts,
   getOurSubscriberSeries,
   getOurTopComments,
@@ -42,11 +42,11 @@ function formatDateTimeKr(iso: string): string {
 }
 
 export default async function DashboardPage() {
-  const [stats, issues, recent, alerts, sub, topComments, aiSummary] =
+  const [stats, issues, rankingNews, alerts, sub, topComments, aiSummary] =
     await Promise.all([
       getOverviewStats(),
       getIssues(4),
-      getRecentArticles(8),
+      getRankingNews(),
       getMissedAlerts("open", 5),
       getOurSubscriberSeries(7),
       getOurTopComments(4),
@@ -96,12 +96,6 @@ export default async function DashboardPage() {
     trend: Math.round(i.confidence * 100),
   }));
 
-  const rankingItems = recent.map((a, idx) => ({
-    rank: idx + 1,
-    title: a.title,
-    media: a.media,
-    change: null as number | null,
-  }));
 
   const alertItems = alerts.map((a) => ({
     title: a.title,
@@ -184,7 +178,7 @@ export default async function DashboardPage() {
 
           <section className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
             <div className="lg:col-span-2">
-              <RankingList items={rankingItems} />
+              <RankingList items={rankingNews} />
             </div>
             <MissedAlerts items={alertItems} />
           </section>

@@ -1,4 +1,5 @@
 import { AlertTriangle } from "lucide-react";
+import Link from "next/link";
 
 type Alert = {
   title: string;
@@ -55,12 +56,12 @@ export function MissedAlerts({ items }: Props) {
         ))}
       </ul>
 
-      <button
-        type="button"
-        className="mt-3 w-full rounded-lg border border-border bg-white py-2 text-xs font-medium text-primary-500 hover:bg-primary-500/5"
+      <Link
+        href="/gap"
+        className="mt-3 block w-full rounded-lg border border-border bg-white py-2 text-center text-xs font-medium text-primary-500 hover:bg-primary-500/5"
       >
         전체 낙종 이슈 보기 →
-      </button>
+      </Link>
     </div>
   );
 }

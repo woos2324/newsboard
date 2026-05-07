@@ -6,7 +6,7 @@
 
 ---
 
-## 현재 진행 상태 (2026-05-03)
+## 현재 진행 상태 (2026-05-07)
 
 새 세션 시작 시 가장 먼저 확인할 진행 현황 체크포인트.
 
@@ -85,6 +85,10 @@
 - [x] **이슈 상세 관련 기사 overflow 수정** — [src/app/issue/\[cluster_id\]/page.tsx](src/app/issue/[cluster_id]/page.tsx) 기사 링크 `inline-flex` → `flex w-full`. 제목 truncate 정상화 + 유사도 배지 겹침 해결.
 - [x] **미보도 탐지 개선 (1단계+2단계)** — [scripts/detect_gap.py](scripts/detect_gap.py) 자사 최근 기사와 제목 바이그램+키워드 2차 검증 추가. verdict 분류(미보도/확인필요/유사보도있음) + priority 조정. [supabase/migrations/0006_gap_verdict.sql](supabase/migrations/0006_gap_verdict.sql) `verdict`, `similar_article_id` 컬럼 추가 (DB 적용 완료). [src/app/gap/page.tsx](src/app/gap/page.tsx) verdict 배지 + 경쟁사 기사 클릭 링크 + 자사 유사 기사 링크.
 - [x] **미보도 목록 보존 정책** — DB: reviewing 제외 7일 이전 missed_issue_alert 삭제 (cleanup_old_data.py 추가). UI: open 항목은 최근 2일치만 표시, reviewing은 전체 표시, detected_at DESC 정렬.
+- [x] **RLS 활성화 (0007_enable_rls)** — 전체 13개 테이블 `rowsecurity=true`. [src/lib/supabase.ts](src/lib/supabase.ts) service_role 키 전용으로 전환 (Codex 작업분 배포 완료). Supabase 이메일 보안 경고 해소.
+- [x] **Topbar 날짜+시간 표시** — `2026년 5월 7일 (목)` → `5월 7일 (목) 17:22` 형식. 1분 자동 갱신 (`setInterval`). hydration 오류 방지(`useState<string|null>`).
+- [x] **대시보드 랭킹뉴스 전 매체 표시** — `getRecentArticles`(article 테이블, 세계일보 위주) → `getRankingNews`(`ranking_news_item`+`ranking_news_snapshot` 조인). [src/components/dashboard/RankingList.tsx](src/components/dashboard/RankingList.tsx) 클라이언트 컴포넌트로 전환, 매체 드롭다운 실제 필터링. limit 500 (50매체×10건).
+- [x] **낙종알림 "전체 낙종 이슈 보기" /gap 링크** — `<button>` → `<Link href="/gap">` 교체.
 
 ### ⚠️ 환경변수 (라이브 / .env.local 양쪽)
 **Vercel Production env (이미 설정됨)**:
@@ -95,15 +99,15 @@
 
 **로컬 .env.local 만 있는 것** (gitignore): 위 값 + 옵션 1 (Vercel AI Gateway) 주석 블록
 
-### 재개 지점 (2026-05-03 7차 세션 종료)
-- **모바일 반응형 사이드바** — AppShell.tsx 신규 + Sidebar/Topbar/PageShell 수정. production 배포 완료.
-- **이슈 상세 기사 overflow 수정** — `flex w-full` 적용. production 배포 완료.
-- **미보도 탐지 개선** — detect_gap.py 2차 검증(바이그램+키워드), verdict/similar_article_id, 0006 마이그레이션 적용, gap/page.tsx UI 개선.
-- **미보도 보존 정책** — DB 7일 삭제(cleanup_old_data.py), UI 최근 2일 open + 전체 reviewing, DESC 정렬.
+### 재개 지점 (2026-05-07 8차 세션 종료)
+- **RLS 활성화** — 0007_enable_rls DB 적용 완료, supabase.ts service_role 전환 배포 완료.
+- **Topbar 날짜+시간** — 배포 완료.
+- **대시보드 랭킹뉴스** — ranking_news_item 기반 전 매체 표시, 매체 필터 드롭다운 작동. 배포 완료.
+- **낙종알림 /gap 링크** — 배포 완료.
 - ⚠ **과거 날짜 category backfill** 미완료: 2026-04-25~29 날짜별로 `python -m scripts.collect_publications --date YYYYMMDD` 수동 실행 필요.
 - ⚠ **subscriber_snapshot / daily_publication_count 보존 기간 미결정** — 나중에 결정 후 cron-cleanup.yml에 삭제 로직 추가.
 - ⚠ **미보도 탐지 3단계** (임베딩 기반 2차 검증) — article.body 수집 + NCP 이전 후 작업 예정.
-- ⚠ **자사 기사 수 집계 오차** — CMS ~208건 vs 대시보드 252건 차이. sid1 없는 URL dedup은 정상이었음(URL에 sid 파라미터 없음 확인). Naver 섹션별 수집이 "no sid1" 통합 뷰보다 더 많은 기사를 잡는 구조적 차이인지, 실제 중복인지 DB 조회로 추가 확인 필요.
+- ⚠ **자사 기사 수 집계 오차** — CMS ~208건 vs 대시보드 252건 차이. DB 조회로 추가 확인 필요.
 ### 다음 작업 로드맵
 - **(즉시) 과거 날짜 category backfill** — `python -m scripts.collect_publications --date 20260425` ~ `20260429` 5일치 수동 실행 (2026-04-29 이전 ~90건 기타 원인).
 - **(미래) 미보도 탐지 + 클러스터 품질 개선** — 설계 완료, 단계적 구현 예정. 상세 내용은 아래 "판단 사항 (미보도·클러스터 개선 설계)" 참조.

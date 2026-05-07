@@ -478,7 +478,7 @@ export type RankingNewsItem = {
   url: string;
 };
 
-export async function getRankingNews(limit = 150): Promise<RankingNewsItem[]> {
+export async function getRankingNews(limit = 500): Promise<RankingNewsItem[]> {
   const sb = getSupabase();
 
   const { data: latest } = await sb

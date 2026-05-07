@@ -89,21 +89,23 @@
 - [x] **Topbar 날짜+시간 표시** — `2026년 5월 7일 (목)` → `5월 7일 (목) 17:22` 형식. 1분 자동 갱신 (`setInterval`). hydration 오류 방지(`useState<string|null>`).
 - [x] **대시보드 랭킹뉴스 전 매체 표시** — `getRecentArticles`(article 테이블, 세계일보 위주) → `getRankingNews`(`ranking_news_item`+`ranking_news_snapshot` 조인). [src/components/dashboard/RankingList.tsx](src/components/dashboard/RankingList.tsx) 클라이언트 컴포넌트로 전환, 매체 드롭다운 실제 필터링. limit 500 (50매체×10건).
 - [x] **낙종알림 "전체 낙종 이슈 보기" /gap 링크** — `<button>` → `<Link href="/gap">` 교체.
+- [x] **GitHub Actions cron 복구** — RLS 활성화 후 `scripts/lib/db.py`가 `SUPABASE_SERVICE_ROLE_KEY` JWT 전용으로 변경됐으나, GitHub Secret에 Supabase 신 포맷(`sb_secret_...`)이 저장되어 `_is_jwt()` 체크 실패 → 전체 cron 중단. Supabase 대시보드 **"Legacy anon, service_role API keys"** 탭에서 `eyJ...` JWT 포맷 service_role 키로 교체 완료. 전체 cron 정상화 확인.
 
 ### ⚠️ 환경변수 (라이브 / .env.local 양쪽)
 **Vercel Production env (이미 설정됨)**:
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`(publishable), `SUPABASE_LEGACY_ANON_KEY`(JWT, Python 용)
 - `AI_BASE_URL=https://api.openai.com/v1`, `OPENAI_API_KEY`, `DEFAULT_AI_MODEL=gpt-4o-mini`, `DEFAULT_EMBED_MODEL=text-embedding-3-small`
 
-**GitHub Secrets (이미 설정됨, 동일)**: 위 7개 + 옵션 `SUPABASE_SERVICE_ROLE_KEY`, `AI_GATEWAY_API_KEY`
+**GitHub Secrets (이미 설정됨, 동일)**: 위 7개 + **필수** `SUPABASE_SERVICE_ROLE_KEY`(RLS 활성화 후 필수, JWT 포맷 `eyJ...`), 옵션 `AI_GATEWAY_API_KEY`
 
 **로컬 .env.local 만 있는 것** (gitignore): 위 값 + 옵션 1 (Vercel AI Gateway) 주석 블록
 
-### 재개 지점 (2026-05-07 8차 세션 종료)
+### 재개 지점 (2026-05-07 9차 세션 종료)
 - **RLS 활성화** — 0007_enable_rls DB 적용 완료, supabase.ts service_role 전환 배포 완료.
 - **Topbar 날짜+시간** — 배포 완료.
 - **대시보드 랭킹뉴스** — ranking_news_item 기반 전 매체 표시, 매체 필터 드롭다운 작동. 배포 완료.
 - **낙종알림 /gap 링크** — 배포 완료.
+- **GitHub Actions cron 복구** — SUPABASE_SERVICE_ROLE_KEY를 JWT 포맷으로 교체, 전체 cron 정상화.
 - ⚠ **과거 날짜 category backfill** 미완료: 2026-04-25~29 날짜별로 `python -m scripts.collect_publications --date YYYYMMDD` 수동 실행 필요.
 - ⚠ **subscriber_snapshot / daily_publication_count 보존 기간 미결정** — 나중에 결정 후 cron-cleanup.yml에 삭제 로직 추가.
 - ⚠ **미보도 탐지 3단계** (임베딩 기반 2차 검증) — article.body 수집 + NCP 이전 후 작업 예정.
@@ -117,6 +119,12 @@
 - **(보너스) 셀렉터 견고화** — Naver UI 변경 대비 [scripts/lib/naver.py](scripts/lib/naver.py) 다중 selector 우선순위 확장.
 - **(보너스) GitHub auto-deploy 연결** — Settings → Git 에서 Vercel ↔ GitHub 연결, push 자동 배포.
 - **(미래) 본문 임베딩** — `article.body` 채워지면 클러스터링 입력을 `title + body[:500]` 으로 확장.
+
+### 판단 사항 (Supabase API 키 포맷 — RLS 이후)
+- **신 포맷 (`sb_secret_...`, `sb_publishable_...`)**: Supabase 대시보드 "API Keys" → "Publishable and secret API keys" 탭에 표시. `supabase-py 2.10.0`에서 인식 불가.
+- **구 JWT 포맷 (`eyJ...`)**: "API Keys" → **"Legacy anon, service_role API keys"** 탭에 표시. Python 스크립트는 반드시 이 포맷 사용.
+- **RLS 활성화 후**: `scripts/lib/db.py`의 `_resolve_key()`는 `SUPABASE_SERVICE_ROLE_KEY`(JWT 형식)만 허용. GitHub Secret / `.env.local` 모두 Legacy 탭의 `service_role` 키(`eyJ...`)로 설정해야 함.
+- **진단법**: cron이 `RuntimeError: SUPABASE_SERVICE_ROLE_KEY 가 .env.local 에 없습니다`로 실패하면 키 포맷 문제. `_is_jwt()` 는 `startswith("eyJ")` 체크.
 
 ### 판단 사항 (데이터 보존 정책 — 7일 cleanup)
 - **대상**: `ranking_news_snapshot` (→ `ranking_news_item` CASCADE), `section_ranking_snapshot`, `comment_metric`, `missed_issue_alert` 4테이블. ranking_news_item 포함 5개 테이블 효과.

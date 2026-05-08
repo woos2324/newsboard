@@ -99,6 +99,8 @@
 - [x] **미보도 탐지(/gap) UI 개선** — reason 텍스트 live 경쟁사 수 기준 동적 계산, 매체명 목록 미표시, 유사도 % 자사유사기사 링크 옆으로 이동. detect_gap.py 경쟁사명 `[:3]` 제한 제거.
 - [x] **구독자 분석 default 선택 세계일보만** — `buildInitialSelectedMedia()` isPinned 항목만 반환.
 - [x] **cron-publications 10분 주기** — 30분(17,47분) → 10분(02,12,22,32,42,52분 UTC).
+- [x] **trending_keyword 7일 보존** — cleanup_old_data.py 대상 테이블 추가.
+- [x] **실시간 트렌드 시간 KST 표시** — `formatFetchedAt()` UTC → KST 변환.
 
 ### ⚠️ 환경변수 (라이브 / .env.local 양쪽)
 **Vercel Production env (이미 설정됨)**:
@@ -116,6 +118,8 @@
 - **미보도 탐지(/gap) UI 개선** — reason 텍스트를 live 경쟁사 수 기준으로 동적 계산, 매체명 목록 미표시(하단에 이미 표시). 유사도 % 자사유사기사 링크 옆으로 이동. detect_gap.py `[:3]` 이름 제한 제거. 배포 완료.
 - **구독자 분석 default 선택** — 세계일보(isPinned)만 기본 선택으로 변경. 배포 완료.
 - **cron-publications 10분 주기** — 30분 → 10분(UTC :02,:12,:22,:32,:42,:52). GitHub push 완료.
+- **trending_keyword 7일 보존** — cleanup_old_data.py에 추가. cron-cleanup 매일 KST 00:00 자동 삭제.
+- **실시간 트렌드 시간 KST 표시** — `formatFetchedAt()` UTC → KST(+9) 변환. 배포 완료.
 - ⚠ **과거 날짜 category backfill** 미완료: 2026-04-25~29 날짜별로 `python -m scripts.collect_publications --date YYYYMMDD` 수동 실행 필요.
 - ⚠ **subscriber_snapshot / daily_publication_count 보존 기간 미결정** — 나중에 결정 후 cron-cleanup.yml에 삭제 로직 추가.
 - ⚠ **미보도 탐지 3단계** (임베딩 기반 2차 검증) — article.body 수집 + NCP 이전 후 작업 예정.

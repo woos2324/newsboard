@@ -2,8 +2,8 @@ name: Collect Self Publications
 
 on:
   schedule:
-    # 30분마다 (:17, :47) — round 분 회피 + 자사 발행 수 누락 보완 강화
-    - cron: "17,47 * * * *"
+    # 10분마다 — 자사 발행 수 실시간 반영
+    - cron: "2,12,22,32,42,52 * * * *"
   workflow_dispatch:
     inputs:
       date:

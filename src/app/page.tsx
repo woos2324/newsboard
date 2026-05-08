@@ -235,7 +235,18 @@ export default async function DashboardPage() {
                       className="flex items-center gap-3 py-3 text-sm"
                     >
                       <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium">{row.title}</p>
+                        {row.url ? (
+                          <a
+                            href={row.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block truncate font-medium hover:text-primary-500 hover:underline"
+                          >
+                            {row.title}
+                          </a>
+                        ) : (
+                          <p className="truncate font-medium">{row.title}</p>
+                        )}
                         <p className="caption mt-0.5">
                           {row.media} · {row.comments.toLocaleString()}개 댓글
                         </p>

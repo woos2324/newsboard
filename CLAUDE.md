@@ -6,7 +6,7 @@
 
 ---
 
-## 현재 진행 상태 (2026-05-07)
+## 현재 진행 상태 (2026-05-08)
 
 새 세션 시작 시 가장 먼저 확인할 진행 현황 체크포인트.
 
@@ -27,7 +27,7 @@
 | [cron-ranking.yml](.github/workflows/cron-ranking.yml) | 매시 7분 (UTC, KST :16) | 50개 매체 × **20건** 인기 랭킹 → article + snapshot |
 | [cron-cluster.yml](.github/workflows/cron-cluster.yml) | **ranking 성공 직후 (workflow_run)** + UTC :30 6시간 fallback | 미할당 article 임베딩 클러스터링 → issue_cluster (threshold=0.85) |
 | [cron-gap.yml](.github/workflows/cron-gap.yml) | **cluster 성공 직후 (workflow_run)** + UTC 01/07/13/19시 fallback | 클러스터 기반 미보도 탐지 → missed_issue_alert |
-| [cron-publications.yml](.github/workflows/cron-publications.yml) | 매시 17분·47분 (UTC, KST :26·:56) | 자사 전체 기사 제목·URL → article 적재 + daily_publication_count |
+| [cron-publications.yml](.github/workflows/cron-publications.yml) | **10분마다** (UTC :02,:12,:22,:32,:42,:52) | 자사 전체 기사 제목·URL → article 적재 + daily_publication_count |
 | [cron-section-ranking.yml](.github/workflows/cron-section-ranking.yml) | **ranking 성공 직후 (workflow_run)** + UTC 02/08/14/20시 fallback | 섹션별 랭킹 → section_ranking_snapshot |
 | [cron-subscribers.yml](.github/workflows/cron-subscribers.yml) | UTC 23:00 (KST 08:00) | followers.json API → subscriber_snapshot |
 | [cron-comments.yml](.github/workflows/cron-comments.yml) | 매시 15분 (UTC, KST :24) | 자사·경쟁사 기사 댓글 수 → comment_metric |
@@ -93,6 +93,12 @@
 - [x] **구글 급상승 검색어 통합** — `trending_keyword` 테이블 (0008 마이그레이션). [scripts/collect_trends.py](scripts/collect_trends.py) Google Trends RSS 수집 + 이슈 클러스터 매칭. [.github/workflows/cron-trends.yml](.github/workflows/cron-trends.yml) **10분마다** 자동 수집. 대시보드에 [TrendingKeywords](src/components/dashboard/TrendingKeywords.tsx) 섹션 추가. 매칭된 이슈 카드에 검색 급상승 배지 표시.
 - [x] **실시간 트렌드 전용 페이지 (/trending)** — [src/app/trending/page.tsx](src/app/trending/page.tsx) 신규. 통계 카드(전체/미보도/보도됨) + 4열 키워드 카드 그리드. 세계일보 보도 여부 표시, 관련뉴스 3건 inline 표시. FK 제약 0009 마이그레이션 적용.
 - [x] **실시간 트렌드 AI 요약** — `trending_keyword.ai_summary` 컬럼 (0010 마이그레이션). `collect_trends.py` 수집 시 gpt-4o-mini로 키워드별 2문장 한국어 요약 자동 생성. `/trending` 페이지 카드에 요약 표시(보도됨 시 세계일보 기사 링크 우선). 배치 윈도우 5분으로 설정 (10분 cron 중복 방지).
+- [x] **실시간 트렌드 카드 전면 개편** — 2열 그리드, AI 요약 상단, 자사보도 레이블+링크, 기사 제목 추천(①②③). 0011 마이그레이션(`title_suggestions TEXT[]`) + collect_trends.py `_generate_trend_content()` async + cron-trends OPENAI_API_KEY env 추가.
+- [x] **대시보드 랭킹뉴스 UX 개선** — 전체 모드 순번 idx+1 적용, 매체명 제목 우측으로 이동.
+- [x] **대시보드 인기 댓글 기사 제목 클릭 링크** — url 있을 때 외부 링크로 연결.
+- [x] **미보도 탐지(/gap) UI 개선** — reason 텍스트 live 경쟁사 수 기준 동적 계산, 매체명 목록 미표시, 유사도 % 자사유사기사 링크 옆으로 이동. detect_gap.py 경쟁사명 `[:3]` 제한 제거.
+- [x] **구독자 분석 default 선택 세계일보만** — `buildInitialSelectedMedia()` isPinned 항목만 반환.
+- [x] **cron-publications 10분 주기** — 30분(17,47분) → 10분(02,12,22,32,42,52분 UTC).
 
 ### ⚠️ 환경변수 (라이브 / .env.local 양쪽)
 **Vercel Production env (이미 설정됨)**:
@@ -103,12 +109,13 @@
 
 **로컬 .env.local 만 있는 것** (gitignore): 위 값 + 옵션 1 (Vercel AI Gateway) 주석 블록
 
-### 재개 지점 (2026-05-08 11차 세션 종료)
-- **실시간 트렌드 AI 요약** — 0010 마이그레이션(ai_summary 컬럼) 적용, collect_trends.py 비동기 AI 생성, /trending 카드 표시. 배포 완료.
-- **실시간 트렌드 페이지 (/trending)** — 4열 키워드 카드 그리드, 보도 여부 표시, 관련뉴스 3건. 사이드바 메뉴 연결. 배포 완료.
-- **cron-trends 10분 주기** — 배포 완료. 배치 윈도우 5분.
-- **RLS 활성화** — 0007_enable_rls DB 적용 완료.
-- **GitHub Actions cron 복구** — SUPABASE_SERVICE_ROLE_KEY JWT 포맷 교체, 전체 cron 정상화.
+### 재개 지점 (2026-05-08 12차 세션 종료)
+- **실시간 트렌드 카드 전면 개편** — 2열 그리드, AI 요약 상단 배치, 자사보도 레이블+링크, 제목 추천(①②③ PenLine 아이콘). 0011 마이그레이션(`title_suggestions TEXT[]`), collect_trends.py `_generate_trend_content()` async, cron-trends OPENAI_API_KEY env 추가. 배포 완료.
+- **대시보드 랭킹뉴스 수정** — 전체 모드 순번 idx+1 적용, 매체명 제목 우측으로 이동. 배포 완료.
+- **대시보드 인기 댓글 기사 제목 클릭 링크** — url 있을 때 `<a>` 태그로 전환. 배포 완료.
+- **미보도 탐지(/gap) UI 개선** — reason 텍스트를 live 경쟁사 수 기준으로 동적 계산, 매체명 목록 미표시(하단에 이미 표시). 유사도 % 자사유사기사 링크 옆으로 이동. detect_gap.py `[:3]` 이름 제한 제거. 배포 완료.
+- **구독자 분석 default 선택** — 세계일보(isPinned)만 기본 선택으로 변경. 배포 완료.
+- **cron-publications 10분 주기** — 30분 → 10분(UTC :02,:12,:22,:32,:42,:52). GitHub push 완료.
 - ⚠ **과거 날짜 category backfill** 미완료: 2026-04-25~29 날짜별로 `python -m scripts.collect_publications --date YYYYMMDD` 수동 실행 필요.
 - ⚠ **subscriber_snapshot / daily_publication_count 보존 기간 미결정** — 나중에 결정 후 cron-cleanup.yml에 삭제 로직 추가.
 - ⚠ **미보도 탐지 3단계** (임베딩 기반 2차 검증) — article.body 수집 + NCP 이전 후 작업 예정.

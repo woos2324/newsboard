@@ -55,18 +55,7 @@ function formatRankDelta(value: number | null): string {
 }
 
 function buildInitialSelectedMedia(rows: CompetitorSubscriberView[]): string[] {
-  const selected: string[] = [];
-
-  for (const row of rows) {
-    if (row.isPinned) selected.push(row.media);
-  }
-
-  for (const row of rows) {
-    if (selected.length >= 3) break;
-    if (!selected.includes(row.media)) selected.push(row.media);
-  }
-
-  return selected;
+  return rows.filter((row) => row.isPinned).map((row) => row.media);
 }
 
 function buildTicks(min: number, max: number, count = 6): number[] {

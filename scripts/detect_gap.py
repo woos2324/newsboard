@@ -180,7 +180,7 @@ def _detect(
         )
 
         competitor_names = sorted({m["name"] for m in media_list if not m.get("is_our_company")})
-        name_summary = ", ".join(competitor_names[:3]) + ("..." if len(competitor_names) > 3 else "")
+        name_summary = ", ".join(competitor_names)
         score = _priority_score(len(competitor_ids), verdict)
 
         if verdict == "미보도":

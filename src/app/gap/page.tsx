@@ -45,6 +45,7 @@ export default async function GapPage() {
             const vConfig = a.verdict ? verdictConfig[a.verdict] : null;
             const isReviewing = a.status === "reviewing";
             const isMissed = !a.verdict || a.verdict === "미보도";
+            const simPct = a.reason?.match(/유사도 (\d+%)/)?.[1] ?? null;
 
             return (
               <article
@@ -79,7 +80,9 @@ export default async function GapPage() {
                     </div>
 
                     {/* reason */}
-                    <p className="mt-1 text-[13px] text-muted">{a.reason ?? "-"}</p>
+                    <p className="mt-1 text-[13px] text-muted">
+                      {`경쟁사 ${a.competitors.length}개 매체 보도${isMissed ? ", 자사 미보도" : ""}`}
+                    </p>
 
                     {/* 자사 유사 기사 링크 */}
                     {a.similar_article && (
@@ -93,6 +96,7 @@ export default async function GapPage() {
                         자사 유사 기사: {a.similar_article.title.length > 35
                           ? a.similar_article.title.slice(0, 35) + "…"
                           : a.similar_article.title}
+                        {simPct && <span className="ml-1 font-normal">(유사도 {simPct})</span>}
                       </a>
                     )}
 

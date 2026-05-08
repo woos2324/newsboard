@@ -1,4 +1,4 @@
-import { TrendingUp } from "lucide-react";
+import { TrendingUp, Sparkles } from "lucide-react";
 import { PageShell } from "@/components/PageShell";
 import { getTrendingWithCoverage } from "@/lib/queries";
 
@@ -106,7 +106,12 @@ export default async function TrendingPage() {
                         📰 {item.our_article_title}
                       </a>
                     ) : item.ai_summary ? (
-                      <p className="line-clamp-3 leading-relaxed text-foreground/70">{item.ai_summary}</p>
+                      <div>
+                        <span className="mb-1 flex items-center gap-1 text-[10px] font-semibold text-primary-500">
+                          <Sparkles className="h-3 w-3" />AI 요약
+                        </span>
+                        <p className="line-clamp-3 leading-relaxed text-foreground/70">{item.ai_summary}</p>
+                      </div>
                     ) : (
                       <p className="italic text-muted">AI 요약 생성 중...</p>
                     )}

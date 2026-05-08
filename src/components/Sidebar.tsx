@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Layers,
+  TrendingUp,
   GitCompare,
   AlertTriangle,
   Users,
@@ -18,6 +19,7 @@ import {
 const nav = [
   { href: "/", label: "대시보드", icon: LayoutDashboard },
   { href: "/issue", label: "이슈 분석", icon: Layers },
+  { href: "/trending", label: "실시간 트렌드", icon: TrendingUp },
   { href: "/compare", label: "경쟁사 비교", icon: GitCompare },
   { href: "/gap", label: "미보도 탐지", icon: AlertTriangle },
   { href: "/articles", label: "자사 기사 현황", icon: Newspaper },

@@ -1462,6 +1462,47 @@ export async function getTrendingKeywords(): Promise<TrendingKeyword[]> {
   return (data ?? []) as TrendingKeyword[];
 }
 
+export type TrendingWithCoverage = TrendingKeyword & {
+  covered: boolean;
+  our_article_title: string | null;
+  our_article_url: string | null;
+};
+
+export async function getTrendingWithCoverage(): Promise<TrendingWithCoverage[]> {
+  const sb = getSupabase();
+
+  const trending = await getTrendingKeywords();
+  if (trending.length === 0) return [];
+
+  const { data: ourMedia } = await sb
+    .from("media_company")
+    .select("media_company_id")
+    .eq("is_our_company", true)
+    .single();
+
+  if (!ourMedia) return trending.map((t) => ({ ...t, covered: false, our_article_title: null, our_article_url: null }));
+
+  const since = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+  const { data: ourArticles } = await sb
+    .from("article")
+    .select("title, url")
+    .eq("media_company_id", ourMedia.media_company_id)
+    .gte("collected_at", since);
+
+  const articles = ourArticles ?? [];
+
+  return trending.map((t) => {
+    const kw = t.keyword.toLowerCase();
+    const match = articles.find((a) => a.title.toLowerCase().includes(kw));
+    return {
+      ...t,
+      covered: !!match,
+      our_article_title: match?.title ?? null,
+      our_article_url: match?.url ?? null,
+    };
+  });
+}
+
 export async function getIssueAISummary(
   clusterId: number
 ): Promise<AISummaryView | null> {

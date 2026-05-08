@@ -56,10 +56,13 @@ def _upsert_summary(
         "source_metadata": meta,
     }
     if existing:
+        row_id = existing[0]["ai_summary_id"]
+        sb.table("ai_summary").update(payload).eq("ai_summary_id", row_id).execute()
         return (
             sb.table("ai_summary")
-            .update(payload)
-            .eq("ai_summary_id", existing[0]["ai_summary_id"])
+            .select()
+            .eq("ai_summary_id", row_id)
+            .limit(1)
             .execute()
             .data[0]
         )

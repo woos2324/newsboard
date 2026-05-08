@@ -110,7 +110,7 @@ export default async function TrendingPage() {
                         <span className="mb-1 flex items-center gap-1 text-[10px] font-semibold text-primary-500">
                           <Sparkles className="h-3 w-3" />AI 요약
                         </span>
-                        <p className="line-clamp-3 leading-relaxed text-foreground/70">{item.ai_summary}</p>
+                        <p className="line-clamp-3 leading-relaxed text-primary-500/80">{item.ai_summary}</p>
                       </div>
                     ) : (
                       <p className="italic text-muted">AI 요약 생성 중...</p>

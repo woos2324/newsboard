@@ -101,10 +101,12 @@
 - [x] **cron-publications 10분 주기** — 30분(17,47분) → 10분(02,12,22,32,42,52분 UTC).
 - [x] **trending_keyword 7일 보존** — cleanup_old_data.py 대상 테이블 추가.
 - [x] **실시간 트렌드 시간 KST 표시** — `formatFetchedAt()` UTC → KST 변환.
+- [x] **AI 이슈 요약 재생성 500 오류 수정** — Vercel Production `SUPABASE_SERVICE_ROLE_KEY`가 빈 값이라 FastAPI DB 라우트 500 발생. Legacy service_role JWT(`eyJ...`)로 재설정 후 재배포. 이후 기존 `ai_summary` UPDATE 경로에서 `supabase-py 2.10.0`의 update builder가 `.select()` 미지원이라 재생성 시 `AttributeError` 발생 확인. [api/routes/report.py](api/routes/report.py), [scripts/generate_daily_briefing.py](scripts/generate_daily_briefing.py): UPDATE 실행 후 `ai_summary_id`로 별도 SELECT 재조회하도록 수정. production 배포 완료 + `/api/report/issue/6410` 연속 재생성 2회 200 확인.
 
 ### ⚠️ 환경변수 (라이브 / .env.local 양쪽)
 **Vercel Production env (이미 설정됨)**:
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`(publishable), `SUPABASE_LEGACY_ANON_KEY`(JWT, Python 용)
+- `SUPABASE_SERVICE_ROLE_KEY` — **필수**, Supabase Legacy `service_role` JWT(`eyJ...`) 사용. 빈 값/`sb_secret_...`/placeholder면 FastAPI DB 라우트가 500.
 - `AI_BASE_URL=https://api.openai.com/v1`, `OPENAI_API_KEY`, `DEFAULT_AI_MODEL=gpt-4o-mini`, `DEFAULT_EMBED_MODEL=text-embedding-3-small`
 
 **GitHub Secrets (이미 설정됨, 동일)**: 위 7개 + **필수** `SUPABASE_SERVICE_ROLE_KEY`(RLS 활성화 후 필수, JWT 포맷 `eyJ...`), 옵션 `AI_GATEWAY_API_KEY`
@@ -120,6 +122,7 @@
 - **cron-publications 10분 주기** — 30분 → 10분(UTC :02,:12,:22,:32,:42,:52). GitHub push 완료.
 - **trending_keyword 7일 보존** — cleanup_old_data.py에 추가. cron-cleanup 매일 KST 00:00 자동 삭제.
 - **실시간 트렌드 시간 KST 표시** — `formatFetchedAt()` UTC → KST(+9) 변환. 배포 완료.
+- **AI 이슈 요약 생성/재생성 복구** — Vercel Production env의 빈 `SUPABASE_SERVICE_ROLE_KEY`를 Legacy service_role JWT로 교체 후 재배포. `supabase-py 2.10.0` update builder `.select()` 미지원 문제는 UPDATE 후 별도 SELECT로 수정. GitHub 커밋 `b5ced3e` + production 배포 완료.
 - ⚠ **과거 날짜 category backfill** 미완료: 2026-04-25~29 날짜별로 `python -m scripts.collect_publications --date YYYYMMDD` 수동 실행 필요.
 - ⚠ **subscriber_snapshot / daily_publication_count 보존 기간 미결정** — 나중에 결정 후 cron-cleanup.yml에 삭제 로직 추가.
 - ⚠ **미보도 탐지 3단계** (임베딩 기반 2차 검증) — article.body 수집 + NCP 이전 후 작업 예정.

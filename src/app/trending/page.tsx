@@ -95,18 +95,20 @@ export default async function TrendingPage() {
                   </div>
 
                   {/* 보도 여부별 중간 영역 */}
-                  <div className="px-3 pb-2 text-xs">
+                  <div className="min-h-[48px] px-3 pb-3 text-xs">
                     {item.covered ? (
                       <a
                         href={item.our_article_url ?? "#"}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="truncate block text-primary-500 hover:underline"
+                        className="line-clamp-2 text-primary-500 hover:underline"
                       >
                         📰 {item.our_article_title}
                       </a>
+                    ) : item.ai_summary ? (
+                      <p className="line-clamp-3 leading-relaxed text-foreground/70">{item.ai_summary}</p>
                     ) : (
-                      <p className="text-muted italic">AI 요약 준비 중...</p>
+                      <p className="italic text-muted">AI 요약 생성 중...</p>
                     )}
                   </div>
 
@@ -123,7 +125,7 @@ export default async function TrendingPage() {
                           href={news.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-baseline gap-2 border-t border-border px-3 py-[5px] hover:bg-background"
+                          className="flex items-baseline gap-2 border-t border-border px-3 py-2 hover:bg-background"
                         >
                           <span className="flex-1 truncate text-xs text-foreground/80">
                             {news.title}

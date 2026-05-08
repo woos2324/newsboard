@@ -603,6 +603,7 @@ export type Database = {
       }
       trending_keyword: {
         Row: {
+          ai_summary: string | null
           approx_traffic: string
           fetched_at: string
           keyword: string
@@ -612,6 +613,7 @@ export type Database = {
           trending_id: number
         }
         Insert: {
+          ai_summary?: string | null
           approx_traffic: string
           fetched_at?: string
           keyword: string
@@ -621,6 +623,7 @@ export type Database = {
           trending_id?: number
         }
         Update: {
+          ai_summary?: string | null
           approx_traffic?: string
           fetched_at?: string
           keyword?: string

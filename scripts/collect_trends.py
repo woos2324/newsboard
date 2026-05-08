@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import re
 import sys
 from datetime import datetime, timezone
@@ -21,6 +22,7 @@ if sys.platform == "win32":
 
 import httpx
 
+from api.lib.ai import chat_completion
 from scripts.lib.db import get_client
 
 TRENDS_RSS_URL = "https://trends.google.com/trending/rss?geo=KR"
@@ -120,6 +122,32 @@ def _load_recent_clusters(sb) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# AI 요약 생성
+# ---------------------------------------------------------------------------
+
+async def _generate_ai_summary(keyword: str, related_news: list[dict]) -> str:
+    titles = [n["title"] for n in related_news if n.get("title")]
+    if not titles:
+        return ""
+    news_text = "\n".join(f"- {t}" for t in titles[:5])
+    system = "당신은 뉴스 편집 어시스턴트다. 간결하게 2문장 이내로 답한다."
+    user = (
+        f"'{keyword}' 키워드 관련 뉴스 제목들:\n{news_text}\n\n"
+        "이 키워드가 왜 급상승 중인지 한국어 2문장으로 요약하라. "
+        "JSON 없이 순수 텍스트로만 반환한다."
+    )
+    try:
+        content, _ = await chat_completion(
+            [{"role": "system", "content": system}, {"role": "user", "content": user}],
+            temperature=0.3,
+        )
+        return content.strip()
+    except Exception as e:
+        print(f"  [경고] AI 요약 실패 ({keyword}): {e}")
+        return ""
+
+
+# ---------------------------------------------------------------------------
 # 저장
 # ---------------------------------------------------------------------------
 
@@ -132,6 +160,7 @@ def _save(sb, trends: list[dict], dry_run: bool) -> None:
             "traffic_rank": t["traffic_rank"],
             "matched_cluster_id": t.get("matched_cluster_id"),
             "related_news": t["related_news"],
+            "ai_summary": t.get("ai_summary") or None,
             "fetched_at": now,
         }
         for t in trends
@@ -152,7 +181,7 @@ def _save(sb, trends: list[dict], dry_run: bool) -> None:
 # main
 # ---------------------------------------------------------------------------
 
-def main() -> None:
+async def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
@@ -174,8 +203,18 @@ def main() -> None:
             matched += 1
 
     print(f"  클러스터 매칭: {matched}/{len(trends)}")
+
+    print("  AI 요약 생성 중...")
+    summaries = await asyncio.gather(
+        *[_generate_ai_summary(t["keyword"], t["related_news"]) for t in trends]
+    )
+    for t, summary in zip(trends, summaries):
+        t["ai_summary"] = summary
+    generated = sum(1 for s in summaries if s)
+    print(f"  AI 요약 생성: {generated}/{len(trends)}")
+
     _save(sb, trends, dry_run=args.dry_run)
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

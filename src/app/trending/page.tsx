@@ -113,7 +113,7 @@ export default async function TrendingPage() {
                   </div>
 
                   {/* 관련 뉴스 3건 */}
-                  <div className="mt-auto">
+                  <div className="mt-auto pb-3">
                     {relatedNews.length === 0 ? (
                       <div className="border-t border-border px-3 py-2 text-xs text-muted">
                         관련 뉴스 없음
@@ -127,10 +127,10 @@ export default async function TrendingPage() {
                           rel="noopener noreferrer"
                           className="flex items-baseline gap-2 border-t border-border px-3 py-2 hover:bg-background"
                         >
-                          <span className="flex-1 truncate text-xs text-foreground/80">
+                          <span className="flex-1 truncate text-sm leading-snug text-foreground/80">
                             {news.title}
                           </span>
-                          <span className="shrink-0 text-[11px] text-muted">
+                          <span className="shrink-0 text-xs text-muted">
                             {news.source}
                           </span>
                         </a>

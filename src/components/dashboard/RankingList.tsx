@@ -52,20 +52,20 @@ export function RankingList({ items }: Props) {
               <span className="w-5 text-center text-xs font-semibold text-muted">
                 {selected === "전체" ? idx + 1 : item.rank}
               </span>
-              <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 flex-1 items-baseline gap-2">
                 {item.url ? (
                   <a
                     href={item.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="block truncate font-medium hover:text-primary-500"
+                    className="flex-1 truncate font-medium hover:text-primary-500"
                   >
                     {item.title}
                   </a>
                 ) : (
-                  <p className="truncate font-medium">{item.title}</p>
+                  <p className="flex-1 truncate font-medium">{item.title}</p>
                 )}
-                <p className="caption">{item.media}</p>
+                <span className="shrink-0 text-xs text-muted">{item.media}</span>
               </div>
             </li>
           ))

@@ -12,6 +12,7 @@ import { RankingList } from "@/components/dashboard/RankingList";
 import { MissedAlerts } from "@/components/dashboard/MissedAlerts";
 import { SubscriberChart } from "@/components/dashboard/SubscriberChart";
 import { AISummaryCard } from "@/components/dashboard/AISummaryCard";
+import { TrendingKeywords } from "@/components/dashboard/TrendingKeywords";
 import {
   getOverviewStats,
   getIssues,
@@ -20,6 +21,7 @@ import {
   getOurSubscriberSeries,
   getOurTopComments,
   getLatestDailySummary,
+  getTrendingKeywords,
 } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
@@ -42,7 +44,7 @@ function formatDateTimeKr(iso: string): string {
 }
 
 export default async function DashboardPage() {
-  const [stats, issues, rankingNews, alerts, sub, topComments, aiSummary] =
+  const [stats, issues, rankingNews, alerts, sub, topComments, aiSummary, trending] =
     await Promise.all([
       getOverviewStats(),
       getIssues(4),
@@ -51,7 +53,14 @@ export default async function DashboardPage() {
       getOurSubscriberSeries(7),
       getOurTopComments(4),
       getLatestDailySummary(),
+      getTrendingKeywords(),
     ]);
+
+  const trendingByCluster = new Map(
+    trending
+      .filter((t) => t.matched_cluster_id !== null)
+      .map((t) => [t.matched_cluster_id!, t.approx_traffic])
+  );
 
   const statCards = [
     {
@@ -94,6 +103,7 @@ export default async function DashboardPage() {
     mediaNames: i.mediaNames,
     mediaCount: i.mediaCount,
     trend: Math.round(i.confidence * 100),
+    trendingTraffic: trendingByCluster.get(i.cluster_id),
   }));
 
 
@@ -175,6 +185,15 @@ export default async function DashboardPage() {
               )}
             </div>
           </section>
+
+          {trending.length > 0 && (
+            <section className="mt-6">
+              <TrendingKeywords
+                items={trending}
+                fetchedAt={trending[0].fetched_at}
+              />
+            </section>
+          )}
 
           <section className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
             <div className="lg:col-span-2">

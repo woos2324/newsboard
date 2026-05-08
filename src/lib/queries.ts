@@ -1420,6 +1420,48 @@ export async function getArticleList(
   };
 }
 
+// ===================================================================
+// Google Trends — 급상승 검색어
+// ===================================================================
+
+export type TrendingKeyword = {
+  trending_id: number;
+  keyword: string;
+  approx_traffic: string;
+  traffic_rank: number;
+  matched_cluster_id: number | null;
+  related_news: { title: string; url: string; source: string }[] | null;
+  fetched_at: string;
+};
+
+export async function getTrendingKeywords(): Promise<TrendingKeyword[]> {
+  const sb = getSupabase();
+
+  const { data: latest } = await sb
+    .from("trending_keyword")
+    .select("fetched_at")
+    .order("fetched_at", { ascending: false })
+    .limit(1)
+    .single();
+
+  if (!latest) return [];
+
+  const batchStart = new Date(
+    new Date(latest.fetched_at).getTime() - 30 * 60 * 1000
+  ).toISOString();
+
+  const { data, error } = await sb
+    .from("trending_keyword")
+    .select(
+      "trending_id, keyword, approx_traffic, traffic_rank, matched_cluster_id, related_news, fetched_at"
+    )
+    .gte("fetched_at", batchStart)
+    .order("traffic_rank", { ascending: true });
+
+  if (error) throw error;
+  return (data ?? []) as TrendingKeyword[];
+}
+
 export async function getIssueAISummary(
   clusterId: number
 ): Promise<AISummaryView | null> {

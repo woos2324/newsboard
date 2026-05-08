@@ -1,4 +1,4 @@
-import { TrendingUp } from "lucide-react";
+import { Flame, TrendingUp } from "lucide-react";
 
 type Props = {
   rank: number;
@@ -9,6 +9,7 @@ type Props = {
   mediaNames: string[];
   mediaCount: number;
   trend: number;
+  trendingTraffic?: string;
 };
 
 export function IssueCard({
@@ -20,6 +21,7 @@ export function IssueCard({
   mediaNames,
   mediaCount,
   trend,
+  trendingTraffic,
 }: Props) {
   return (
     <article className="card card-hover flex h-full cursor-pointer flex-col">
@@ -34,6 +36,15 @@ export function IssueCard({
           </p>
         </div>
       </div>
+
+      {trendingTraffic && (
+        <div className="mt-2">
+          <span className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning">
+            <Flame className="h-3 w-3" />
+            검색 급상승 · {trendingTraffic}
+          </span>
+        </div>
+      )}
 
       <div className="mt-3 flex flex-wrap gap-1.5">
         {keywords.map((k) => (

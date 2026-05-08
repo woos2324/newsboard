@@ -374,7 +374,9 @@ export type Database = {
           reason: string | null
           reviewed_at: string | null
           reviewed_by_user_id: number | null
+          similar_article_id: number | null
           target_media_company_id: number
+          verdict: string | null
         }
         Insert: {
           alert_status?: string
@@ -387,7 +389,9 @@ export type Database = {
           reason?: string | null
           reviewed_at?: string | null
           reviewed_by_user_id?: number | null
+          similar_article_id?: number | null
           target_media_company_id: number
+          verdict?: string | null
         }
         Update: {
           alert_status?: string
@@ -400,7 +404,9 @@ export type Database = {
           reason?: string | null
           reviewed_at?: string | null
           reviewed_by_user_id?: number | null
+          similar_article_id?: number | null
           target_media_company_id?: number
+          verdict?: string | null
         }
         Relationships: [
           {
@@ -416,6 +422,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "app_user"
             referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "missed_issue_alert_similar_article_id_fkey"
+            columns: ["similar_article_id"]
+            isOneToOne: false
+            referencedRelation: "article"
+            referencedColumns: ["article_id"]
           },
           {
             foreignKeyName: "missed_issue_alert_target_media_company_id_fkey"
@@ -587,6 +600,36 @@ export type Database = {
             referencedColumns: ["media_company_id"]
           },
         ]
+      }
+      trending_keyword: {
+        Row: {
+          approx_traffic: string
+          fetched_at: string
+          keyword: string
+          matched_cluster_id: number | null
+          related_news: Json | null
+          traffic_rank: number
+          trending_id: number
+        }
+        Insert: {
+          approx_traffic: string
+          fetched_at?: string
+          keyword: string
+          matched_cluster_id?: number | null
+          related_news?: Json | null
+          traffic_rank: number
+          trending_id?: number
+        }
+        Update: {
+          approx_traffic?: string
+          fetched_at?: string
+          keyword?: string
+          matched_cluster_id?: number | null
+          related_news?: Json | null
+          traffic_rank?: number
+          trending_id?: number
+        }
+        Relationships: []
       }
     }
     Views: {

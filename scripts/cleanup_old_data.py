@@ -5,6 +5,7 @@
   - section_ranking_snapshot
   - comment_metric
   - missed_issue_alert (reviewing 제외, open/resolved/ignored)
+  - trending_keyword
 
 사용:
   python -m scripts.cleanup_old_data
@@ -80,6 +81,15 @@ def main() -> None:
         .execute()
     )
     print(f"missed_issue_alert 삭제: {len(res.data)}건 (reviewing 제외)")
+
+    # 5. trending_keyword
+    res = (
+        sb.table("trending_keyword")
+        .delete()
+        .lt("fetched_at", cutoff)
+        .execute()
+    )
+    print(f"trending_keyword 삭제: {len(res.data)}건")
 
     print("정리 완료")
 

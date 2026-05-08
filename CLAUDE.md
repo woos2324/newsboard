@@ -147,7 +147,7 @@
 - **진단법**: cron이 `RuntimeError: SUPABASE_SERVICE_ROLE_KEY 가 .env.local 에 없습니다`로 실패하면 키 포맷 문제. `_is_jwt()` 는 `startswith("eyJ")` 체크.
 
 ### 판단 사항 (데이터 보존 정책 — 7일 cleanup)
-- **대상**: `ranking_news_snapshot` (→ `ranking_news_item` CASCADE), `section_ranking_snapshot`, `comment_metric`, `missed_issue_alert` 4테이블. ranking_news_item 포함 5개 테이블 효과.
+- **대상**: `ranking_news_snapshot` (→ `ranking_news_item` CASCADE), `section_ranking_snapshot`, `comment_metric`, `missed_issue_alert`, `trending_keyword` 5테이블. ranking_news_item 포함 6개 테이블 효과.
 - **missed_issue_alert 삭제 제외**: `reviewing` 상태는 삭제 제외. 검토 중인 항목을 자동 삭제하면 안 됨.
 - **미보도 UI 표시 정책**: DB 삭제(7일)와 UI 표시(2일)를 분리. `open` 항목은 최근 2일치만 표시(검토 필요성 낮아짐), `reviewing` 항목은 전체 표시(검토 완료 전까지 유지). `detected_at DESC` 정렬.
 - **제외**: `subscriber_snapshot`, `daily_publication_count` — 보존 기간 미결정. 날짜별 1건씩 쌓이므로 용량 부담 적음. 장기 추이 분석용으로 보존 필요할 수 있음.

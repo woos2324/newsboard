@@ -1447,7 +1447,7 @@ export async function getTrendingKeywords(): Promise<TrendingKeyword[]> {
   if (!latest) return [];
 
   const batchStart = new Date(
-    new Date(latest.fetched_at).getTime() - 30 * 60 * 1000
+    new Date(latest.fetched_at).getTime() - 5 * 60 * 1000
   ).toISOString();
 
   const { data, error } = await sb

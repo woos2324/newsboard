@@ -1432,6 +1432,7 @@ export type TrendingKeyword = {
   matched_cluster_id: number | null;
   related_news: { title: string; url: string; source: string }[] | null;
   ai_summary: string | null;
+  title_suggestions: string[] | null;
   fetched_at: string;
 };
 
@@ -1454,7 +1455,7 @@ export async function getTrendingKeywords(): Promise<TrendingKeyword[]> {
   const { data, error } = await sb
     .from("trending_keyword")
     .select(
-      "trending_id, keyword, approx_traffic, traffic_rank, matched_cluster_id, related_news, ai_summary, fetched_at"
+      "trending_id, keyword, approx_traffic, traffic_rank, matched_cluster_id, related_news, ai_summary, title_suggestions, fetched_at"
     )
     .gte("fetched_at", batchStart)
     .order("traffic_rank", { ascending: true });

@@ -609,6 +609,7 @@ export type Database = {
           keyword: string
           matched_cluster_id: number | null
           related_news: Json | null
+          title_suggestions: string[] | null
           traffic_rank: number
           trending_id: number
         }
@@ -619,6 +620,7 @@ export type Database = {
           keyword: string
           matched_cluster_id?: number | null
           related_news?: Json | null
+          title_suggestions?: string[] | null
           traffic_rank: number
           trending_id?: number
         }
@@ -629,6 +631,7 @@ export type Database = {
           keyword?: string
           matched_cluster_id?: number | null
           related_news?: Json | null
+          title_suggestions?: string[] | null
           traffic_rank?: number
           trending_id?: number
         }

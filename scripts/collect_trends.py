@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import re
 import sys
 from datetime import datetime, timezone
@@ -122,29 +123,40 @@ def _load_recent_clusters(sb) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# AI 요약 생성
+# AI 콘텐츠 생성 (요약 + 제목 추천)
 # ---------------------------------------------------------------------------
 
-async def _generate_ai_summary(keyword: str, related_news: list[dict]) -> str:
+async def _generate_trend_content(keyword: str, related_news: list[dict]) -> dict:
+    """키워드 + 관련뉴스 → {summary, title_suggestions}. 한 번의 AI 호출로 생성."""
     titles = [n["title"] for n in related_news if n.get("title")]
     if not titles:
-        return ""
+        return {"summary": "", "title_suggestions": []}
     news_text = "\n".join(f"- {t}" for t in titles[:5])
-    system = "당신은 뉴스 편집 어시스턴트다. 간결하게 2문장 이내로 답한다."
+    system = "당신은 뉴스 편집 어시스턴트다. 출력은 항상 JSON 객체 하나로만 반환한다."
     user = (
         f"'{keyword}' 키워드 관련 뉴스 제목들:\n{news_text}\n\n"
-        "이 키워드가 왜 급상승 중인지 한국어 2문장으로 요약하라. "
-        "JSON 없이 순수 텍스트로만 반환한다."
+        "아래 JSON 형식으로 반환하라.\n"
+        '{"summary": "이 키워드가 왜 급상승 중인지 2문장 한국어 요약", '
+        '"title_suggestions": ["검색 최적화된 기사 제목 후보1", "후보2", "후보3"]}\n'
+        "규칙:\n"
+        "- summary: 2문장 이내\n"
+        "- title_suggestions: 2~3개, 각 30자 이내, SEO에 강한 한국어 제목\n"
+        "- JSON 외 텍스트/마크다운 금지"
     )
     try:
         content, _ = await chat_completion(
             [{"role": "system", "content": system}, {"role": "user", "content": user}],
             temperature=0.3,
+            response_format_json=True,
         )
-        return content.strip()
+        result = json.loads(content)
+        return {
+            "summary": (result.get("summary") or "").strip(),
+            "title_suggestions": result.get("title_suggestions") or [],
+        }
     except Exception as e:
-        print(f"  [경고] AI 요약 실패 ({keyword}): {e}")
-        return ""
+        print(f"  [경고] AI 콘텐츠 생성 실패 ({keyword}): {e}")
+        return {"summary": "", "title_suggestions": []}
 
 
 # ---------------------------------------------------------------------------
@@ -161,6 +173,7 @@ def _save(sb, trends: list[dict], dry_run: bool) -> None:
             "matched_cluster_id": t.get("matched_cluster_id"),
             "related_news": t["related_news"],
             "ai_summary": t.get("ai_summary") or None,
+            "title_suggestions": t.get("title_suggestions") or None,
             "fetched_at": now,
         }
         for t in trends
@@ -204,14 +217,15 @@ async def main() -> None:
 
     print(f"  클러스터 매칭: {matched}/{len(trends)}")
 
-    print("  AI 요약 생성 중...")
-    summaries = await asyncio.gather(
-        *[_generate_ai_summary(t["keyword"], t["related_news"]) for t in trends]
+    print("  AI 콘텐츠 생성 중...")
+    contents = await asyncio.gather(
+        *[_generate_trend_content(t["keyword"], t["related_news"]) for t in trends]
     )
-    for t, summary in zip(trends, summaries):
-        t["ai_summary"] = summary
-    generated = sum(1 for s in summaries if s)
-    print(f"  AI 요약 생성: {generated}/{len(trends)}")
+    for t, c in zip(trends, contents):
+        t["ai_summary"] = c["summary"]
+        t["title_suggestions"] = c["title_suggestions"]
+    generated = sum(1 for c in contents if c["summary"])
+    print(f"  AI 콘텐츠 생성: {generated}/{len(trends)}")
 
     _save(sb, trends, dry_run=args.dry_run)
 

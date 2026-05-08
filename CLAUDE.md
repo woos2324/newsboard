@@ -90,6 +90,7 @@
 - [x] **대시보드 랭킹뉴스 전 매체 표시** — `getRecentArticles`(article 테이블, 세계일보 위주) → `getRankingNews`(`ranking_news_item`+`ranking_news_snapshot` 조인). [src/components/dashboard/RankingList.tsx](src/components/dashboard/RankingList.tsx) 클라이언트 컴포넌트로 전환, 매체 드롭다운 실제 필터링. limit 500 (50매체×10건).
 - [x] **낙종알림 "전체 낙종 이슈 보기" /gap 링크** — `<button>` → `<Link href="/gap">` 교체.
 - [x] **GitHub Actions cron 복구** — RLS 활성화 후 `scripts/lib/db.py`가 `SUPABASE_SERVICE_ROLE_KEY` JWT 전용으로 변경됐으나, GitHub Secret에 Supabase 신 포맷(`sb_secret_...`)이 저장되어 `_is_jwt()` 체크 실패 → 전체 cron 중단. Supabase 대시보드 **"Legacy anon, service_role API keys"** 탭에서 `eyJ...` JWT 포맷 service_role 키로 교체 완료. 전체 cron 정상화 확인.
+- [x] **구글 급상승 검색어 통합** — `trending_keyword` 테이블 (0008 마이그레이션). [scripts/collect_trends.py](scripts/collect_trends.py) Google Trends RSS 수집 + 이슈 클러스터 매칭. [.github/workflows/cron-trends.yml](.github/workflows/cron-trends.yml) 6시간마다 자동 수집. 대시보드에 [TrendingKeywords](src/components/dashboard/TrendingKeywords.tsx) 섹션 추가. 매칭된 이슈 카드에 검색 급상승 배지 표시.
 
 ### ⚠️ 환경변수 (라이브 / .env.local 양쪽)
 **Vercel Production env (이미 설정됨)**:
@@ -100,12 +101,14 @@
 
 **로컬 .env.local 만 있는 것** (gitignore): 위 값 + 옵션 1 (Vercel AI Gateway) 주석 블록
 
-### 재개 지점 (2026-05-07 9차 세션 종료)
+### 재개 지점 (2026-05-08 10차 세션 종료)
+- **구글 급상승 검색어 통합** — DB 마이그레이션 적용, collect_trends.py + cron-trends.yml 생성, 대시보드 TrendingKeywords 섹션 + IssueCard 배지 추가. 배포 완료. GitHub Actions `cron-trends.yml` 첫 수동 실행 필요 (데이터 수집용).
 - **RLS 활성화** — 0007_enable_rls DB 적용 완료, supabase.ts service_role 전환 배포 완료.
 - **Topbar 날짜+시간** — 배포 완료.
 - **대시보드 랭킹뉴스** — ranking_news_item 기반 전 매체 표시, 매체 필터 드롭다운 작동. 배포 완료.
 - **낙종알림 /gap 링크** — 배포 완료.
 - **GitHub Actions cron 복구** — SUPABASE_SERVICE_ROLE_KEY를 JWT 포맷으로 교체, 전체 cron 정상화.
+- ⚠ **cron-trends 첫 실행** 필요: GitHub Actions → cron-trends.yml → Run workflow 로 수동 트리거하면 첫 데이터 수집. 이후 6시간마다 자동.
 - ⚠ **과거 날짜 category backfill** 미완료: 2026-04-25~29 날짜별로 `python -m scripts.collect_publications --date YYYYMMDD` 수동 실행 필요.
 - ⚠ **subscriber_snapshot / daily_publication_count 보존 기간 미결정** — 나중에 결정 후 cron-cleanup.yml에 삭제 로직 추가.
 - ⚠ **미보도 탐지 3단계** (임베딩 기반 2차 검증) — article.body 수집 + NCP 이전 후 작업 예정.
@@ -119,6 +122,16 @@
 - **(보너스) 셀렉터 견고화** — Naver UI 변경 대비 [scripts/lib/naver.py](scripts/lib/naver.py) 다중 selector 우선순위 확장.
 - **(보너스) GitHub auto-deploy 연결** — Settings → Git 에서 Vercel ↔ GitHub 연결, push 자동 배포.
 - **(미래) 본문 임베딩** — `article.body` 채워지면 클러스터링 입력을 `title + body[:500]` 으로 확장.
+
+### 판단 사항 (구글 급상승 검색어 통합)
+- **데이터 소스**: Google Trends RSS (`trends.google.com/trending/rss?geo=KR`). 무료, 인증 불필요, GitHub Actions 미국 IP에서 접근 가능. ~6시간마다 업데이트.
+- **approx_traffic**: 구글이 제공하는 대략적 검색량 범위. `100+`, `1K+`, `10K+`, `100K+`, `1M+` — 정확한 수치 아님.
+- **클러스터 매칭 로직**: `_match_cluster()` — 키워드가 클러스터 제목/키워드에 포함(직접 포함)되거나 제목 바이그램 Jaccard ≥ 0.2. 느슨하게 설계해 매칭율 높임.
+- **배치 그룹화**: `fetched_at` 기준 30분 이내를 같은 배치로 처리. `getTrendingKeywords()` 및 `collect_trends.py` 모두 동일 30분 윈도우 적용.
+- **대시보드 표시**: trending 데이터 있을 때만 섹션 표시 (`trending.length > 0`). 클러스터 매칭된 키워드는 `/issue/[id]` 링크로 연결.
+- **IssueCard 배지**: `trendingByCluster` Map으로 cluster_id → approx_traffic 빠른 조회. 매칭된 이슈 카드에만 오렌지 배지 노출.
+- **cron 주기**: 6시간 (UTC 01/07/13/19 = KST 10/16/22/04시). RSS 업데이트 주기와 맞춤. trending_keyword 테이블은 cleanup 대상 아님 — 6시간 배치 × 4/일 × 20~30개 = 매일 ~100건, 용량 부담 적음.
+- **RLS 정책**: trending_keyword 테이블은 14번째 테이블. 0007_enable_rls 는 13개 기준이었으므로 trending_keyword는 RLS 미적용 상태. 현재 service_role 키로 접근하므로 기능 문제 없음 (필요 시 별도 migration 추가).
 
 ### 판단 사항 (Supabase API 키 포맷 — RLS 이후)
 - **신 포맷 (`sb_secret_...`, `sb_publishable_...`)**: Supabase 대시보드 "API Keys" → "Publishable and secret API keys" 탭에 표시. `supabase-py 2.10.0`에서 인식 불가.

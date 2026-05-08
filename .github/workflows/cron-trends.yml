@@ -18,6 +18,9 @@ jobs:
     env:
       NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
+      DEFAULT_AI_MODEL: ${{ secrets.DEFAULT_AI_MODEL }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

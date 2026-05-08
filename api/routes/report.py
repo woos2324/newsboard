@@ -66,6 +66,7 @@ def _upsert_summary(
             sb.table("ai_summary")
             .update(payload)
             .eq("ai_summary_id", row_id)
+            .select()
             .execute()
             .data[0]
         )
@@ -141,7 +142,7 @@ async def generate_daily() -> AISummaryOut:
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"AI 요약 생성 실패: {e}") from e
 
-    title = result.get("title") or f"{today} 일간 브리핑"
+    title = result.get("title") or f"{today_kst} 일간 브리핑"
     content = result.get("summary") or ""
     bullets_raw = result.get("bullets") or []
 

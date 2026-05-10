@@ -58,9 +58,6 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-4">
-        <p className="px-3 pb-2 text-[11px] font-medium uppercase tracking-wider text-muted">
-          Workspace
-        </p>
         <ul className="space-y-1">
           {nav.map((item) => {
             const Icon = item.icon;

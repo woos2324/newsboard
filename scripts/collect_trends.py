@@ -123,6 +123,33 @@ def _load_recent_clusters(sb) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# AI 콘텐츠 캐시 (1시간 내 동일 키워드 재사용)
+# ---------------------------------------------------------------------------
+
+def _load_recent_ai_content(sb, keywords: list[str]) -> dict[str, dict]:
+    from datetime import timedelta
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+    result = (
+        sb.table("trending_keyword")
+        .select("keyword, ai_summary, title_suggestions")
+        .in_("keyword", keywords)
+        .gte("fetched_at", cutoff)
+        .not_.is_("ai_summary", "null")
+        .order("fetched_at", desc=True)
+        .execute()
+    )
+    seen: dict[str, dict] = {}
+    for row in (result.data or []):
+        kw = row["keyword"]
+        if kw not in seen:
+            seen[kw] = {
+                "summary": row["ai_summary"] or "",
+                "title_suggestions": row["title_suggestions"] or [],
+            }
+    return seen
+
+
+# ---------------------------------------------------------------------------
 # AI 콘텐츠 생성 (요약 + 제목 추천)
 # ---------------------------------------------------------------------------
 
@@ -218,14 +245,25 @@ async def main() -> None:
     print(f"  클러스터 매칭: {matched}/{len(trends)}")
 
     print("  AI 콘텐츠 생성 중...")
-    contents = await asyncio.gather(
-        *[_generate_trend_content(t["keyword"], t["related_news"]) for t in trends]
-    )
-    for t, c in zip(trends, contents):
-        t["ai_summary"] = c["summary"]
-        t["title_suggestions"] = c["title_suggestions"]
-    generated = sum(1 for c in contents if c["summary"])
-    print(f"  AI 콘텐츠 생성: {generated}/{len(trends)}")
+    cached = _load_recent_ai_content(sb, [t["keyword"] for t in trends])
+    to_generate = [t for t in trends if t["keyword"] not in cached]
+    print(f"  캐시 재사용: {len(cached)}건 / 신규 생성: {len(to_generate)}건")
+
+    if to_generate:
+        contents = await asyncio.gather(
+            *[_generate_trend_content(t["keyword"], t["related_news"]) for t in to_generate]
+        )
+        for t, c in zip(to_generate, contents):
+            t["ai_summary"] = c["summary"]
+            t["title_suggestions"] = c["title_suggestions"]
+
+    for t in trends:
+        if t["keyword"] in cached:
+            t["ai_summary"] = cached[t["keyword"]]["summary"]
+            t["title_suggestions"] = cached[t["keyword"]]["title_suggestions"]
+
+    generated = sum(1 for t in trends if t.get("ai_summary"))
+    print(f"  AI 콘텐츠 완료: {generated}/{len(trends)}")
 
     _save(sb, trends, dry_run=args.dry_run)
 

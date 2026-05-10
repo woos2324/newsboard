@@ -104,6 +104,7 @@
 - [x] **AI 이슈 요약 재생성 500 오류 수정** — Vercel Production `SUPABASE_SERVICE_ROLE_KEY`가 빈 값이라 FastAPI DB 라우트 500 발생. Legacy service_role JWT(`eyJ...`)로 재설정 후 재배포. 이후 기존 `ai_summary` UPDATE 경로에서 `supabase-py 2.10.0`의 update builder가 `.select()` 미지원이라 재생성 시 `AttributeError` 발생 확인. [api/routes/report.py](api/routes/report.py), [scripts/generate_daily_briefing.py](scripts/generate_daily_briefing.py): UPDATE 실행 후 `ai_summary_id`로 별도 SELECT 재조회하도록 수정. production 배포 완료 + `/api/report/issue/6410` 연속 재생성 2회 200 확인.
 - [x] **자사기사현황 기사 수 불일치 수정** — 기사 목록은 `article` 테이블 KST 기준 조회, 트렌드 그래프는 `daily_publication_count` 스냅샷 조회로 소스가 달라 숫자 불일치 발생. [src/lib/queries.ts](src/lib/queries.ts) `getOurArticlesPage()`: 트렌드 7일 및 전일 대비 수치를 `daily_publication_count` → `article` 테이블 COUNT로 교체 (동일 KST 시간 필터 적용). `shiftDateString()` 헬퍼 추가로 날짜 계산 시 JS Date 타임존 오류 방지. 배포 완료.
 - [x] **네이버 섹션 코드 104/105 매핑 수정** — 실제 네이버 기준과 반대로 `104=it(IT/과학)`, `105=world(세계)`로 잘못 매핑되어 있었음. [scripts/lib/naver.py](scripts/lib/naver.py) `NAVER_SECTIONS` 104↔105 스왑. DB `article.category` 기존 데이터도 `it`↔`world` 일괄 UPDATE (215건). 배포 완료.
+- [x] **트렌드 AI 중복 생성 최적화** — `collect_trends.py`가 10분마다 전체 키워드 AI 호출 → 최근 1시간 내 동일 키워드는 DB에서 재사용하도록 수정. `_load_recent_ai_content()` 추가. AI 호출 횟수 최대 1/6 감소, GPT 비용 ~24,900원 → ~4,200원/월로 절감. 배포 완료.
 
 ### ⚠️ 환경변수 (라이브 / .env.local 양쪽)
 **Vercel Production env (이미 설정됨)**:
@@ -127,6 +128,7 @@
 - **AI 이슈 요약 생성/재생성 복구** — Vercel Production env의 빈 `SUPABASE_SERVICE_ROLE_KEY`를 Legacy service_role JWT로 교체 후 재배포. `supabase-py 2.10.0` update builder `.select()` 미지원 문제는 UPDATE 후 별도 SELECT로 수정. GitHub 커밋 `b5ced3e` + production 배포 완료.
 - **자사기사현황 기사 수 불일치 수정** — `getOurArticlesPage()` 트렌드/전일 카운트를 `daily_publication_count` → `article` 테이블 COUNT로 통일. 배포 완료.
 - **네이버 섹션 코드 104/105 매핑 수정** — `NAVER_SECTIONS` 104↔105 스왑. DB `article.category` it↔world 일괄 UPDATE. 배포 완료.
+- **트렌드 AI 중복 생성 최적화** — 1시간 내 동일 키워드 DB 재사용. GPT 비용 ~1/6 절감. 배포 완료.
 - ⚠ **과거 날짜 category backfill** 미완료: 2026-04-25~29 날짜별로 `python -m scripts.collect_publications --date YYYYMMDD` 수동 실행 필요.
 - ⚠ **subscriber_snapshot / daily_publication_count 보존 기간 미결정** — 나중에 결정 후 cron-cleanup.yml에 삭제 로직 추가.
 - ⚠ **미보도 탐지 3단계** (임베딩 기반 2차 검증) — article.body 수집 + NCP 이전 후 작업 예정.

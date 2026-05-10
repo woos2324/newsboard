@@ -105,6 +105,7 @@
 - [x] **자사기사현황 기사 수 불일치 수정** — 기사 목록은 `article` 테이블 KST 기준 조회, 트렌드 그래프는 `daily_publication_count` 스냅샷 조회로 소스가 달라 숫자 불일치 발생. [src/lib/queries.ts](src/lib/queries.ts) `getOurArticlesPage()`: 트렌드 7일 및 전일 대비 수치를 `daily_publication_count` → `article` 테이블 COUNT로 교체 (동일 KST 시간 필터 적용). `shiftDateString()` 헬퍼 추가로 날짜 계산 시 JS Date 타임존 오류 방지. 배포 완료.
 - [x] **네이버 섹션 코드 104/105 매핑 수정** — 실제 네이버 기준과 반대로 `104=it(IT/과학)`, `105=world(세계)`로 잘못 매핑되어 있었음. [scripts/lib/naver.py](scripts/lib/naver.py) `NAVER_SECTIONS` 104↔105 스왑. DB `article.category` 기존 데이터도 `it`↔`world` 일괄 UPDATE (215건). 배포 완료.
 - [x] **트렌드 AI 중복 생성 최적화** — `collect_trends.py`가 10분마다 전체 키워드 AI 호출 → 최근 1시간 내 동일 키워드는 DB에서 재사용하도록 수정. `_load_recent_ai_content()` 추가. AI 호출 횟수 최대 1/6 감소, GPT 비용 ~24,900원 → ~4,200원/월로 절감. 배포 완료.
+- [x] **트렌드 시간 표시 KST 수정** — 대시보드 `TrendingKeywords.tsx`: `d.getHours()`(UTC) → UTC+9 KST 변환. `/trending` 페이지: `items[0].fetched_at` → 배치 내 `reduce` max로 최신 fetched_at 사용. 배포 완료.
 
 ### ⚠️ 환경변수 (라이브 / .env.local 양쪽)
 **Vercel Production env (이미 설정됨)**:
@@ -116,7 +117,7 @@
 
 **로컬 .env.local 만 있는 것** (gitignore): 위 값 + 옵션 1 (Vercel AI Gateway) 주석 블록
 
-### 재개 지점 (2026-05-10 13차 세션 종료)
+### 재개 지점 (2026-05-10 14차 세션 종료)
 - **실시간 트렌드 카드 전면 개편** — 2열 그리드, AI 요약 상단 배치, 자사보도 레이블+링크, 제목 추천(①②③ PenLine 아이콘). 0011 마이그레이션(`title_suggestions TEXT[]`), collect_trends.py `_generate_trend_content()` async, cron-trends OPENAI_API_KEY env 추가. 배포 완료.
 - **대시보드 랭킹뉴스 수정** — 전체 모드 순번 idx+1 적용, 매체명 제목 우측으로 이동. 배포 완료.
 - **대시보드 인기 댓글 기사 제목 클릭 링크** — url 있을 때 `<a>` 태그로 전환. 배포 완료.
@@ -129,6 +130,7 @@
 - **자사기사현황 기사 수 불일치 수정** — `getOurArticlesPage()` 트렌드/전일 카운트를 `daily_publication_count` → `article` 테이블 COUNT로 통일. 배포 완료.
 - **네이버 섹션 코드 104/105 매핑 수정** — `NAVER_SECTIONS` 104↔105 스왑. DB `article.category` it↔world 일괄 UPDATE. 배포 완료.
 - **트렌드 AI 중복 생성 최적화** — 1시간 내 동일 키워드 DB 재사용. GPT 비용 ~1/6 절감. 배포 완료.
+- **트렌드 시간 표시 KST 수정** — 대시보드 `TrendingKeywords.tsx` `getHours()` → UTC+9 변환. `/trending` 페이지 `fetchedAt`을 배치 내 최신값(`reduce` max)으로 변경. 배포 완료.
 - ⚠ **과거 날짜 category backfill** 미완료: 2026-04-25~29 날짜별로 `python -m scripts.collect_publications --date YYYYMMDD` 수동 실행 필요.
 - ⚠ **subscriber_snapshot / daily_publication_count 보존 기간 미결정** — 나중에 결정 후 cron-cleanup.yml에 삭제 로직 추가.
 - ⚠ **미보도 탐지 3단계** (임베딩 기반 2차 검증) — article.body 수집 + NCP 이전 후 작업 예정.
@@ -142,6 +144,13 @@
 - **(보너스) 셀렉터 견고화** — Naver UI 변경 대비 [scripts/lib/naver.py](scripts/lib/naver.py) 다중 selector 우선순위 확장.
 - **(보너스) GitHub auto-deploy 연결** — Settings → Git 에서 Vercel ↔ GitHub 연결, push 자동 배포.
 - **(미래) 본문 임베딩** — `article.body` 채워지면 클러스터링 입력을 `title + body[:500]` 으로 확장.
+
+### 판단 사항 (cron-trends 실제 실행 빈도)
+- **설정**: `*/10 * * * *` (10분마다)
+- **실제**: GitHub Actions 무료 플랜 schedule 지연으로 **실제 40~60분 간격** 실행. 시간당 1~2배치 수준.
+- **비용 영향**: GPT 비용은 10분 기준 ~24,900원/월이 아닌 실제 ~3,500원/월 수준 (하루 ~20배치 × 25키워드 × 500토큰).
+- **1시간 캐시 효과**: 배치 간격이 이미 1시간 가까이라 캐시 효과는 제한적. 단, 간헐적으로 10분 내 연속 실행될 때 중복 방지 역할.
+- **트렌드 데이터 신선도**: 수집 자체는 실행될 때마다 최신 RSS를 가져오므로 데이터는 최신. 단, 표시 시간 기준은 `fetched_at` UTC → KST 변환 필요 (수정 완료).
 
 ### 판단 사항 (구글 급상승 검색어 통합)
 - **데이터 소스**: Google Trends RSS (`trends.google.com/trending/rss?geo=KR`). 무료, 인증 불필요, GitHub Actions 미국 IP에서 접근 가능. ~6시간마다 업데이트.

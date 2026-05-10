@@ -32,7 +32,8 @@ export default async function TrendingPage() {
 
   const missed = items.filter((i) => !i.covered);
   const covered = items.filter((i) => i.covered);
-  const fetchedAt = items[0]?.fetched_at;
+  const fetchedAt = items.reduce((latest, i) =>
+    i.fetched_at > latest ? i.fetched_at : latest, items[0]?.fetched_at ?? "");
 
   return (
     <PageShell

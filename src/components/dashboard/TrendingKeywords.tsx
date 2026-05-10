@@ -21,8 +21,9 @@ function trafficStyle(traffic: string): string {
 
 function formatFetchedAt(iso: string): string {
   const d = new Date(iso);
-  const h = String(d.getHours()).padStart(2, "0");
-  const m = String(d.getMinutes()).padStart(2, "0");
+  const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+  const h = String(kst.getUTCHours()).padStart(2, "0");
+  const m = String(kst.getUTCMinutes()).padStart(2, "0");
   return `${h}:${m} 기준`;
 }
 

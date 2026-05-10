@@ -35,8 +35,8 @@ NAVER_SECTIONS: dict[int, str] = {
     101: "economy",
     102: "society",
     103: "culture",
-    104: "it",
-    105: "world",
+    104: "world",
+    105: "it",
     106: "entertainment",
     107: "sports",
 }

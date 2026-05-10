@@ -1269,6 +1269,15 @@ export function sectionLabel(category: string | null): string {
   return SECTION_LABEL[category] ?? category;
 }
 
+function shiftDateString(date: string, days: number): string {
+  const [year, month, day] = date.split("-").map(Number);
+  const shifted = new Date(Date.UTC(year, month - 1, day + days));
+  const y = shifted.getUTCFullYear();
+  const m = String(shifted.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(shifted.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 export async function getOurArticlesPage(
   date: string,
   page: number,
@@ -1284,16 +1293,14 @@ export async function getOurArticlesPage(
   const mediaId = ourCompany.data?.media_company_id;
   if (!mediaId) return { articles: [], total: 0, issueLinked: 0, sectionCounts: [], trend: [], prevDayTotal: 0 };
 
-  const nextDate = new Date(date);
-  nextDate.setDate(nextDate.getDate() + 1);
-  const nextDateStr = nextDate.toISOString().slice(0, 10);
-
-  const prevDate = new Date(date);
-  prevDate.setDate(prevDate.getDate() - 1);
-  const prevDateStr = prevDate.toISOString().slice(0, 10);
+  const nextDateStr = shiftDateString(date, 1);
+  const prevDateStr = shiftDateString(date, -1);
+  const trendDates = Array.from({ length: 7 }, (_, i) =>
+    shiftDateString(date, i - 6)
+  );
 
   // 병렬 조회
-  const [allArticlesRes, trendRes, prevRes] = await Promise.all([
+  const [allArticlesRes, ...countResults] = await Promise.all([
     sb
       .from("article")
       .select("article_id, title, url, category, author_name, published_at")
@@ -1301,22 +1308,30 @@ export async function getOurArticlesPage(
       .gte("published_at", date + "T00:00:00+09:00")
       .lt("published_at", nextDateStr + "T00:00:00+09:00")
       .order("published_at", { ascending: false }),
+    ...trendDates.map((trendDate) =>
+      sb
+        .from("article")
+        .select("article_id", { count: "exact", head: true })
+        .eq("media_company_id", mediaId)
+        .gte("published_at", trendDate + "T00:00:00+09:00")
+        .lt("published_at", shiftDateString(trendDate, 1) + "T00:00:00+09:00")
+    ),
     sb
-      .from("daily_publication_count")
-      .select("snapshot_date, publication_count")
+      .from("article")
+      .select("article_id", { count: "exact", head: true })
       .eq("media_company_id", mediaId)
-      .gte("snapshot_date", new Date(Date.now() - 7 * 24 * 60 * 60_000).toISOString().slice(0, 10))
-      .lte("snapshot_date", date)
-      .order("snapshot_date", { ascending: true }),
-    sb
-      .from("daily_publication_count")
-      .select("publication_count")
-      .eq("media_company_id", mediaId)
-      .eq("snapshot_date", prevDateStr)
-      .maybeSingle(),
+      .gte("published_at", prevDateStr + "T00:00:00+09:00")
+      .lt("published_at", date + "T00:00:00+09:00"),
   ]);
 
+  if (allArticlesRes.error) throw allArticlesRes.error;
+  for (const result of countResults) {
+    if (result.error) throw result.error;
+  }
+
   const allArticles = allArticlesRes.data ?? [];
+  const trendCounts = countResults.slice(0, trendDates.length);
+  const prevRes = countResults[trendDates.length];
   const articleIds = allArticles.map((a) => a.article_id);
 
   // 클러스터 연결 조회
@@ -1359,8 +1374,11 @@ export async function getOurArticlesPage(
     total: articles.length,
     issueLinked: clusterMap.size,
     sectionCounts,
-    trend: (trendRes.data ?? []).map((r) => ({ date: r.snapshot_date, count: r.publication_count })),
-    prevDayTotal: prevRes.data?.publication_count ?? 0,
+    trend: trendDates.map((trendDate, i) => ({
+      date: trendDate,
+      count: trendCounts[i]?.count ?? 0,
+    })),
+    prevDayTotal: prevRes?.count ?? 0,
   };
 }
 

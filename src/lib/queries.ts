@@ -1502,23 +1502,60 @@ export async function getTrendingWithCoverage(): Promise<TrendingWithCoverage[]>
 
   if (!ourMedia) return trending.map((t) => ({ ...t, covered: false, our_article_title: null, our_article_url: null }));
 
+  const ourId = ourMedia.media_company_id;
+
+  // 클러스터 기반 매칭: matched_cluster_id가 있는 키워드의 클러스터 목록
+  const clusterIds = trending
+    .map((t) => t.matched_cluster_id)
+    .filter((id): id is number => id !== null);
+
+  const clusterArticleMap = new Map<number, { title: string; url: string | null }>();
+
+  if (clusterIds.length > 0) {
+    const { data: clusterArticles } = await sb
+      .from("issue_cluster_article")
+      .select("issue_cluster_id, article(title, url, media_company_id)")
+      .in("issue_cluster_id", clusterIds);
+
+    for (const row of clusterArticles ?? []) {
+      const art = row.article as { title: string; url: string | null; media_company_id: number } | null;
+      if (art && art.media_company_id === ourId && !clusterArticleMap.has(row.issue_cluster_id)) {
+        clusterArticleMap.set(row.issue_cluster_id, { title: art.title, url: art.url });
+      }
+    }
+  }
+
+  // 키워드 폴백용: matched_cluster_id 없는 키워드를 위해 최근 48h 자사 기사
   const since = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
   const { data: ourArticles } = await sb
     .from("article")
     .select("title, url")
-    .eq("media_company_id", ourMedia.media_company_id)
+    .eq("media_company_id", ourId)
     .gte("collected_at", since);
 
   const articles = ourArticles ?? [];
 
   return trending.map((t) => {
+    // 1순위: 클러스터 기반 매칭
+    const clusterMatch = t.matched_cluster_id !== null
+      ? clusterArticleMap.get(t.matched_cluster_id) ?? null
+      : null;
+    if (clusterMatch) {
+      return {
+        ...t,
+        covered: true,
+        our_article_title: clusterMatch.title,
+        our_article_url: clusterMatch.url,
+      };
+    }
+    // 2순위: 키워드 포함 매칭 (클러스터 없거나 클러스터에 자사 기사 없을 때)
     const kw = t.keyword.toLowerCase();
-    const match = articles.find((a) => a.title.toLowerCase().includes(kw));
+    const kwMatch = articles.find((a) => a.title.toLowerCase().includes(kw));
     return {
       ...t,
-      covered: !!match,
-      our_article_title: match?.title ?? null,
-      our_article_url: match?.url ?? null,
+      covered: !!kwMatch,
+      our_article_title: kwMatch?.title ?? null,
+      our_article_url: kwMatch?.url ?? null,
     };
   });
 }

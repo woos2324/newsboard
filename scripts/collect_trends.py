@@ -81,32 +81,49 @@ def _bigrams(text: str) -> set[str]:
     return {merged[i:i+2] for i in range(len(merged) - 1)}
 
 
-def _match_cluster(keyword: str, clusters: list[dict]) -> int | None:
+def _match_cluster(keyword: str, related_news: list[dict], clusters: list[dict]) -> int | None:
+    kw_lower = keyword.lower()
     kw_bigrams = _bigrams(keyword)
+    # 관련뉴스 제목 바이그램 (최대 3건) — 트렌드 주제 컨텍스트
+    news_bigrams = [_bigrams(n["title"]) for n in related_news[:3] if n.get("title")]
+
     best_id = None
     best_score = 0.0
 
     for c in clusters:
         title = c.get("representative_title") or ""
         cluster_kws = c.get("keywords") or []
-
-        # 클러스터 키워드 직접 포함 여부
-        for ckw in cluster_kws:
-            if keyword in ckw or ckw in keyword:
-                return c["issue_cluster_id"]
-
-        # 바이그램 유사도
         title_bigrams = _bigrams(title)
-        if not kw_bigrams or not title_bigrams:
-            continue
-        intersection = kw_bigrams & title_bigrams
-        union = kw_bigrams | title_bigrams
-        score = len(intersection) / len(union)
+        score = 0.0
+
+        # 1. 클러스터 키워드와 트렌드 키워드 정확 일치
+        for ckw in cluster_kws:
+            ckw_lower = ckw.lower()
+            if kw_lower == ckw_lower:
+                score += 1.0
+            elif kw_lower in ckw_lower or ckw_lower in kw_lower:
+                score += 0.4
+
+        # 2. 트렌드 키워드 vs 클러스터 제목 바이그램
+        if kw_bigrams and title_bigrams:
+            inter = kw_bigrams & title_bigrams
+            uni = kw_bigrams | title_bigrams
+            score += len(inter) / len(uni)
+
+        # 3. 관련뉴스 제목 vs 클러스터 제목 바이그램 (가중치 높음)
+        if news_bigrams and title_bigrams:
+            max_sim = max(
+                len(nb & title_bigrams) / len(nb | title_bigrams)
+                for nb in news_bigrams
+                if nb | title_bigrams
+            )
+            score += max_sim * 1.5
+
         if score > best_score:
             best_score = score
             best_id = c["issue_cluster_id"]
 
-    return best_id if best_score >= 0.2 else None
+    return best_id if best_score >= 0.5 else None
 
 
 def _load_recent_clusters(sb) -> list[dict]:
@@ -237,7 +254,7 @@ async def main() -> None:
 
     matched = 0
     for t in trends:
-        cluster_id = _match_cluster(t["keyword"], clusters)
+        cluster_id = _match_cluster(t["keyword"], t["related_news"], clusters)
         t["matched_cluster_id"] = cluster_id
         if cluster_id:
             matched += 1

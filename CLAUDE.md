@@ -106,6 +106,7 @@
 - [x] **네이버 섹션 코드 104/105 매핑 수정** — 실제 네이버 기준과 반대로 `104=it(IT/과학)`, `105=world(세계)`로 잘못 매핑되어 있었음. [scripts/lib/naver.py](scripts/lib/naver.py) `NAVER_SECTIONS` 104↔105 스왑. DB `article.category` 기존 데이터도 `it`↔`world` 일괄 UPDATE (215건). 배포 완료.
 - [x] **트렌드 AI 중복 생성 최적화** — `collect_trends.py`가 10분마다 전체 키워드 AI 호출 → 최근 1시간 내 동일 키워드는 DB에서 재사용하도록 수정. `_load_recent_ai_content()` 추가. AI 호출 횟수 최대 1/6 감소, GPT 비용 ~24,900원 → ~4,200원/월로 절감. 배포 완료.
 - [x] **트렌드 시간 표시 KST 수정** — 대시보드 `TrendingKeywords.tsx`: `d.getHours()`(UTC) → UTC+9 KST 변환. `/trending` 페이지: `items[0].fetched_at` → 배치 내 `reduce` max로 최신 fetched_at 사용. 배포 완료.
+- [x] **트렌드 자사보도 매칭 로직 개선** — `getTrendingWithCoverage()` 클러스터 기반 우선 + 키워드 폴백. `_match_cluster()` related_news 제목 유사도 신호 추가(가중치 1.5), 임계값 0.2 → 0.5 상향.
 
 ### ⚠️ 환경변수 (라이브 / .env.local 양쪽)
 **Vercel Production env (이미 설정됨)**:
@@ -116,6 +117,18 @@
 **GitHub Secrets (이미 설정됨, 동일)**: 위 7개 + **필수** `SUPABASE_SERVICE_ROLE_KEY`(RLS 활성화 후 필수, JWT 포맷 `eyJ...`), 옵션 `AI_GATEWAY_API_KEY`
 
 **로컬 .env.local 만 있는 것** (gitignore): 위 값 + 옵션 1 (Vercel AI Gateway) 주석 블록
+
+### 재개 지점 (2026-05-12 15차 세션 종료)
+- **미보도 탐지(/gap) 경쟁사 수 불일치 수정** — reason 텍스트 live `competitors` 배열로 동적 계산, 매체명 목록 제거. detect_gap.py `[:3]` 이름 제한 제거. 배포 완료.
+- **미보도 탐지(/gap) 유사도 % 위치 개선** — 자사 유사 기사 링크 옆으로 이동, reason 텍스트에서 제거. 배포 완료.
+- **구독자 분석 default 선택 세계일보만** — `buildInitialSelectedMedia()` isPinned 항목만 반환. 배포 완료.
+- **cron-publications 10분 주기** — 30분 → 10분(UTC :02,:12,:22,:32,:42,:52). GitHub push 완료.
+- **trending_keyword 7일 보존** — cleanup_old_data.py에 추가. cron-cleanup 매일 KST 00:00 자동 삭제.
+- **실시간 트렌드 시간 KST 표시** — `/trending` `formatFetchedAt()` UTC → KST(+9) 변환. 배포 완료.
+- **트렌드 자사보도 매칭 로직 개선** — `getTrendingWithCoverage()` 클러스터 기반 우선 + 키워드 폴백. `_match_cluster()` related_news 제목 유사도 신호 추가, 임계값 0.2 → 0.5 상향. 배포 완료.
+- ⚠ **과거 날짜 category backfill** 미완료: 2026-04-25~29 날짜별로 `python -m scripts.collect_publications --date YYYYMMDD` 수동 실행 필요.
+- ⚠ **subscriber_snapshot / daily_publication_count 보존 기간 미결정** — 나중에 결정 후 cron-cleanup.yml에 삭제 로직 추가.
+- ⚠ **미보도 탐지 3단계** (임베딩 기반 2차 검증) — article.body 수집 + NCP 이전 후 작업 예정.
 
 ### 재개 지점 (2026-05-10 14차 세션 종료)
 - **실시간 트렌드 카드 전면 개편** — 2열 그리드, AI 요약 상단 배치, 자사보도 레이블+링크, 제목 추천(①②③ PenLine 아이콘). 0011 마이그레이션(`title_suggestions TEXT[]`), collect_trends.py `_generate_trend_content()` async, cron-trends OPENAI_API_KEY env 추가. 배포 완료.

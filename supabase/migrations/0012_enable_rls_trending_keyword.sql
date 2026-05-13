@@ -1,0 +1,1 @@
+ALTER TABLE trending_keyword ENABLE ROW LEVEL SECURITY;

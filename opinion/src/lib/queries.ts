@@ -9,6 +9,7 @@ export interface Editorial {
   url: string
   published_at: string | null
   topic: string | null
+  issue: string | null
   stance_score: number | null
   stance_label: string | null
   ai_analysis: Record<string, unknown> | null
@@ -28,6 +29,7 @@ export interface MediaStance {
   is_our_company: boolean
   avg_stance: number
   editorial_count: number
+  by_topic: Record<string, number>  // topic → avg_stance
 }
 
 export async function getTodayEditorials(date?: string): Promise<Editorial[]> {
@@ -76,6 +78,7 @@ export async function getMediaStanceAvg(days = 30): Promise<MediaStance[]> {
     .select(`
       media_company_id,
       stance_score,
+      topic,
       media_company (media_company_id, name, normalized_name, is_our_company)
     `)
     .gte('published_at', since.toISOString())
@@ -83,27 +86,41 @@ export async function getMediaStanceAvg(days = 30): Promise<MediaStance[]> {
 
   if (error) throw error
 
-  const map = new Map<number, { sum: number; count: number; mc: Editorial['media_company'] }>()
+  type Acc = { sum: number; count: number; mc: Editorial['media_company']; topics: Record<string, { sum: number; count: number }> }
+  const map = new Map<number, Acc>()
+
   for (const row of data ?? []) {
     const id = row.media_company_id
     if (!id) continue
+    const topic = (row.topic as string) ?? '기타'
+    const score = row.stance_score as number
     const existing = map.get(id)
     if (existing) {
-      existing.sum += row.stance_score as number
+      existing.sum += score
       existing.count += 1
+      const t = existing.topics[topic] ?? { sum: 0, count: 0 }
+      t.sum += score; t.count += 1
+      existing.topics[topic] = t
     } else {
-      map.set(id, { sum: row.stance_score as number, count: 1, mc: (row as unknown as { media_company: Editorial['media_company'] }).media_company })
+      map.set(id, {
+        sum: score, count: 1,
+        mc: (row as unknown as { media_company: Editorial['media_company'] }).media_company,
+        topics: { [topic]: { sum: score, count: 1 } },
+      })
     }
   }
 
   return Array.from(map.entries())
-    .map(([id, { sum, count, mc }]) => ({
+    .map(([id, { sum, count, mc, topics }]) => ({
       media_company_id: id,
       name: mc?.name ?? '',
       normalized_name: mc?.normalized_name ?? '',
       is_our_company: mc?.is_our_company ?? false,
       avg_stance: sum / count,
       editorial_count: count,
+      by_topic: Object.fromEntries(
+        Object.entries(topics).map(([t, { sum: s, count: c }]) => [t, s / c])
+      ),
     }))
     .sort((a, b) => a.avg_stance - b.avg_stance)
 }

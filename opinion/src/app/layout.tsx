@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import OpinionShell from '@/components/OpinionShell'
 
 export const metadata: Metadata = {
   title: '사설 분석 — 세계일보 논설실',
@@ -15,7 +16,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-full bg-gray-50 text-gray-900 antialiased">{children}</body>
+      <body className="min-h-full bg-gray-50 text-gray-900 antialiased">
+        <OpinionShell>{children}</OpinionShell>
+      </body>
     </html>
   )
 }

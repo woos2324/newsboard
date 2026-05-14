@@ -13,7 +13,7 @@ const STANCE_COLORS: Record<string, string> = {
 
 function formatDate(iso: string | null) {
   if (!iso) return ''
-  return new Date(iso).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })
+  return new Date(iso).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul', month: 'long', day: 'numeric' })
 }
 
 export default function TrendTab({ editorials }: { editorials: Editorial[] }) {
@@ -71,7 +71,7 @@ export default function TrendTab({ editorials }: { editorials: Editorial[] }) {
         </div>
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-5">
         {editorials.map((e) => (
           <a
             key={e.editorial_id}
@@ -87,9 +87,16 @@ export default function TrendTab({ editorials }: { editorials: Editorial[] }) {
             </div>
             <div className="flex flex-col items-end gap-1 flex-shrink-0">
               {e.stance_label && (
-                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STANCE_COLORS[e.stance_label] ?? 'bg-gray-100 text-gray-600'}`}>
-                  {e.stance_label}
-                </span>
+                <div className="relative group">
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium cursor-help ${STANCE_COLORS[e.stance_label] ?? 'bg-gray-100 text-gray-600'}`}>
+                    {e.stance_label}
+                  </span>
+                  {(e.ai_analysis as Record<string, string> | null)?.stance_reason && (
+                    <div className="absolute bottom-full right-0 mb-1.5 w-52 bg-gray-800 text-white text-xs rounded-lg p-2.5 opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none leading-relaxed shadow-lg">
+                      {(e.ai_analysis as Record<string, string>).stance_reason}
+                    </div>
+                  )}
+                </div>
               )}
               {e.topic && <span className="text-xs text-gray-400">{e.topic}</span>}
             </div>

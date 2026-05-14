@@ -3,7 +3,7 @@
 
 수집 대상: https://news.naver.com/opinion/editorial (네이버 사설 전용 페이지)
 분석: gpt-4o-mini로 요약 + 성향 점수(-2~+2) + 주제 분류
-실행: python -m scripts.collect_editorials [--dry-run]
+실행: python -m scripts.collect_editorials [--dry-run] [--date YYYYMMDD]
 """
 
 import argparse
@@ -36,6 +36,7 @@ SYSTEM_PROMPT = """당신은 언론사 사설을 분석하는 전문가입니다
 {
   "summary": "사설 핵심 내용 2~3문장 요약",
   "topic": "정치|경제|사회|외교|문화|과학|기타 중 하나",
+  "issue": "이 사설이 다루는 핵심 쟁점을 15자 이내 명사구로 (예: 탄핵 이후 정국 수습, 반도체 파업 대응, 저출생 구조 개혁)",
   "stance_score": -2.0에서 2.0 사이 숫자 (-2=매우진보, 0=중립, 2=매우보수),
   "stance_label": "진보|중도진보|중립|중도보수|보수 중 하나",
   "stance_reason": "성향 판단 근거 1문장"
@@ -46,13 +47,14 @@ def clean_text(text: str) -> str:
     return re.sub(r"[\ud800-\udfff]", "", text)
 
 
-async def fetch_editorial_list(client: httpx.AsyncClient) -> list[dict]:
-    """네이버 사설 전용 페이지에서 오늘의 사설 목록 수집."""
+async def fetch_editorial_list(client: httpx.AsyncClient, date: Optional[str] = None) -> list[dict]:
+    """네이버 사설 전용 페이지에서 사설 목록 수집. date=YYYYMMDD 지정 시 해당 날짜."""
+    url = f"{EDITORIAL_URL}?date={date}" if date else EDITORIAL_URL
     try:
-        resp = await client.get(EDITORIAL_URL, headers=HEADERS, timeout=15)
+        resp = await client.get(url, headers=HEADERS, timeout=15)
         resp.raise_for_status()
     except Exception as e:
-        print(f"[fetch error] {EDITORIAL_URL}: {e}", file=sys.stderr)
+        print(f"[fetch error] {url}: {e}", file=sys.stderr)
         return []
 
     soup = BeautifulSoup(resp.text, "html.parser")
@@ -70,23 +72,38 @@ async def fetch_editorial_list(client: httpx.AsyncClient) -> list[dict]:
         title = clean_text(desc.get_text(strip=True)) if desc else ""
         if not title or not press_name:
             continue
+        if any(kw in title for kw in ["석간", "조간"]):
+            continue
         items.append({"press_name": press_name, "title": title, "url": url})
 
     return items
 
 
-async def fetch_article_body(client: httpx.AsyncClient, url: str) -> Optional[str]:
+async def fetch_article_body(client: httpx.AsyncClient, url: str) -> tuple[Optional[str], Optional[str]]:
+    """본문과 발행 시각(ISO8601+09:00)을 반환."""
     try:
         resp = await client.get(url, headers=HEADERS, timeout=15, follow_redirects=True)
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "html.parser")
+
+        # 발행 시각: data-date-time="2026-05-14 11:13:05"
+        published_at = None
+        dt_el = soup.select_one(".media_end_head_info_datestamp_time[data-date-time]")
+        if dt_el:
+            raw = dt_el.get("data-date-time", "").strip()
+            if raw:
+                published_at = raw.replace(" ", "T") + "+09:00"
+
+        body = None
         for sel in ["#dic_area", "#articleBodyContents", ".newsct_article", "#articeBody"]:
             el = soup.select_one(sel)
             if el:
-                return clean_text(el.get_text(" ", strip=True))[:3000]
-        return None
+                body = clean_text(el.get_text(" ", strip=True))[:3000]
+                break
+
+        return body, published_at
     except Exception:
-        return None
+        return None, None
 
 
 async def analyze_with_ai(title: str, body: Optional[str]) -> Optional[dict]:
@@ -125,8 +142,30 @@ async def analyze_with_ai(title: str, body: Optional[str]) -> Optional[dict]:
     return None
 
 
-async def main(dry_run: bool):
-    print(f"[collect_editorials] dry_run={dry_run}")
+async def reanalyze_issue(supabase) -> None:
+    """issue 컬럼이 비어있는 기존 레코드를 AI로 재분석."""
+    rows = supabase.table("editorial").select("editorial_id,title,body").is_("issue", "null").execute()
+    print(f"[reanalyze] issue 없는 레코드: {len(rows.data)}건")
+    async with httpx.AsyncClient() as http_client:
+        for row in rows.data:
+            ai = await analyze_with_ai(row["title"], row["body"])
+            if ai and ai.get("issue"):
+                supabase.table("editorial").update({
+                    "issue": ai.get("issue"),
+                    "ai_analysis": ai,
+                }).eq("editorial_id", row["editorial_id"]).execute()
+                print(f"  [ok] {row['title'][:40]} | {ai.get('issue')}")
+            else:
+                print(f"  [skip] {row['title'][:40]}")
+
+
+async def main(dry_run: bool, date: Optional[str] = None, reanalyze: bool = False):
+    print(f"[collect_editorials] dry_run={dry_run} date={date or 'today'} reanalyze={reanalyze}")
+
+    if reanalyze and not dry_run:
+        supabase = get_client()
+        await reanalyze_issue(supabase)
+        return
 
     supabase = get_client() if not dry_run else None
 
@@ -137,8 +176,14 @@ async def main(dry_run: bool):
     else:
         name_map = {}
 
+    # published_at 기준 날짜 계산
+    if date:
+        dt = datetime(int(date[:4]), int(date[4:6]), int(date[6:8]), tzinfo=KST)
+    else:
+        dt = datetime.now(KST).replace(hour=0, minute=0, second=0, microsecond=0)
+
     async with httpx.AsyncClient() as http_client:
-        items = await fetch_editorial_list(http_client)
+        items = await fetch_editorial_list(http_client, date)
         print(f"  수집된 사설: {len(items)}건")
 
         if not items:
@@ -153,17 +198,28 @@ async def main(dry_run: bool):
             mc_id = name_map.get(press_name)
 
             if not dry_run:
-                existing = supabase.table("editorial").select("editorial_id").eq("url", url).execute()
+                existing = supabase.table("editorial").select("editorial_id,media_company_id").eq("url", url).execute()
                 if existing.data:
-                    print(f"  [skip] {press_name}: {title[:30]}")
+                    # 기존 레코드: media_company_id(null인 경우)와 published_at 업데이트
+                    body, article_published_at = await fetch_article_body(http_client, url)
+                    update_fields: dict = {}
+                    if existing.data[0]["media_company_id"] is None and mc_id is not None:
+                        update_fields["media_company_id"] = mc_id
+                    if article_published_at:
+                        update_fields["published_at"] = article_published_at
+                    if update_fields:
+                        supabase.table("editorial").update(update_fields).eq("url", url).execute()
+                        print(f"  [updated] {press_name}: {title[:30]} | fields={list(update_fields.keys())}")
+                    else:
+                        print(f"  [skip] {press_name}: {title[:30]}")
                     continue
 
-            body = await fetch_article_body(http_client, url)
+            body, article_published_at = await fetch_article_body(http_client, url)
             body_preview = f"{len(body)}자" if body else "본문 없음"
 
             ai = await analyze_with_ai(title, body)
 
-            published_at = datetime.now(KST).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+            published_at = article_published_at or dt.isoformat()
 
             row = {
                 "media_company_id": mc_id,
@@ -173,6 +229,7 @@ async def main(dry_run: bool):
                 "published_at": published_at,
                 "summary": ai.get("summary") if ai else None,
                 "topic": ai.get("topic") if ai else None,
+                "issue": ai.get("issue") if ai else None,
                 "stance_score": ai.get("stance_score") if ai else None,
                 "stance_label": ai.get("stance_label") if ai else None,
                 "ai_analysis": ai,
@@ -193,5 +250,7 @@ async def main(dry_run: bool):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--date", type=str, help="수집 날짜 YYYYMMDD (기본: 오늘)")
+    parser.add_argument("--reanalyze", action="store_true", help="issue 없는 기존 레코드 AI 재분석")
     args = parser.parse_args()
-    asyncio.run(main(args.dry_run))
+    asyncio.run(main(args.dry_run, args.date, args.reanalyze))

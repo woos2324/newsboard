@@ -10,7 +10,7 @@ export default async function TrendPage() {
   })
 
   return (
-    <div className="p-6 w-full">
+    <div className="px-6 pt-6 pb-16 w-full">
       <TrendTab editorials={segyeEditorials} />
     </div>
   )

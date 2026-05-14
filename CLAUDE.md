@@ -49,7 +49,7 @@
 - `SUPABASE_SERVICE_ROLE_KEY` — **필수**, Supabase Legacy `service_role` JWT(`eyJ...`). 신 포맷(`sb_secret_...`) 사용 시 Python 스크립트 전체 중단.
 - `AI_BASE_URL=https://api.openai.com/v1`, `OPENAI_API_KEY`, `DEFAULT_AI_MODEL=gpt-4o-mini`, `DEFAULT_EMBED_MODEL=text-embedding-3-small`
 
-## 재개 지점 (2026-05-14, 17차 세션 종료)
+## 재개 지점 (2026-05-14, 18차 세션 종료)
 
 **이번 세션 완료**:
 - **사설 분석 앱 (`opinion/`) 전면 개편** — 별도 Vercel 프로젝트 (https://opinion-eta.vercel.app)
@@ -59,19 +59,21 @@
   - StanceTab: 주제 필터 + 언론사×주제 교차 테이블 + 세계일보 상단 고정 (bg-blue-50)
   - TrendTab: 90일 세계일보 사설 트렌드
   - 성향 이유 hover 툴팁 (stance_reason)
-  - BOM 제거 (supabase.ts), 간격 3배 확대
+  - BOM 제거 (supabase.ts), 페이지 하단 여백 96px
 - **collect_editorials.py 개선**: --date 백필, --reanalyze (issue 소급 분석), 실제 발행 시각 파싱, 석간/조간 필터
+- **collect_editorials.py API 페이지네이션 추가**: 네이버 사설 `/api?page=N` 엔드포인트 활용, HTML 첫 페이지 + API page=2~ 전체 순회 → 73건/일 (기존 18건), 세계일보 수집 시작
 - DB 마이그레이션 0015~0017: 코리아중앙데일리/부산일보 추가, media_company anon RLS, editorial.issue 컬럼
 
 **미완료 (다음 세션 이어받을 것)**:
+- ⚠ **세계일보 트렌드 화면 수정** — 다음 세션 첫 작업
 - ⚠ **과거 날짜 category backfill** — `python -m scripts.collect_publications --date 20260425` ~ `20260429` 수동 실행
 - ⚠ **subscriber_snapshot / daily_publication_count 보존 기간 미결정**
 - ⚠ **미보도 탐지 3단계** (임베딩 기반) — article.body 수집 + NCP 이전 후
 - ⚠ **StanceTab 차트 레이블 겹침** — 스태거드 방식 적용, 데이터 늘면 툴팁(Option B)으로 전환 검토
-- ⚠ **세계일보 트렌드** — 세계일보가 네이버 사설 페이지에 등록돼야 자동 수집 시작
 
 ## 다음 작업 로드맵
 
+- **(당장) 세계일보 트렌드 화면 수정**
 - **(당장) 과거 날짜 category backfill** — 2026-04-25~29 날짜별 수동 실행
 - **(미래) 미보도 탐지 + 클러스터 품질 개선** — 설계 완료. 상세: `documents/decisions.md`
 - **(미래) 검색 기능** — Topbar 검색창 UI 주석 처리됨. 이슈 클러스터 제목/키워드 검색

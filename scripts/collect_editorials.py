@@ -1,14 +1,15 @@
 """
 사설 수집 + AI 성향 분석 스크립트
 
-수집 대상: 주요 언론사 네이버 뉴스 사설 섹션
+수집 대상: https://news.naver.com/opinion/editorial (네이버 사설 전용 페이지)
 분석: gpt-4o-mini로 요약 + 성향 점수(-2~+2) + 주제 분류
-실행: python -m scripts.collect_editorials [--dry-run] [--date YYYYMMDD]
+실행: python -m scripts.collect_editorials [--dry-run]
 """
 
 import argparse
 import asyncio
 import json
+import os
 import re
 import sys
 from datetime import datetime, timezone, timedelta
@@ -21,17 +22,7 @@ from scripts.lib.db import get_client
 
 KST = timezone(timedelta(hours=9))
 
-TARGETS = [
-    {"normalized_name": "segye",    "naver_media_id": "022", "section_id": "110"},
-    {"normalized_name": "chosun",   "naver_media_id": "023", "section_id": "110"},
-    {"normalized_name": "joongang", "naver_media_id": "025", "section_id": "110"},
-    {"normalized_name": "donga",    "naver_media_id": "020", "section_id": "110"},
-    {"normalized_name": "hani",     "naver_media_id": "028", "section_id": "110"},
-    {"normalized_name": "khan",     "naver_media_id": "032", "section_id": "110"},
-    {"normalized_name": "hk",       "naver_media_id": "469", "section_id": "110"},
-    {"normalized_name": "munhwa",   "naver_media_id": "021", "section_id": "110"},
-    {"normalized_name": "kmib",     "naver_media_id": "005", "section_id": "110"},
-]
+EDITORIAL_URL = "https://news.naver.com/opinion/editorial"
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36",
@@ -51,30 +42,37 @@ SYSTEM_PROMPT = """당신은 언론사 사설을 분석하는 전문가입니다
 }"""
 
 
-async def fetch_editorial_list(client: httpx.AsyncClient, oid: str, date_str: str) -> list[dict]:
-    url = f"https://news.naver.com/main/list.naver?mode=LPOD&mid=sec&oid={oid}&sid1=110&date={date_str}&page=1"
+def clean_text(text: str) -> str:
+    return re.sub(r"[\ud800-\udfff]", "", text)
+
+
+async def fetch_editorial_list(client: httpx.AsyncClient) -> list[dict]:
+    """네이버 사설 전용 페이지에서 오늘의 사설 목록 수집."""
     try:
-        resp = await client.get(url, headers=HEADERS, timeout=15)
+        resp = await client.get(EDITORIAL_URL, headers=HEADERS, timeout=15)
         resp.raise_for_status()
     except Exception as e:
-        print(f"  [fetch error] oid={oid}: {e}", file=sys.stderr)
+        print(f"[fetch error] {EDITORIAL_URL}: {e}", file=sys.stderr)
         return []
 
     soup = BeautifulSoup(resp.text, "html.parser")
-    articles = []
-    for dt in soup.select("dt:not(.photo)"):
-        a = dt.find("a", href=True)
+    items = []
+    for li in soup.select("li.opinion_editorial_item"):
+        a = li.select_one("a.link")
         if not a:
             continue
-        href = a["href"]
-        if "article" not in href:
+        url = a.get("href", "")
+        if not url or "article" not in url:
             continue
-        title = a.get_text(strip=True)
-        if not title:
+        press = li.select_one("strong.press_name")
+        desc = li.select_one("p.description")
+        press_name = clean_text(press.get_text(strip=True)) if press else ""
+        title = clean_text(desc.get_text(strip=True)) if desc else ""
+        if not title or not press_name:
             continue
-        articles.append({"title": title, "url": href})
+        items.append({"press_name": press_name, "title": title, "url": url})
 
-    return articles[:3]
+    return items
 
 
 async def fetch_article_body(client: httpx.AsyncClient, url: str) -> Optional[str]:
@@ -85,14 +83,13 @@ async def fetch_article_body(client: httpx.AsyncClient, url: str) -> Optional[st
         for sel in ["#dic_area", "#articleBodyContents", ".newsct_article", "#articeBody"]:
             el = soup.select_one(sel)
             if el:
-                return el.get_text(" ", strip=True)[:3000]
+                return clean_text(el.get_text(" ", strip=True))[:3000]
         return None
     except Exception:
         return None
 
 
 async def analyze_with_ai(title: str, body: Optional[str]) -> Optional[dict]:
-    import os
     api_key = os.getenv("OPENAI_API_KEY") or os.getenv("AI_GATEWAY_API_KEY")
     base_url = os.getenv("AI_BASE_URL", "https://api.openai.com/v1")
     model = os.getenv("DEFAULT_AI_MODEL", "gpt-4o-mini")
@@ -128,90 +125,73 @@ async def analyze_with_ai(title: str, body: Optional[str]) -> Optional[dict]:
     return None
 
 
-async def process_media(
-    http_client: httpx.AsyncClient,
-    target: dict,
-    media_company_id: int,
-    date_str: str,
-    dry_run: bool,
-    supabase,
-) -> int:
-    oid = target["naver_media_id"]
-    name = target["normalized_name"]
-
-    articles = await fetch_editorial_list(http_client, oid, date_str)
-    if not articles:
-        print(f"  [{name}] 사설 없음")
-        return 0
-
-    saved = 0
-    for art in articles:
-        url = art["url"]
-        title = art["title"]
-
-        if not dry_run:
-            existing = supabase.table("editorial").select("editorial_id").eq("url", url).execute()
-            if existing.data:
-                print(f"  [{name}] skip (already exists): {title[:30]}")
-                continue
-
-        body = await fetch_article_body(http_client, url)
-        ai = await analyze_with_ai(title, body)
-
-        published_at = datetime.now(KST).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
-
-        row = {
-            "media_company_id": media_company_id,
-            "title": title,
-            "url": url,
-            "body": body,
-            "published_at": published_at,
-            "summary": ai.get("summary") if ai else None,
-            "topic": ai.get("topic") if ai else None,
-            "stance_score": ai.get("stance_score") if ai else None,
-            "stance_label": ai.get("stance_label") if ai else None,
-            "ai_analysis": ai,
-        }
-
-        if dry_run:
-            print(f"  [dry] [{name}] {title[:40]} | {ai}")
-        else:
-            supabase.table("editorial").upsert(row, on_conflict="url").execute()
-            print(f"  [{name}] saved: {title[:40]} | stance={ai.get('stance_score') if ai else 'N/A'}")
-            saved += 1
-
-    return saved
-
-
-async def main(date_str: str, dry_run: bool):
-    print(f"[collect_editorials] date={date_str} dry_run={dry_run}")
+async def main(dry_run: bool):
+    print(f"[collect_editorials] dry_run={dry_run}")
 
     supabase = get_client() if not dry_run else None
 
+    # DB에서 매체명 → media_company_id 매핑
     if not dry_run:
-        mc_rows = supabase.table("media_company").select("media_company_id,normalized_name").execute()
-        mc_map = {r["normalized_name"]: r["media_company_id"] for r in mc_rows.data}
+        mc_rows = supabase.table("media_company").select("media_company_id,name,normalized_name").execute()
+        name_map = {r["name"]: r["media_company_id"] for r in mc_rows.data}
     else:
-        mc_map = {t["normalized_name"]: i + 1 for i, t in enumerate(TARGETS)}
+        name_map = {}
 
     async with httpx.AsyncClient() as http_client:
-        tasks = []
-        for target in TARGETS:
-            mc_id = mc_map.get(target["normalized_name"])
-            if mc_id is None:
-                print(f"  [skip] {target['normalized_name']} not in DB")
-                continue
-            tasks.append(process_media(http_client, target, mc_id, date_str, dry_run, supabase))
+        items = await fetch_editorial_list(http_client)
+        print(f"  수집된 사설: {len(items)}건")
 
-        results = await asyncio.gather(*tasks)
+        if not items:
+            print("  [경고] 사설 목록을 가져오지 못했습니다.")
+            return
 
-    total = sum(results)
-    print(f"[collect_editorials] 완료: {total}건 저장")
+        saved = 0
+        for item in items:
+            url = item["url"]
+            title = item["title"]
+            press_name = item["press_name"]
+            mc_id = name_map.get(press_name)
+
+            if not dry_run:
+                existing = supabase.table("editorial").select("editorial_id").eq("url", url).execute()
+                if existing.data:
+                    print(f"  [skip] {press_name}: {title[:30]}")
+                    continue
+
+            body = await fetch_article_body(http_client, url)
+            body_preview = f"{len(body)}자" if body else "본문 없음"
+
+            ai = await analyze_with_ai(title, body)
+
+            published_at = datetime.now(KST).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+
+            row = {
+                "media_company_id": mc_id,
+                "title": title,
+                "url": url,
+                "body": body,
+                "published_at": published_at,
+                "summary": ai.get("summary") if ai else None,
+                "topic": ai.get("topic") if ai else None,
+                "stance_score": ai.get("stance_score") if ai else None,
+                "stance_label": ai.get("stance_label") if ai else None,
+                "ai_analysis": ai,
+            }
+
+            if dry_run:
+                print(f"  [dry] [{press_name}] {title[:40]}")
+                print(f"        본문: {body_preview} | AI: {ai}")
+            else:
+                supabase.table("editorial").upsert(row, on_conflict="url").execute()
+                print(f"  [saved] [{press_name}] {title[:40]} | stance={ai.get('stance_score') if ai else 'N/A'}")
+                saved += 1
+
+    if not dry_run:
+        print(f"[collect_editorials] 완료: {saved}건 저장")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--date", default=datetime.now(KST).strftime("%Y%m%d"))
     args = parser.parse_args()
-    asyncio.run(main(args.date, args.dry_run))
+    asyncio.run(main(args.dry_run))

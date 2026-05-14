@@ -5,10 +5,6 @@ on:
     - cron: '30 22 * * *'  # KST 07:30 (매일 아침 사설 수집)
   workflow_dispatch:
     inputs:
-      date:
-        description: '수집 날짜 (YYYYMMDD, 기본: 오늘)'
-        required: false
-        default: ''
       dry_run:
         description: 'Dry run (DB 저장 없이 확인만)'
         required: false
@@ -36,12 +32,8 @@ jobs:
           AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
           DEFAULT_AI_MODEL: ${{ secrets.DEFAULT_AI_MODEL }}
         run: |
-          DATE_ARG=""
-          if [ -n "${{ github.event.inputs.date }}" ]; then
-            DATE_ARG="--date ${{ github.event.inputs.date }}"
-          fi
           DRY_ARG=""
           if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
             DRY_ARG="--dry-run"
           fi
-          python -m scripts.collect_editorials $DATE_ARG $DRY_ARG
+          python -m scripts.collect_editorials $DRY_ARG

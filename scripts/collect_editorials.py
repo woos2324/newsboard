@@ -23,10 +23,18 @@ from scripts.lib.db import get_client
 KST = timezone(timedelta(hours=9))
 
 EDITORIAL_URL = "https://news.naver.com/opinion/editorial"
+EDITORIAL_API_URL = "https://news.naver.com/opinion/editorial/api"
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36",
     "Accept-Language": "ko-KR,ko;q=0.9",
+}
+
+API_HEADERS = {
+    **HEADERS,
+    "Accept": "application/json, text/plain, */*",
+    "X-Requested-With": "XMLHttpRequest",
+    "Referer": EDITORIAL_URL,
 }
 
 SYSTEM_PROMPT = """당신은 언론사 사설을 분석하는 전문가입니다.
@@ -76,6 +84,35 @@ async def fetch_editorial_list(client: httpx.AsyncClient, date: Optional[str] = 
             continue
         items.append({"press_name": press_name, "title": title, "url": url})
 
+    return items
+
+
+async def fetch_editorial_api_page(client: httpx.AsyncClient, date: str, page: int) -> list[dict]:
+    """API로 추가 페이지 수집 (page=2 이상, 스크롤 로딩분)."""
+    try:
+        resp = await client.get(
+            EDITORIAL_API_URL,
+            params={"officeId": "", "date": date, "page": page},
+            headers=API_HEADERS,
+            timeout=15,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        contents = data.get("message", {}).get("contents", [])
+    except Exception as e:
+        print(f"[api error] page={page}: {e}", file=sys.stderr)
+        return []
+
+    items = []
+    for c in contents:
+        press_name = clean_text(c.get("officeName", ""))
+        title = clean_text(c.get("title", "").strip())
+        url = c.get("linkUrl", "")
+        if not title or not press_name or not url or "article" not in url:
+            continue
+        if any(kw in title for kw in ["석간", "조간"]):
+            continue
+        items.append({"press_name": press_name, "title": title, "url": url})
     return items
 
 
@@ -184,7 +221,27 @@ async def main(dry_run: bool, date: Optional[str] = None, reanalyze: bool = Fals
 
     async with httpx.AsyncClient() as http_client:
         items = await fetch_editorial_list(http_client, date)
-        print(f"  수집된 사설: {len(items)}건")
+
+        # API로 page=2 이상 추가 수집 (스크롤 로딩분)
+        api_date = date or datetime.now(KST).strftime("%Y%m%d")
+        page = 2
+        while True:
+            extra = await fetch_editorial_api_page(http_client, api_date, page)
+            if not extra:
+                break
+            items.extend(extra)
+            page += 1
+
+        # URL 중복 제거
+        seen: set[str] = set()
+        unique_items = []
+        for item in items:
+            if item["url"] not in seen:
+                seen.add(item["url"])
+                unique_items.append(item)
+        items = unique_items
+
+        print(f"  수집된 사설: {len(items)}건 (HTML+API {page-1}페이지)")
 
         if not items:
             print("  [경고] 사설 목록을 가져오지 못했습니다.")

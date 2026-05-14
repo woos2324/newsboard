@@ -49,22 +49,29 @@
 - `SUPABASE_SERVICE_ROLE_KEY` — **필수**, Supabase Legacy `service_role` JWT(`eyJ...`). 신 포맷(`sb_secret_...`) 사용 시 Python 스크립트 전체 중단.
 - `AI_BASE_URL=https://api.openai.com/v1`, `OPENAI_API_KEY`, `DEFAULT_AI_MODEL=gpt-4o-mini`, `DEFAULT_EMBED_MODEL=text-embedding-3-small`
 
-## 재개 지점 (2026-05-13, 16차 세션 종료)
+## 재개 지점 (2026-05-14, 17차 세션 종료)
 
 **이번 세션 완료**:
-- RLS `trending_keyword` 테이블 적용 (0012 마이그레이션) — Supabase 보안 경고 해소
-- **사설 분석 기능 설계 확정 + UI 샘플 완료** (`_editorial_preview.html`) — 내일 구현 시작
-- CLAUDE.md 구조 정리 (판단 사항/히스토리 분리)
+- **사설 분석 앱 (`opinion/`) 전면 개편** — 별도 Vercel 프로젝트 (https://opinion-eta.vercel.app)
+  - 3탭 → 좌측 사이드바 + 분리 라우트 (/, /stance, /trend)
+  - 반응형: 데스크탑 고정 사이드바 / 모바일 햄버거 슬라이드
+  - TodayTab: 토픽 그룹화 + issue 부제목 + 종합/경제지 필터 버튼
+  - StanceTab: 주제 필터 + 언론사×주제 교차 테이블 + 세계일보 상단 고정 (bg-blue-50)
+  - TrendTab: 90일 세계일보 사설 트렌드
+  - 성향 이유 hover 툴팁 (stance_reason)
+  - BOM 제거 (supabase.ts), 간격 3배 확대
+- **collect_editorials.py 개선**: --date 백필, --reanalyze (issue 소급 분석), 실제 발행 시각 파싱, 석간/조간 필터
+- DB 마이그레이션 0015~0017: 코리아중앙데일리/부산일보 추가, media_company anon RLS, editorial.issue 컬럼
 
 **미완료 (다음 세션 이어받을 것)**:
-- ⚠ **사설 분석 기능 구현** — DB 마이그레이션부터 시작. 상세 계획: `~/.claude/projects/d--newsboard/memory/project_editorial_feature.md`
 - ⚠ **과거 날짜 category backfill** — `python -m scripts.collect_publications --date 20260425` ~ `20260429` 수동 실행
 - ⚠ **subscriber_snapshot / daily_publication_count 보존 기간 미결정**
 - ⚠ **미보도 탐지 3단계** (임베딩 기반) — article.body 수집 + NCP 이전 후
+- ⚠ **StanceTab 차트 레이블 겹침** — 스태거드 방식 적용, 데이터 늘면 툴팁(Option B)으로 전환 검토
+- ⚠ **세계일보 트렌드** — 세계일보가 네이버 사설 페이지에 등록돼야 자동 수집 시작
 
 ## 다음 작업 로드맵
 
-- **(당장) 사설 분석 기능** — `editorial` 테이블 + `collect_editorials.py` + AI 성향 분석 + `/editorial` 페이지. 상세: memory `project_editorial_feature.md`
 - **(당장) 과거 날짜 category backfill** — 2026-04-25~29 날짜별 수동 실행
 - **(미래) 미보도 탐지 + 클러스터 품질 개선** — 설계 완료. 상세: `documents/decisions.md`
 - **(미래) 검색 기능** — Topbar 검색창 UI 주석 처리됨. 이슈 클러스터 제목/키워드 검색

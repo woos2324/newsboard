@@ -147,7 +147,7 @@ export default function TodayTab({ editorials, date }: { editorials: Editorial[]
           <p className="text-sm">해당 분류의 사설이 없습니다.</p>
         </div>
       ) : (
-        <div className="space-y-12">
+        <div className="space-y-8">
           {mainGroups.map(([topic, items, issue]) => {
             const isSingle = topic === '__single__'
             return (
@@ -161,7 +161,7 @@ export default function TodayTab({ editorials, date }: { editorials: Editorial[]
                     <span className="text-xs text-gray-400 flex-shrink-0">{items.length}개 언론사가 같은 주제</span>
                   )}
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                   {items.map((e) => <EditorialCard key={e.editorial_id} item={e} />)}
                 </div>
               </div>

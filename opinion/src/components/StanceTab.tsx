@@ -182,15 +182,15 @@ export default function StanceTab({ mediaStances }: { mediaStances: MediaStance[
                 key={m.media_company_id}
                 className={`border-b border-gray-100 ${m.is_our_company ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
               >
-                <td className={`px-5 py-5 font-semibold ${m.is_our_company ? 'text-blue-800' : 'text-gray-800'}`}>
+                <td className={`px-5 py-3 font-semibold ${m.is_our_company ? 'text-blue-800' : 'text-gray-800'}`}>
                   {m.name}{m.is_our_company ? ' ★' : ''}
                 </td>
                 {topicCols.map((t) => (
-                  <td key={t} className="px-4 py-5 text-center">
+                  <td key={t} className="px-4 py-3 text-center">
                     <StanceBadge score={m.by_topic[t]} />
                   </td>
                 ))}
-                <td className="px-4 py-5 text-center">
+                <td className="px-4 py-3 text-center">
                   <StanceBadge score={m.avg_stance} />
                 </td>
               </tr>

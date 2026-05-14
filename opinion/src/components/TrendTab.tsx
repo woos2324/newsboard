@@ -71,7 +71,7 @@ export default function TrendTab({ editorials }: { editorials: Editorial[] }) {
         </div>
       </div>
 
-      <div className="space-y-5">
+      <div className="space-y-3">
         {editorials.map((e) => (
           <a
             key={e.editorial_id}

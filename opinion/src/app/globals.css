@@ -46,3 +46,8 @@ body {
   color: #111827;
   font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif;
 }
+
+.page-wrapper {
+  padding: 24px 24px 96px 24px;
+  width: 100%;
+}

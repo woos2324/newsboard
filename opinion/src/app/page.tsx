@@ -12,7 +12,7 @@ export default async function Page() {
   })
 
   return (
-    <div className="px-6 pt-6 pb-16 w-full">
+    <div className="page-wrapper">
       <TodayTab editorials={todayEditorials} date={today} />
     </div>
   )

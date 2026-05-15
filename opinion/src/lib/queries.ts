@@ -1,3 +1,4 @@
+import { unstable_cache } from 'next/cache'
 import { supabase } from './supabase'
 
 export interface Editorial {
@@ -49,18 +50,20 @@ export async function getEditorialById(id: number): Promise<Editorial | null> {
   return (data ?? null) as Editorial | null
 }
 
-export async function getTodayEditorials(date?: string): Promise<Editorial[]> {
-  const targetDate = date ?? new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' })
+export const getTodayEditorials = unstable_cache(
+  async (date: string): Promise<Editorial[]> => {
+    const { data, error } = await supabase
+      .from('editorial')
+      .select(EDITORIAL_LIST_COLS)
+      .eq('edition_date', date)
+      .order('published_at', { ascending: false })
 
-  const { data, error } = await supabase
-    .from('editorial')
-    .select(EDITORIAL_LIST_COLS)
-    .eq('edition_date', targetDate)
-    .order('published_at', { ascending: false })
-
-  if (error) throw error
-  return (data ?? []) as unknown as Editorial[]
-}
+    if (error) throw error
+    return (data ?? []) as unknown as Editorial[]
+  },
+  ['editorial-by-date'],
+  { revalidate: 300 }
+)
 
 export async function getRecentEditorials(days = 30): Promise<Editorial[]> {
   const since = new Date()

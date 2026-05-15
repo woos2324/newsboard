@@ -191,7 +191,7 @@ export async function getSegyeEditorials(days = 90): Promise<Editorial[]> {
     .from('editorial')
     .select(`
       editorial_id, media_company_id, title, summary, url,
-      published_at, topic, issue, stance_score, stance_label, fetched_at,
+      published_at, edition_date, topic, issue, stance_score, stance_label, fetched_at,
       media_company!inner (media_company_id, name, normalized_name, is_our_company)
     `)
     .eq('media_company.is_our_company', true)

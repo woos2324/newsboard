@@ -29,16 +29,19 @@
 | cron-section-ranking | ranking 성공 직후 + UTC 02/08/14/20시 fallback | 섹션별 랭킹 → section_ranking_snapshot |
 | cron-subscribers | UTC 23:00 (KST 08:00) | followers.json → subscriber_snapshot |
 | cron-comments | 매시 15분 (UTC) | 자사·경쟁사 댓글 수 → comment_metric |
+| cron-editorials | KST 06:00, 14:00, 22:00 (하루 3회) | 네이버 사설 수집 + AI 성향 분석 → editorial |
 | cron-daily-briefing | UTC 15:00 (KST 00:00) | AI 일간 브리핑 → ai_summary |
 | cron-cleanup | UTC 15:00 (KST 00:00) | 7일 이전 스냅샷 삭제 |
 
 **cron chain**: `ranking → cluster → gap` (매시 자동 연쇄)
 
-## DB 스키마 (마이그레이션 12건)
+## DB 스키마 (마이그레이션 15건)
 
 - `0001_init` — 11개 코어 테이블
 - `0002` ~ `0006` — daily_publication_count, section_ranking, 성능 인덱스, section_ranking_unique, gap_verdict
 - `0007~0012` — RLS 활성화 (전체 14개 테이블)
+- `0013~0014` — editorial 인덱스 3개 (19차)
+- `0015` — editorial.edition_date DATE 컬럼 추가 (20차)
 - 마이그레이션 상세: [supabase/migrations/](supabase/migrations/)
 - 매체 51개 (naver_media_id 보유 47개)
 
@@ -49,26 +52,26 @@
 - `SUPABASE_SERVICE_ROLE_KEY` — **필수**, Supabase Legacy `service_role` JWT(`eyJ...`). 신 포맷(`sb_secret_...`) 사용 시 Python 스크립트 전체 중단.
 - `AI_BASE_URL=https://api.openai.com/v1`, `OPENAI_API_KEY`, `DEFAULT_AI_MODEL=gpt-4o-mini`, `DEFAULT_EMBED_MODEL=text-embedding-3-small`
 
-## 재개 지점 (2026-05-15, 19차 세션 종료)
+## 재개 지점 (2026-05-16, 20차 세션 종료)
 
 **이번 세션 완료**:
-- **성향 레이블링 페이지 (`/label`) 추가** — opinion 앱
-  - 카드 그리드 (4열, 16개/페이지, 페이지네이션)
-  - 평가 모달: 이름 입력 + 성향 선택 + 메모 + 제출 후 AI vs 인간 비교
-  - `editorial_label` 테이블 다중 평가자 지원
-  - 좌측 사이드바에 레이블링 메뉴 추가 (Tag 아이콘)
-- **스켈레톤 로딩 추가** — opinion 4개 라우트 (`/`, `/stance`, `/trend`, `/label`) loading.tsx
-- **EditorialModal 개선**: 본문(body) 표시, 단락 구분 (`whitespace-pre-line`)
-- **collect_editorials.py 본문 줄바꿈 수정**: `<br>`/`<p>` → `\n` 변환 후 저장
-- **collect_editorials.py 모델 업그레이드**: `gpt-4o` 고정, `stance_reason` 3~4문장으로 확장
-- **DB 인덱스 3개 추가** (마이그레이션):
-  - `idx_editorial_media_published` (media_company_id, published_at DESC)
-  - `idx_editorial_published_stance` (published_at DESC) WHERE stance_score IS NOT NULL
-  - `idx_issue_cluster_date_confidence` (cluster_date DESC, confidence_score DESC)
-- **쿼리 최적화**: 목록 쿼리에서 `body`/`ai_analysis` 제외 → 모달 열 때 `getEditorialById`로 lazy fetch, 본문 로딩 스켈레톤 표시
-- **revalidate 캐싱 적용**: newsboard + opinion 전 페이지 `revalidate = 300` (5분)
-  - newsboard `/trending`만 `force-dynamic` 유지 (실시간)
-  - tsconfig.json에 `opinion` 제외 추가 (빌드 분리)
+- **edition_date 날짜 체계 도입** — `editorial` 테이블에 `edition_date DATE` 컬럼 추가 (마이그레이션 0015)
+  - 한국 신문은 전날 밤 온라인 게재 → `published_at` KST 날짜 ≠ 신문 판 날짜 문제 해결
+  - `collect_editorials.py`: Naver API 요청 날짜(`api_date`)를 `edition_date`로 저장
+  - API page=1부터 수집 (HTML 스크래핑 + API 병합, URL 중복 제거)
+  - `석간`/`조간` 키워드 필터 — 연합뉴스 단신 묶음 제외 (의도적 설계)
+  - 과거 날짜 재수집: 05-13~15 수동 실행, 05-13 이전 데이터 삭제
+- **DateNav 날짜 네비게이션** — opinion 메인 상단 `< 2026.05.16.토 📅 >`
+  - 달력 아이콘 클릭 시 월별 달력 팝업, 날짜 선택으로 해당 날짜 사설 이동
+  - 월 이동 / 오늘 버튼 / 미래 날짜 비활성화 / 일요일 빨간색 / 선택 날짜 파란 원
+- **TrendTab edition_date 기준 수정**
+  - `EDITORIAL_LIST_COLS` + `getSegyeEditorials` SELECT에 `edition_date` 추가
+  - 주간/월간 필터링 및 목록 날짜 표시 모두 `edition_date` 기준으로 통일
+- **TodayTab 세계일보 우선 정렬** — 토픽 그룹 내 `is_our_company=true` 기사 맨 앞으로
+- **캐시 최적화** — `getTodayEditorials`에 `unstable_cache` 적용 (날짜별 5분 캐시)
+- **cron-editorials 하루 3회** — KST 06:00 / 14:00 / 22:00 (기존 07:30 1회 → 3회)
+  - 중복 기사는 AI 재분석 없이 필드 업데이트만 → 비용 추가 없음
+- **cron-editorials workflow_dispatch date 파라미터 추가** — 수동 특정 날짜 재수집 지원
 
 **미완료 (다음 세션 이어받을 것)**:
 - ⚠ **과거 날짜 category backfill** — `python -m scripts.collect_publications --date 20260425` ~ `20260429` 수동 실행
@@ -79,7 +82,6 @@
 
 ## 다음 작업 로드맵
 
-- **(당장) 세계일보 트렌드 화면 수정**
 - **(당장) 과거 날짜 category backfill** — 2026-04-25~29 날짜별 수동 실행
 - **(미래) 미보도 탐지 + 클러스터 품질 개선** — 설계 완료. 상세: `documents/decisions.md`
 - **(미래) 성향 분석 정확도 개선** — `editorial_label` 테이블에 인간 레이블 충분히 쌓인 후 진행

@@ -112,8 +112,7 @@ async def fetch_editorial_api_page(client: httpx.AsyncClient, date: str, page: i
             continue
         if any(kw in title for kw in ["석간", "조간"]):
             continue
-        api_edition_date = (c.get("serviceTime") or {}).get("yearMonthDayDash")
-        items.append({"press_name": press_name, "title": title, "url": url, "api_edition_date": api_edition_date})
+        items.append({"press_name": press_name, "title": title, "url": url})
     return items
 
 
@@ -293,7 +292,7 @@ async def main(dry_run: bool, date: Optional[str] = None, reanalyze: bool = Fals
                 if existing.data:
                     # 기존 레코드: media_company_id(null인 경우)와 published_at, edition_date 업데이트
                     body, article_published_at = await fetch_article_body(http_client, url)
-                    update_fields: dict = {"edition_date": item.get("api_edition_date") or edition_date}
+                    update_fields: dict = {"edition_date": edition_date}
                     if existing.data[0]["media_company_id"] is None and mc_id is not None:
                         update_fields["media_company_id"] = mc_id
                     if article_published_at:
@@ -318,7 +317,7 @@ async def main(dry_run: bool, date: Optional[str] = None, reanalyze: bool = Fals
                 "url": url,
                 "body": body,
                 "published_at": published_at,
-                "edition_date": item.get("api_edition_date") or edition_date,
+                "edition_date": edition_date,
                 "summary": ai.get("summary") if ai else None,
                 "topic": ai.get("topic") if ai else None,
                 "issue": ai.get("issue") if ai else None,

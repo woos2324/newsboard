@@ -47,7 +47,7 @@ SYSTEM_PROMPT = """당신은 언론사 사설을 분석하는 전문가입니다
   "issue": "이 사설이 다루는 핵심 쟁점을 15자 이내 명사구로 (예: 탄핵 이후 정국 수습, 반도체 파업 대응, 저출생 구조 개혁)",
   "stance_score": -2.0에서 2.0 사이 숫자 (-2=매우진보, 0=중립, 2=매우보수),
   "stance_label": "진보|중도진보|중립|중도보수|보수 중 하나",
-  "stance_reason": "성향 판단 근거 1문장"
+  "stance_reason": "이 사설의 성향을 판단한 구체적 근거를 3~4문장으로 서술. 사설에서 사용된 주요 논거·표현·입장을 인용하며 설명할 것"
 }"""
 
 
@@ -135,7 +135,9 @@ async def fetch_article_body(client: httpx.AsyncClient, url: str) -> tuple[Optio
         for sel in ["#dic_area", "#articleBodyContents", ".newsct_article", "#articeBody"]:
             el = soup.select_one(sel)
             if el:
-                body = clean_text(el.get_text(" ", strip=True))[:3000]
+                for tag in el.find_all(['br', 'p']):
+                    tag.insert_before('\n')
+                body = clean_text(el.get_text("", strip=False).strip())[:3000]
                 break
 
         return body, published_at
@@ -146,7 +148,8 @@ async def fetch_article_body(client: httpx.AsyncClient, url: str) -> tuple[Optio
 async def analyze_with_ai(title: str, body: Optional[str]) -> Optional[dict]:
     api_key = os.getenv("OPENAI_API_KEY") or os.getenv("AI_GATEWAY_API_KEY")
     base_url = os.getenv("AI_BASE_URL", "https://api.openai.com/v1")
-    model = os.getenv("DEFAULT_AI_MODEL", "gpt-4o-mini")
+    # 사설 분석은 품질 우선 — gpt-4o 고정 (다른 스크립트의 DEFAULT_AI_MODEL과 별개)
+    model = "gpt-4o"
 
     if not api_key or api_key.startswith("PLACEHOLDER"):
         return None
@@ -165,7 +168,7 @@ async def analyze_with_ai(title: str, body: Optional[str]) -> Optional[dict]:
                         {"role": "user", "content": content},
                     ],
                     "temperature": 0.3,
-                    "max_tokens": 400,
+                    "max_tokens": 800,
                 },
                 timeout=30,
             )
@@ -196,8 +199,37 @@ async def reanalyze_issue(supabase) -> None:
                 print(f"  [skip] {row['title'][:40]}")
 
 
-async def main(dry_run: bool, date: Optional[str] = None, reanalyze: bool = False):
-    print(f"[collect_editorials] dry_run={dry_run} date={date or 'today'} reanalyze={reanalyze}")
+async def reanalyze_by_date(supabase, date: str) -> None:
+    """특정 날짜(YYYYMMDD)의 사설 전체를 AI로 재분석."""
+    dt = datetime(int(date[:4]), int(date[4:6]), int(date[6:8]), tzinfo=KST)
+    day_start = dt.isoformat()
+    day_end = (dt + timedelta(days=1)).isoformat()
+    rows = supabase.table("editorial").select("editorial_id,title,body") \
+        .gte("published_at", day_start).lt("published_at", day_end).execute()
+    print(f"[reanalyze-date] {date} 사설: {len(rows.data)}건")
+    for row in rows.data:
+        ai = await analyze_with_ai(row["title"], row["body"])
+        if ai:
+            supabase.table("editorial").update({
+                "summary": ai.get("summary"),
+                "topic": ai.get("topic"),
+                "issue": ai.get("issue"),
+                "stance_score": ai.get("stance_score"),
+                "stance_label": ai.get("stance_label"),
+                "ai_analysis": ai,
+            }).eq("editorial_id", row["editorial_id"]).execute()
+            print(f"  [ok] {row['title'][:40]} | {ai.get('stance_label')} | {ai.get('issue')}")
+        else:
+            print(f"  [skip] {row['title'][:40]}")
+
+
+async def main(dry_run: bool, date: Optional[str] = None, reanalyze: bool = False, reanalyze_date: Optional[str] = None):
+    print(f"[collect_editorials] dry_run={dry_run} date={date or 'today'} reanalyze={reanalyze} reanalyze_date={reanalyze_date}")
+
+    if reanalyze_date and not dry_run:
+        supabase = get_client()
+        await reanalyze_by_date(supabase, reanalyze_date)
+        return
 
     if reanalyze and not dry_run:
         supabase = get_client()
@@ -309,5 +341,6 @@ if __name__ == "__main__":
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--date", type=str, help="수집 날짜 YYYYMMDD (기본: 오늘)")
     parser.add_argument("--reanalyze", action="store_true", help="issue 없는 기존 레코드 AI 재분석")
+    parser.add_argument("--reanalyze-date", type=str, help="특정 날짜 사설 전체 재분석 YYYYMMDD")
     args = parser.parse_args()
-    asyncio.run(main(args.dry_run, args.date, args.reanalyze))
+    asyncio.run(main(args.dry_run, args.date, args.reanalyze, args.reanalyze_date))

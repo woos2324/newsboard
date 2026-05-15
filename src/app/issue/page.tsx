@@ -3,7 +3,7 @@ import { Layers } from "lucide-react";
 import { PageShell } from "@/components/PageShell";
 import { getIssues } from "@/lib/queries";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300
 
 export default async function IssuePage() {
   const issues = await getIssues(30);

@@ -1,8 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { Editorial } from '@/lib/queries'
-import { ExternalLink } from 'lucide-react'
+import { Editorial, getEditorialById } from '@/lib/queries'
+import EditorialModal from './EditorialModal'
 
 const STANCE_COLORS: Record<string, string> = {
   진보: 'bg-blue-100 text-blue-700',
@@ -34,14 +34,15 @@ function formatTime(iso: string | null) {
   })
 }
 
-function EditorialCard({ item }: { item: Editorial }) {
+function EditorialCard({ item, onClick }: { item: Editorial; onClick: () => void }) {
   const isOurs = item.media_company?.is_our_company
   return (
-    <a
-      href={item.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={`editorial-card rounded-xl p-4 block ${isOurs ? 'our-card' : 'bg-white border border-gray-200'}`}
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick() }}
+      className={`editorial-card rounded-xl p-4 cursor-pointer ${isOurs ? 'our-card' : 'bg-white border border-gray-200'}`}
     >
       <div className="flex items-center justify-between mb-2">
         <span className={`text-xs font-semibold ${isOurs ? 'text-blue-800' : 'text-gray-600'}`}>
@@ -55,28 +56,33 @@ function EditorialCard({ item }: { item: Editorial }) {
       )}
       <div className="flex items-center gap-2 flex-wrap">
         {item.stance_label && (
-          <div className="relative group">
-            <span className={`text-xs px-2 py-0.5 rounded-full font-medium cursor-help ${STANCE_COLORS[item.stance_label] ?? 'bg-gray-100 text-gray-600'}`}>
-              {item.stance_label}
-            </span>
-            {(item.ai_analysis as Record<string, string> | null)?.stance_reason && (
-              <div className="absolute bottom-full left-0 mb-1.5 w-52 bg-gray-800 text-white text-xs rounded-lg p-2.5 opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none leading-relaxed shadow-lg">
-                {(item.ai_analysis as Record<string, string>).stance_reason}
-              </div>
-            )}
-          </div>
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STANCE_COLORS[item.stance_label] ?? 'bg-gray-100 text-gray-600'}`}>
+            {item.stance_label}
+          </span>
         )}
         {item.topic && (
           <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{item.topic}</span>
         )}
-        <ExternalLink className="w-3 h-3 text-gray-300 ml-auto" />
       </div>
-    </a>
+    </div>
   )
 }
 
 export default function TodayTab({ editorials, date }: { editorials: Editorial[]; date: string }) {
   const [filter, setFilter] = useState<FilterType>('전체')
+  const [selected, setSelected] = useState<Editorial | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+
+  async function openModal(item: Editorial) {
+    setSelected(item)
+    setDetailLoading(true)
+    try {
+      const full = await getEditorialById(item.editorial_id)
+      if (full) setSelected(full)
+    } finally {
+      setDetailLoading(false)
+    }
+  }
 
   const filtered = filter === '전체'
     ? editorials
@@ -93,7 +99,6 @@ export default function TodayTab({ editorials, date }: { editorials: Editorial[]
     topicMap.set(key, arr)
   }
 
-  // 그룹별 대표 issue: 가장 많이 등장한 issue 선택
   function pickIssue(items: Editorial[]): string | null {
     const freq = new Map<string, number>()
     for (const e of items) {
@@ -162,12 +167,23 @@ export default function TodayTab({ editorials, date }: { editorials: Editorial[]
                   )}
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                  {items.map((e) => <EditorialCard key={e.editorial_id} item={e} />)}
+                  {items.map((e) => (
+                    <EditorialCard key={e.editorial_id} item={e} onClick={() => openModal(e)} />
+                  ))}
                 </div>
               </div>
             )
           })}
         </div>
+      )}
+
+      {selected && (
+        <EditorialModal
+          item={selected}
+          relatedEditorials={editorials}
+          onClose={() => setSelected(null)}
+          detailLoading={detailLoading}
+        />
       )}
     </div>
   )

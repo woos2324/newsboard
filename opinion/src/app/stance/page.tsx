@@ -1,7 +1,7 @@
 import { getMediaStanceAvg } from '@/lib/queries'
 import StanceTab from '@/components/StanceTab'
 
-export const dynamic = 'force-dynamic'
+export const revalidate = 300
 
 export default async function StancePage() {
   const mediaStances = await getMediaStanceAvg(30).catch((e) => {

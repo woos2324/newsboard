@@ -3,7 +3,7 @@ import { PageShell } from "@/components/PageShell";
 import { getMissedAlerts } from "@/lib/queries";
 import { ReviewButton } from "./ReviewButton";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300
 
 const badgeByPriority: Record<
   "high" | "medium" | "low",

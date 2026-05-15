@@ -3,7 +3,7 @@ import { PageShell } from "@/components/PageShell";
 import { GenerateReportButton } from "@/components/GenerateReportButton";
 import { getReports } from "@/lib/queries";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300
 
 function formatDate(dateStr: string, type: string): string {
   if (type === "weekly") {

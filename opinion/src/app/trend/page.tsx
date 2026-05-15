@@ -1,7 +1,7 @@
 import { getSegyeEditorials } from '@/lib/queries'
 import TrendTab from '@/components/TrendTab'
 
-export const dynamic = 'force-dynamic'
+export const revalidate = 300
 
 export default async function TrendPage() {
   const segyeEditorials = await getSegyeEditorials(90).catch((e) => {

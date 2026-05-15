@@ -3,7 +3,7 @@ import { getOurArticlesPage, sectionLabel } from "@/lib/queries";
 import { ArticleDateNav } from "./ArticleDateNav";
 import { ArticleListClient } from "./ArticleListClient";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300
 
 const PER_PAGE = 10;
 

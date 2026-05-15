@@ -3,7 +3,7 @@ import { getCompareMatrix, getSectionRankings } from "@/lib/queries";
 import { CompareTabView } from "./CompareTabView";
 import { MediaSelector } from "./MediaSelector";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300
 
 const DEFAULT_MEDIA: string[] = [];
 

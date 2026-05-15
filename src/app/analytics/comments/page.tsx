@@ -6,7 +6,7 @@ import {
   type TopCommentView,
 } from "@/lib/queries";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300
 
 function engagementBadge(comments: number): { cls: string; label: string } {
   if (comments >= 500) return { cls: "badge-error", label: "매우 활발" };

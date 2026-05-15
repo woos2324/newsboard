@@ -49,36 +49,51 @@
 - `SUPABASE_SERVICE_ROLE_KEY` — **필수**, Supabase Legacy `service_role` JWT(`eyJ...`). 신 포맷(`sb_secret_...`) 사용 시 Python 스크립트 전체 중단.
 - `AI_BASE_URL=https://api.openai.com/v1`, `OPENAI_API_KEY`, `DEFAULT_AI_MODEL=gpt-4o-mini`, `DEFAULT_EMBED_MODEL=text-embedding-3-small`
 
-## 재개 지점 (2026-05-14, 18차 세션 종료)
+## 재개 지점 (2026-05-15, 19차 세션 종료)
 
 **이번 세션 완료**:
-- **사설 분석 앱 (`opinion/`) 전면 개편** — 별도 Vercel 프로젝트 (https://opinion-eta.vercel.app)
-  - 3탭 → 좌측 사이드바 + 분리 라우트 (/, /stance, /trend)
-  - 반응형: 데스크탑 고정 사이드바 / 모바일 햄버거 슬라이드
-  - TodayTab: 토픽 그룹화 + issue 부제목 + 종합/경제지 필터 버튼
-  - StanceTab: 주제 필터 + 언론사×주제 교차 테이블 + 세계일보 상단 고정 (bg-blue-50)
-  - TrendTab: 90일 세계일보 사설 트렌드
-  - 성향 이유 hover 툴팁 (stance_reason)
-  - BOM 제거 (supabase.ts), 페이지 하단 여백 96px
-- **collect_editorials.py 개선**: --date 백필, --reanalyze (issue 소급 분석), 실제 발행 시각 파싱, 석간/조간 필터
-- **collect_editorials.py API 페이지네이션 추가**: 네이버 사설 `/api?page=N` 엔드포인트 활용, HTML 첫 페이지 + API page=2~ 전체 순회 → 73건/일 (기존 18건), 세계일보 수집 시작
-- DB 마이그레이션 0015~0017: 코리아중앙데일리/부산일보 추가, media_company anon RLS, editorial.issue 컬럼
+- **성향 레이블링 페이지 (`/label`) 추가** — opinion 앱
+  - 카드 그리드 (4열, 16개/페이지, 페이지네이션)
+  - 평가 모달: 이름 입력 + 성향 선택 + 메모 + 제출 후 AI vs 인간 비교
+  - `editorial_label` 테이블 다중 평가자 지원
+  - 좌측 사이드바에 레이블링 메뉴 추가 (Tag 아이콘)
+- **스켈레톤 로딩 추가** — opinion 4개 라우트 (`/`, `/stance`, `/trend`, `/label`) loading.tsx
+- **EditorialModal 개선**: 본문(body) 표시, 단락 구분 (`whitespace-pre-line`)
+- **collect_editorials.py 본문 줄바꿈 수정**: `<br>`/`<p>` → `\n` 변환 후 저장
+- **collect_editorials.py 모델 업그레이드**: `gpt-4o` 고정, `stance_reason` 3~4문장으로 확장
+- **DB 인덱스 3개 추가** (마이그레이션):
+  - `idx_editorial_media_published` (media_company_id, published_at DESC)
+  - `idx_editorial_published_stance` (published_at DESC) WHERE stance_score IS NOT NULL
+  - `idx_issue_cluster_date_confidence` (cluster_date DESC, confidence_score DESC)
+- **쿼리 최적화**: 목록 쿼리에서 `body`/`ai_analysis` 제외 → 모달 열 때 `getEditorialById`로 lazy fetch, 본문 로딩 스켈레톤 표시
+- **revalidate 캐싱 적용**: newsboard + opinion 전 페이지 `revalidate = 300` (5분)
+  - newsboard `/trending`만 `force-dynamic` 유지 (실시간)
+  - tsconfig.json에 `opinion` 제외 추가 (빌드 분리)
 
 **미완료 (다음 세션 이어받을 것)**:
-- ⚠ **세계일보 트렌드 화면 수정** — 다음 세션 첫 작업
 - ⚠ **과거 날짜 category backfill** — `python -m scripts.collect_publications --date 20260425` ~ `20260429` 수동 실행
 - ⚠ **subscriber_snapshot / daily_publication_count 보존 기간 미결정**
 - ⚠ **미보도 탐지 3단계** (임베딩 기반) — article.body 수집 + NCP 이전 후
 - ⚠ **StanceTab 차트 레이블 겹침** — 스태거드 방식 적용, 데이터 늘면 툴팁(Option B)으로 전환 검토
+- ⚠ **On-demand Revalidation** — 수집 스크립트 완료 시 `/api/revalidate` 호출로 즉시 캐시 갱신 (미구현)
 
 ## 다음 작업 로드맵
 
 - **(당장) 세계일보 트렌드 화면 수정**
 - **(당장) 과거 날짜 category backfill** — 2026-04-25~29 날짜별 수동 실행
 - **(미래) 미보도 탐지 + 클러스터 품질 개선** — 설계 완료. 상세: `documents/decisions.md`
+- **(미래) 성향 분석 정확도 개선** — `editorial_label` 테이블에 인간 레이블 충분히 쌓인 후 진행
+  - 정확도 측정: `editorial_label` vs `editorial.stance_label` 비교 SQL로 일치율 계산
+  - Few-shot 예시 추출: 레이블 일치 사례를 SYSTEM_PROMPT에 추가
+  - 상세 6단계 성향 판단 프롬프트 적용 검토 (진보 지표 3개 + 보수 지표 3개 + 점수 산출)
 - **(미래) 검색 기능** — Topbar 검색창 UI 주석 처리됨. 이슈 클러스터 제목/키워드 검색
 - **(미래) 이메일 브리핑 자동 발송** — 매일 KST 9시 GitHub Actions cron
 - **(미래) 기자 이름 기반 통계** — NCP 한국 IP 서버 구성 후 기자명 수집 재도입
+- **(미래) NCP 전면 이전** — 사내 데이터 내재화 목적. 3단계 순서로 진행:
+  - 1단계: GitHub Actions cron → NCP 수집서버 cron 이전 (1~2일)
+  - 2단계: Supabase → NCP PostgreSQL 이전 — `supabase-js` → `pg` 교체, `queries.ts` 전면 수정, RLS 제거 (3~5일, 핵심 난관)
+  - 3단계: Vercel → NCP 웹서버 이전 — nginx + PM2, GitHub Actions CD 워크플로 추가 (1~2일)
+  - 구성: 웹서버 1대 (80/443 외부 오픈) + 수집서버 1대 (크롤링, 한국 IP) + DB서버 1대 (내부망만 허용, ACG 설정)
 
 ---
 

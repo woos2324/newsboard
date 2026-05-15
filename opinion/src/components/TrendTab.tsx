@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { Editorial } from '@/lib/queries'
+import { Editorial, getEditorialById } from '@/lib/queries'
 import { ExternalLink } from 'lucide-react'
+import EditorialModal from './EditorialModal'
 
 type Period = 'week' | 'month'
 
@@ -74,6 +75,19 @@ function getTopTopic(items: Editorial[]) {
 export default function TrendTab({ editorials }: { editorials: Editorial[] }) {
   const [period, setPeriod] = useState<Period>('week')
   const [showAll, setShowAll] = useState(false)
+  const [selected, setSelected] = useState<Editorial | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+
+  async function openModal(item: Editorial) {
+    setSelected(item)
+    setDetailLoading(true)
+    try {
+      const full = await getEditorialById(item.editorial_id)
+      if (full) setSelected(full)
+    } finally {
+      setDetailLoading(false)
+    }
+  }
 
   const { currentItems, prevItems, chartData, topicDist } = useMemo(() => {
     const now = new Date()
@@ -334,12 +348,13 @@ export default function TrendTab({ editorials }: { editorials: Editorial[] }) {
         </div>
         <div className="divide-y divide-gray-100">
           {listItems.map((e) => (
-            <a
+            <div
               key={e.editorial_id}
-              href={e.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-4 px-5 py-3.5 hover:bg-gray-50 group"
+              role="button"
+              tabIndex={0}
+              onClick={() => openModal(e)}
+              onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') openModal(e) }}
+              className="flex items-center gap-4 px-5 py-3.5 hover:bg-gray-50 cursor-pointer group"
             >
               <span className="text-xs text-gray-400 w-20 flex-shrink-0">{formatDate(e.published_at)}</span>
               <span className="flex-1 text-sm text-gray-800 truncate group-hover:text-blue-700">{e.title}</span>
@@ -351,8 +366,7 @@ export default function TrendTab({ editorials }: { editorials: Editorial[] }) {
               {e.topic && (
                 <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full flex-shrink-0">{e.topic}</span>
               )}
-              <ExternalLink className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
-            </a>
+            </div>
           ))}
           {!showAll && editorials.length > 10 && (
             <button
@@ -364,6 +378,14 @@ export default function TrendTab({ editorials }: { editorials: Editorial[] }) {
           )}
         </div>
       </div>
+
+      {selected && (
+        <EditorialModal
+          item={selected}
+          onClose={() => setSelected(null)}
+          detailLoading={detailLoading}
+        />
+      )}
     </div>
   )
 }

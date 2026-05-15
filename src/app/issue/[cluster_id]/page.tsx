@@ -5,7 +5,7 @@ import { PageShell } from "@/components/PageShell";
 import { GenerateReportButton } from "@/components/GenerateReportButton";
 import { getIssueDetail, getIssueAISummary } from "@/lib/queries";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300
 
 function formatDateTime(iso: string | null): string {
   if (!iso) return "-";

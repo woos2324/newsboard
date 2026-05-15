@@ -111,10 +111,13 @@ export default function TodayTab({ editorials, date }: { editorials: Editorial[]
   const mainGroups: [string, Editorial[], string | null][] = []
   const singleItems: Editorial[] = []
   for (const [topic, items] of topicMap.entries()) {
-    if (items.length === 1) {
-      singleItems.push(...items)
+    const sorted = [...items].sort((a, b) =>
+      (b.media_company?.is_our_company ? 1 : 0) - (a.media_company?.is_our_company ? 1 : 0)
+    )
+    if (sorted.length === 1) {
+      singleItems.push(...sorted)
     } else {
-      mainGroups.push([topic, items, pickIssue(items)])
+      mainGroups.push([topic, sorted, pickIssue(sorted)])
     }
   }
   mainGroups.sort((a, b) => b[1].length - a[1].length)

@@ -9,6 +9,10 @@ on:
         description: 'Dry run (DB 저장 없이 확인만)'
         required: false
         default: 'false'
+      date:
+        description: '수집 날짜 YYYYMMDD (기본: 오늘)'
+        required: false
+        default: ''
 
 jobs:
   collect:
@@ -36,4 +40,8 @@ jobs:
           if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
             DRY_ARG="--dry-run"
           fi
-          python -m scripts.collect_editorials $DRY_ARG
+          DATE_ARG=""
+          if [ -n "${{ github.event.inputs.date }}" ]; then
+            DATE_ARG="--date ${{ github.event.inputs.date }}"
+          fi
+          python -m scripts.collect_editorials $DRY_ARG $DATE_ARG

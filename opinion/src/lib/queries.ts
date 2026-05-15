@@ -35,7 +35,7 @@ export interface MediaStance {
 
 const EDITORIAL_LIST_COLS = `
   editorial_id, media_company_id, title, summary, url,
-  published_at, topic, issue, stance_score, stance_label, fetched_at,
+  published_at, edition_date, topic, issue, stance_score, stance_label, fetched_at,
   media_company (media_company_id, name, normalized_name, is_our_company)
 `
 
@@ -197,7 +197,7 @@ export async function getSegyeEditorials(days = 90): Promise<Editorial[]> {
     .eq('media_company.is_our_company', true)
     .gte('published_at', since.toISOString())
     .not('stance_score', 'is', null)
-    .order('published_at', { ascending: false })
+    .order('edition_date', { ascending: false })
 
   if (error) throw error
   return (data ?? []) as unknown as Editorial[]

@@ -47,10 +47,13 @@ function getMonthKey(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
 }
 
-function formatDate(iso: string | null) {
-  if (!iso) return ''
-  const d = new Date(iso)
-  return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`
+function toDateStr(date: Date): string {
+  return date.toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' })
+}
+
+function formatEditionDate(dateStr: string | null) {
+  if (!dateStr) return ''
+  return dateStr.replace(/-/g, '.')
 }
 
 function getMajorStance(items: Editorial[]) {
@@ -96,12 +99,13 @@ export default function TrendTab({ editorials }: { editorials: Editorial[] }) {
       const currentMonday = getWeekStart(now)
       const prevMonday = new Date(currentMonday)
       prevMonday.setDate(prevMonday.getDate() - 7)
+      const currentMondayStr = toDateStr(currentMonday)
+      const prevMondayStr = toDateStr(prevMonday)
 
-      const currentItems = editorials.filter(e => e.published_at && new Date(e.published_at) >= currentMonday)
+      const currentItems = editorials.filter(e => e.edition_date && e.edition_date >= currentMondayStr)
       const prevItems = editorials.filter(e => {
-        if (!e.published_at) return false
-        const d = new Date(e.published_at)
-        return d >= prevMonday && d < currentMonday
+        if (!e.edition_date) return false
+        return e.edition_date >= prevMondayStr && e.edition_date < currentMondayStr
       })
 
       // 최근 5주 차트 데이터
@@ -115,11 +119,11 @@ export default function TrendTab({ editorials }: { editorials: Editorial[] }) {
       }
 
       const chartData = weeks.map(({ start, label, isCurrent }, idx) => {
-        const end = idx < 4 ? weeks[idx + 1].start : new Date(8640000000000000)
+        const startStr = toDateStr(start)
+        const endStr = idx < 4 ? toDateStr(weeks[idx + 1].start) : '9999-99-99'
         const items = editorials.filter(e => {
-          if (!e.published_at) return false
-          const d = new Date(e.published_at)
-          return d >= start && d < end
+          if (!e.edition_date) return false
+          return e.edition_date >= startStr && e.edition_date < endStr
         })
         const stanceCounts: Record<string, number> = {}
         for (const e of items) {
@@ -139,12 +143,13 @@ export default function TrendTab({ editorials }: { editorials: Editorial[] }) {
     } else {
       const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
       const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+      const currentMonthStr = toDateStr(currentMonthStart)
+      const prevMonthStr = toDateStr(prevMonthStart)
 
-      const currentItems = editorials.filter(e => e.published_at && new Date(e.published_at) >= currentMonthStart)
+      const currentItems = editorials.filter(e => e.edition_date && e.edition_date >= currentMonthStr)
       const prevItems = editorials.filter(e => {
-        if (!e.published_at) return false
-        const d = new Date(e.published_at)
-        return d >= prevMonthStart && d < currentMonthStart
+        if (!e.edition_date) return false
+        return e.edition_date >= prevMonthStr && e.edition_date < currentMonthStr
       })
 
       // 최근 5개월 차트 데이터
@@ -155,11 +160,11 @@ export default function TrendTab({ editorials }: { editorials: Editorial[] }) {
       }
 
       const chartData = months.map(({ start, label, isCurrent }, idx) => {
-        const end = idx < 4 ? months[idx + 1].start : new Date(8640000000000000)
+        const startStr = toDateStr(start)
+        const endStr = idx < 4 ? toDateStr(months[idx + 1].start) : '9999-99-99'
         const items = editorials.filter(e => {
-          if (!e.published_at) return false
-          const d = new Date(e.published_at)
-          return d >= start && d < end
+          if (!e.edition_date) return false
+          return e.edition_date >= startStr && e.edition_date < endStr
         })
         const stanceCounts: Record<string, number> = {}
         for (const e of items) {
@@ -356,7 +361,7 @@ export default function TrendTab({ editorials }: { editorials: Editorial[] }) {
               onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') openModal(e) }}
               className="flex items-center gap-4 px-5 py-3.5 hover:bg-gray-50 cursor-pointer group"
             >
-              <span className="text-xs text-gray-400 w-20 flex-shrink-0">{formatDate(e.published_at)}</span>
+              <span className="text-xs text-gray-400 w-20 flex-shrink-0">{formatEditionDate(e.edition_date)}</span>
               <span className="flex-1 text-sm text-gray-800 truncate group-hover:text-blue-700">{e.title}</span>
               {e.stance_label && (
                 <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${STANCE_COLORS[e.stance_label] ?? 'bg-gray-100 text-gray-600'}`}>

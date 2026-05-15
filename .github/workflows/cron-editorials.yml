@@ -2,7 +2,9 @@ name: Collect Editorials
 
 on:
   schedule:
-    - cron: '30 22 * * *'  # KST 07:30 (매일 아침 사설 수집)
+    - cron: '0 21 * * *'   # KST 06:00
+    - cron: '0 5 * * *'    # KST 14:00
+    - cron: '0 13 * * *'   # KST 22:00
   workflow_dispatch:
     inputs:
       dry_run:

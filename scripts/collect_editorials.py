@@ -112,7 +112,8 @@ async def fetch_editorial_api_page(client: httpx.AsyncClient, date: str, page: i
             continue
         if any(kw in title for kw in ["석간", "조간"]):
             continue
-        items.append({"press_name": press_name, "title": title, "url": url})
+        api_edition_date = (c.get("serviceTime") or {}).get("yearMonthDayDash")
+        items.append({"press_name": press_name, "title": title, "url": url, "api_edition_date": api_edition_date})
     return items
 
 
@@ -254,9 +255,10 @@ async def main(dry_run: bool, date: Optional[str] = None, reanalyze: bool = Fals
     async with httpx.AsyncClient() as http_client:
         items = await fetch_editorial_list(http_client, date)
 
-        # API로 page=2 이상 추가 수집 (스크롤 로딩분)
+        # API로 page=1부터 전체 수집 (HTML 스크래핑 보완 + 누락 방지)
         api_date = date or datetime.now(KST).strftime("%Y%m%d")
-        page = 2
+        edition_date = f"{api_date[:4]}-{api_date[4:6]}-{api_date[6:8]}"
+        page = 1
         while True:
             extra = await fetch_editorial_api_page(http_client, api_date, page)
             if not extra:
@@ -289,9 +291,9 @@ async def main(dry_run: bool, date: Optional[str] = None, reanalyze: bool = Fals
             if not dry_run:
                 existing = supabase.table("editorial").select("editorial_id,media_company_id").eq("url", url).execute()
                 if existing.data:
-                    # 기존 레코드: media_company_id(null인 경우)와 published_at 업데이트
+                    # 기존 레코드: media_company_id(null인 경우)와 published_at, edition_date 업데이트
                     body, article_published_at = await fetch_article_body(http_client, url)
-                    update_fields: dict = {}
+                    update_fields: dict = {"edition_date": item.get("api_edition_date") or edition_date}
                     if existing.data[0]["media_company_id"] is None and mc_id is not None:
                         update_fields["media_company_id"] = mc_id
                     if article_published_at:
@@ -316,6 +318,7 @@ async def main(dry_run: bool, date: Optional[str] = None, reanalyze: bool = Fals
                 "url": url,
                 "body": body,
                 "published_at": published_at,
+                "edition_date": item.get("api_edition_date") or edition_date,
                 "summary": ai.get("summary") if ai else None,
                 "topic": ai.get("topic") if ai else None,
                 "issue": ai.get("issue") if ai else None,

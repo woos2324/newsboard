@@ -8,6 +8,7 @@ export interface Editorial {
   body?: string | null
   url: string
   published_at: string | null
+  edition_date: string | null
   topic: string | null
   issue: string | null
   stance_score: number | null
@@ -49,15 +50,12 @@ export async function getEditorialById(id: number): Promise<Editorial | null> {
 }
 
 export async function getTodayEditorials(date?: string): Promise<Editorial[]> {
-  const targetDate = date ?? new Date().toISOString().slice(0, 10)
-  const start = `${targetDate}T00:00:00+09:00`
-  const end = `${targetDate}T23:59:59+09:00`
+  const targetDate = date ?? new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' })
 
   const { data, error } = await supabase
     .from('editorial')
     .select(EDITORIAL_LIST_COLS)
-    .gte('published_at', start)
-    .lte('published_at', end)
+    .eq('edition_date', targetDate)
     .order('published_at', { ascending: false })
 
   if (error) throw error

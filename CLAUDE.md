@@ -18,7 +18,7 @@
 - **프론트**: Next.js 15 App Router + Tailwind + lucide-react. `next dev --turbopack` (Windows webpack 행 회피)
 - **데이터 경로**: 단순 조회 → Next.js Server Component → `src/lib/queries.ts` → Supabase JS / AI·파이프라인 → FastAPI 또는 GitHub Actions Python scripts
 
-## 자동화 파이프라인 (GitHub Actions, 9종)
+## 자동화 파이프라인 (GitHub Actions, 10종)
 
 | 워크플로 | 트리거 | 역할 |
 |---|---|---|
@@ -32,16 +32,20 @@
 | cron-editorials | KST 06:00, 14:00, 22:00 (하루 3회) | 네이버 사설 수집 + AI 성향 분석 → editorial |
 | cron-daily-briefing | UTC 15:00 (KST 00:00) | AI 일간 브리핑 → ai_summary |
 | cron-cleanup | UTC 15:00 (KST 00:00) | 7일 이전 스냅샷 삭제 |
+| **cron-naver-pv** | **매시 30분 (UTC)** | **네이버 파트너센터 PV 수집 → 4개 테이블** |
 
 **cron chain**: `ranking → cluster → gap` (매시 자동 연쇄)
 
-## DB 스키마 (마이그레이션 15건)
+## DB 스키마 (마이그레이션 18건)
 
 - `0001_init` — 11개 코어 테이블
 - `0002` ~ `0006` — daily_publication_count, section_ranking, 성능 인덱스, section_ranking_unique, gap_verdict
 - `0007~0012` — RLS 활성화 (전체 14개 테이블)
 - `0013~0014` — editorial 인덱스 3개 (19차)
 - `0015` — editorial.edition_date DATE 컬럼 추가 (20차)
+- `0016` — PV 데이터 4개 테이블 (article_pv_snapshot, hourly_pv_snapshot, traffic_source_daily, search_keyword_daily) (21차)
+- `0017` — article_pv_snapshot.article_url 컬럼 추가 (21차)
+- `0018` — naver_session 쿠키 캐시 테이블 (21차)
 - 마이그레이션 상세: [supabase/migrations/](supabase/migrations/)
 - 매체 51개 (naver_media_id 보유 47개)
 
@@ -51,29 +55,28 @@
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_LEGACY_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY` — **필수**, Supabase Legacy `service_role` JWT(`eyJ...`). 신 포맷(`sb_secret_...`) 사용 시 Python 스크립트 전체 중단.
 - `AI_BASE_URL=https://api.openai.com/v1`, `OPENAI_API_KEY`, `DEFAULT_AI_MODEL=gpt-4o-mini`, `DEFAULT_EMBED_MODEL=text-embedding-3-small`
+- `NAVER_PARTNER_ID`, `NAVER_PARTNER_PW` — 네이버 파트너센터 공용계정 (GitHub Secrets + .env.local)
 
-## 재개 지점 (2026-05-16, 20차 세션 종료)
+**로컬 .env.local 추가 항목** (GitHub Secrets에 없는 것):
+- `HEADLESS=0` — Playwright 브라우저 표시 (로컬 디버깅용, 운영은 기본값 1)
+
+## 재개 지점 (2026-05-19, 21차 세션 종료)
 
 **이번 세션 완료**:
-- **edition_date 날짜 체계 도입** — `editorial` 테이블에 `edition_date DATE` 컬럼 추가 (마이그레이션 0015)
-  - 한국 신문은 전날 밤 온라인 게재 → `published_at` KST 날짜 ≠ 신문 판 날짜 문제 해결
-  - `collect_editorials.py`: Naver API 요청 날짜(`api_date`)를 `edition_date`로 저장
-  - API page=1부터 수집 (HTML 스크래핑 + API 병합, URL 중복 제거)
-  - `석간`/`조간` 키워드 필터 — 연합뉴스 단신 묶음 제외 (의도적 설계)
-  - 과거 날짜 재수집: 05-13~15 수동 실행, 05-13 이전 데이터 삭제
-- **DateNav 날짜 네비게이션** — opinion 메인 상단 `< 2026.05.16.토 📅 >`
-  - 달력 아이콘 클릭 시 월별 달력 팝업, 날짜 선택으로 해당 날짜 사설 이동
-  - 월 이동 / 오늘 버튼 / 미래 날짜 비활성화 / 일요일 빨간색 / 선택 날짜 파란 원
-- **TrendTab edition_date 기준 수정**
-  - `EDITORIAL_LIST_COLS` + `getSegyeEditorials` SELECT에 `edition_date` 추가
-  - 주간/월간 필터링 및 목록 날짜 표시 모두 `edition_date` 기준으로 통일
-- **TodayTab 세계일보 우선 정렬** — 토픽 그룹 내 `is_our_company=true` 기사 맨 앞으로
-- **캐시 최적화** — `getTodayEditorials`에 `unstable_cache` 적용 (날짜별 5분 캐시)
-- **cron-editorials 하루 3회** — KST 06:00 / 14:00 / 22:00 (기존 07:30 1회 → 3회)
-  - 중복 기사는 AI 재분석 없이 필드 업데이트만 → 비용 추가 없음
-- **cron-editorials workflow_dispatch date 파라미터 추가** — 수동 특정 날짜 재수집 지원
+- **네이버 파트너센터 PV 수집 자동화** (JSON API 방식)
+  - 수집 데이터: 기사 PV 순위(Top 100) / 시간대별 조회수(24h) / 유입분석(카테고리) / 유입키워드(Top 100)
+  - Playwright stealth 로그인 (`navigator.webdriver` 우회, `keyboard.type` 실제 타이핑)
+  - **쿠키 캐시**: `naver_session` 테이블에 14일 유효 쿠키 저장 → 매시간 실행 시 로그인 없이 재사용
+  - **로그인 빈도**: 14일에 1회 자동 재로그인 (만료 시) + HTTP 401 감지 시 즉시 재로그인
+  - **article 매칭률 100%**: JSON uri의 `aid` 파라미터로 `article.url` 자동 매칭
+  - 마이그레이션 0016~0018 적용
+  - `cron-naver-pv` 워크플로 추가 (매시 30분)
+  - 로컬 검증 완료 (2026-05-17, 05-18 데이터 적재 확인)
 
 **미완료 (다음 세션 이어받을 것)**:
+- ⚠ **cron-naver-pv 첫 GitHub Actions 실행 확인** — GitHub Actions (미국 IP + headless=True) 환경에서 stealth 로그인 동작 여부 미검증. push 완료되었으므로 Actions 탭에서 확인 필요
+- ⚠ **/traffic 페이지 UI 구현** — 기사 PV 순위 / 시간대별 조회수 / 유입 경로 + 검색 키워드 4탭. 메뉴명 "트래픽 분석", 아이콘 BarChart3
+- ⚠ **/articles 페이지에 PV 컬럼 추가** — article_pv_snapshot.pv를 기사 목록에 표시
 - ⚠ **과거 날짜 category backfill** — `python -m scripts.collect_publications --date 20260425` ~ `20260429` 수동 실행
 - ⚠ **subscriber_snapshot / daily_publication_count 보존 기간 미결정**
 - ⚠ **미보도 탐지 3단계** (임베딩 기반) — article.body 수집 + NCP 이전 후
@@ -82,12 +85,12 @@
 
 ## 다음 작업 로드맵
 
-- **(당장) 과거 날짜 category backfill** — 2026-04-25~29 날짜별 수동 실행
+- **(당장) cron-naver-pv GitHub Actions 동작 확인** — Actions 탭에서 첫 자동 실행 로그 확인. 실패 시 headless=True 환경 추가 디버깅
+- **(당장) /traffic 페이지 UI 구현** — 수집된 PV 데이터 시각화
+- **(당장) /articles 페이지 PV 컬럼 추가**
+- **(미래) 편집회의 자동 일간 보고서** — 기존 데이터 + PV 통합한 매일 아침 보고서
 - **(미래) 미보도 탐지 + 클러스터 품질 개선** — 설계 완료. 상세: `documents/decisions.md`
 - **(미래) 성향 분석 정확도 개선** — `editorial_label` 테이블에 인간 레이블 충분히 쌓인 후 진행
-  - 정확도 측정: `editorial_label` vs `editorial.stance_label` 비교 SQL로 일치율 계산
-  - Few-shot 예시 추출: 레이블 일치 사례를 SYSTEM_PROMPT에 추가
-  - 상세 6단계 성향 판단 프롬프트 적용 검토 (진보 지표 3개 + 보수 지표 3개 + 점수 산출)
 - **(미래) 검색 기능** — Topbar 검색창 UI 주석 처리됨. 이슈 클러스터 제목/키워드 검색
 - **(미래) 이메일 브리핑 자동 발송** — 매일 KST 9시 GitHub Actions cron
 - **(미래) 기자 이름 기반 통계** — NCP 한국 IP 서버 구성 후 기자명 수집 재도입
@@ -130,9 +133,10 @@ d:\newsboard\
 │   ├── collect_trends.py
 │   ├── cluster_articles.py
 │   ├── detect_gap.py
-│   └── lib/              # db.py, http.py, naver.py, cluster.py
-├── .github/workflows/    # GitHub Actions (9종)
-├── supabase/migrations/  # DB 마이그레이션 (0001~0012)
+│   ├── collect_naver_pv.py   # 네이버 파트너센터 PV 수집 (21차)
+│   └── lib/              # db.py, http.py, naver.py, cluster.py, naver_pv_json_parser.py
+├── .github/workflows/    # GitHub Actions (10종)
+├── supabase/migrations/  # DB 마이그레이션 (0001~0018)
 ├── vercel.json
 └── .env.local.example
 ```

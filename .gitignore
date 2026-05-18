@@ -37,3 +37,7 @@ $null
 _design-preview.html
 
 .vercel
+
+# 네이버 파트너센터 다운로드 샘플 (자사 PV 데이터 — 절대 git 노출 금지)
+samples/
+

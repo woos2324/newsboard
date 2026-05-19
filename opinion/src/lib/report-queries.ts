@@ -52,8 +52,6 @@ export async function getReportByDate(date: string): Promise<DailyReport | null>
       )
     `)
     .eq('report_date', date)
-    .order('sort_order', { referencedTable: 'daily_report_section', ascending: true })
-    .order('sort_order', { referencedTable: 'daily_report_article', ascending: true })
     .maybeSingle()
 
   if (error) throw error
@@ -64,10 +62,12 @@ export async function getReportByDate(date: string): Promise<DailyReport | null>
   }
   return {
     ...result,
-    sections: (result.sections ?? []).map((s) => ({
-      ...s,
-      articles: s.articles ?? [],
-    })),
+    sections: (result.sections ?? [])
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map((s) => ({
+        ...s,
+        articles: (s.articles ?? []).sort((a, b) => a.sort_order - b.sort_order),
+      })),
   }
 }
 

@@ -42,49 +42,33 @@ export interface SearchArticleResult {
 }
 
 export async function getReportByDate(date: string): Promise<DailyReport | null> {
-  const { data: report, error } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from('daily_report')
-    .select('*')
+    .select(`
+      *,
+      sections: daily_report_section (
+        *,
+        articles: daily_report_article (*)
+      )
+    `)
     .eq('report_date', date)
+    .order('sort_order', { referencedTable: 'daily_report_section', ascending: true })
+    .order('sort_order', { referencedTable: 'daily_report_article', ascending: true })
     .maybeSingle()
 
   if (error) throw error
-  if (!report) return null
+  if (!data) return null
 
-  const [{ data: sections, error: secErr }, ] = await Promise.all([
-    supabaseAdmin
-      .from('daily_report_section')
-      .select('*')
-      .eq('report_id', report.report_id)
-      .order('sort_order', { ascending: true }),
-  ])
-  if (secErr) throw secErr
-
-  const sectionIds = (sections ?? []).map((s) => s.section_id)
-  const { data: articles, error: artErr } = sectionIds.length > 0
-    ? await supabaseAdmin
-        .from('daily_report_article')
-        .select('*')
-        .in('section_id', sectionIds)
-        .order('sort_order', { ascending: true })
-    : { data: [], error: null }
-
-  if (artErr) throw artErr
-
-  const articlesBySection = new Map<number, ReportArticle[]>()
-  for (const a of articles ?? []) {
-    const arr = articlesBySection.get(a.section_id) ?? []
-    arr.push(a as ReportArticle)
-    articlesBySection.set(a.section_id, arr)
+  const result = data as unknown as DailyReport & {
+    sections: (ReportSection & { articles: ReportArticle[] | null })[]
   }
-
   return {
-    ...report,
-    sections: (sections ?? []).map((s) => ({
+    ...result,
+    sections: (result.sections ?? []).map((s) => ({
       ...s,
-      articles: articlesBySection.get(s.section_id) ?? [],
+      articles: s.articles ?? [],
     })),
-  } as DailyReport
+  }
 }
 
 export async function searchArticles(

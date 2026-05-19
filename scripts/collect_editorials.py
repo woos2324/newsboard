@@ -216,15 +216,15 @@ async def reanalyze_issue(supabase) -> None:
 
 
 async def reanalyze_by_date(supabase, date: str) -> None:
-    """특정 날짜(YYYYMMDD)의 사설 전체를 AI로 재분석."""
-    dt = datetime(int(date[:4]), int(date[4:6]), int(date[6:8]), tzinfo=KST)
-    day_start = dt.isoformat()
-    day_end = (dt + timedelta(days=1)).isoformat()
+    """특정 날짜(YYYYMMDD)의 사설 전체를 AI로 재분석. issue 레이블 누적 적용."""
+    edition_date = f"{date[:4]}-{date[4:6]}-{date[6:8]}"
     rows = supabase.table("editorial").select("editorial_id,title,body") \
-        .gte("published_at", day_start).lt("published_at", day_end).execute()
+        .eq("edition_date", edition_date).execute()
     print(f"[reanalyze-date] {date} 사설: {len(rows.data)}건")
+
+    existing_issues: list[str] = []
     for row in rows.data:
-        ai = await analyze_with_ai(row["title"], row["body"])
+        ai = await analyze_with_ai(row["title"], row["body"], existing_issues)
         if ai:
             supabase.table("editorial").update({
                 "summary": ai.get("summary"),
@@ -235,6 +235,9 @@ async def reanalyze_by_date(supabase, date: str) -> None:
                 "ai_analysis": ai,
             }).eq("editorial_id", row["editorial_id"]).execute()
             print(f"  [ok] {row['title'][:40]} | {ai.get('stance_label')} | {ai.get('issue')}")
+            new_issue = ai.get("issue")
+            if new_issue and new_issue not in existing_issues:
+                existing_issues.append(new_issue)
         else:
             print(f"  [skip] {row['title'][:40]}")
 

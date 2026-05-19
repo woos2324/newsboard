@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { supabaseAdmin } from './supabase-admin'
 
 export type ReportSource = 'segye' | 'other'
 
@@ -41,7 +42,7 @@ export interface SearchArticleResult {
 }
 
 export async function getReportByDate(date: string): Promise<DailyReport | null> {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('daily_report')
     .select(`
       *,

@@ -37,18 +37,33 @@ API_HEADERS = {
     "Referer": EDITORIAL_URL,
 }
 
-SYSTEM_PROMPT = """당신은 언론사 사설을 분석하는 전문가입니다.
+BASE_SYSTEM_PROMPT = """당신은 언론사 사설을 분석하는 전문가입니다.
 다음 사설을 읽고 JSON 형식으로 분석하세요.
 
 반드시 아래 JSON만 반환하세요 (다른 텍스트 없이):
-{
+{{
   "summary": "사설 핵심 내용 2~3문장 요약",
   "topic": "정치|경제|사회|외교|문화|과학|기타 중 하나",
-  "issue": "이 사설이 다루는 핵심 쟁점을 15자 이내 명사구로 (예: 탄핵 이후 정국 수습, 반도체 파업 대응, 저출생 구조 개혁)",
+  "issue": "이 사설이 다루는 핵심 쟁점을 15자 이내 명사구로{issue_instruction}",
   "stance_score": -2.0에서 2.0 사이 숫자 (-2=매우진보, 0=중립, 2=매우보수),
   "stance_label": "진보|중도진보|중립|중도보수|보수 중 하나",
   "stance_reason": "이 사설의 성향을 판단한 구체적 근거를 3~4문장으로 서술. 사설에서 사용된 주요 논거·표현·입장을 인용하며 설명할 것"
-}"""
+}}"""
+
+
+def build_system_prompt(existing_issues: list[str]) -> str:
+    """오늘 이미 등록된 issue 목록을 주입해 동일 사안이면 레이블을 재사용하도록 유도."""
+    if not existing_issues:
+        instruction = " (예: 탄핵 이후 정국 수습, 반도체 파업 대응, 저출생 구조 개혁)"
+        return BASE_SYSTEM_PROMPT.format(issue_instruction=instruction)
+
+    issue_list = "\n".join(f"  - {iss}" for iss in existing_issues)
+    instruction = (
+        f". 아래 오늘의 기존 쟁점 목록에서 동일한 사안이 있으면 반드시 그 표현을 그대로 사용할 것:\n"
+        f"{issue_list}\n"
+        f"  새로운 사안이면 15자 이내 명사구로 새로 작성"
+    )
+    return BASE_SYSTEM_PROMPT.format(issue_instruction=instruction)
 
 
 def clean_text(text: str) -> str:
@@ -145,7 +160,7 @@ async def fetch_article_body(client: httpx.AsyncClient, url: str) -> tuple[Optio
         return None, None
 
 
-async def analyze_with_ai(title: str, body: Optional[str]) -> Optional[dict]:
+async def analyze_with_ai(title: str, body: Optional[str], existing_issues: list[str] | None = None) -> Optional[dict]:
     api_key = os.getenv("OPENAI_API_KEY") or os.getenv("AI_GATEWAY_API_KEY")
     base_url = os.getenv("AI_BASE_URL", "https://api.openai.com/v1")
     # 사설 분석은 품질 우선 — gpt-4o 고정 (다른 스크립트의 DEFAULT_AI_MODEL과 별개)
@@ -155,6 +170,7 @@ async def analyze_with_ai(title: str, body: Optional[str]) -> Optional[dict]:
         return None
 
     content = f"제목: {title}\n\n본문:\n{body or '(본문 없음)'}"
+    system_prompt = build_system_prompt(existing_issues or [])
 
     async with httpx.AsyncClient() as ai_client:
         try:
@@ -164,7 +180,7 @@ async def analyze_with_ai(title: str, body: Optional[str]) -> Optional[dict]:
                 json={
                     "model": model,
                     "messages": [
-                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "system", "content": system_prompt},
                         {"role": "user", "content": content},
                     ],
                     "temperature": 0.3,
@@ -245,18 +261,30 @@ async def main(dry_run: bool, date: Optional[str] = None, reanalyze: bool = Fals
     else:
         name_map = {}
 
-    # published_at 기준 날짜 계산
+    # published_at + edition_date 계산
     if date:
         dt = datetime(int(date[:4]), int(date[4:6]), int(date[6:8]), tzinfo=KST)
     else:
         dt = datetime.now(KST).replace(hour=0, minute=0, second=0, microsecond=0)
+    api_date = date or datetime.now(KST).strftime("%Y%m%d")
+    edition_date = f"{api_date[:4]}-{api_date[4:6]}-{api_date[6:8]}"
+
+    # 당일 이미 저장된 issue 목록 미리 로드 (AI 레이블 일관성 확보)
+    existing_issues: list[str] = []
+    if not dry_run:
+        existing_rows = supabase.table("editorial") \
+            .select("issue") \
+            .eq("edition_date", edition_date) \
+            .not_.is_("issue", "null") \
+            .execute()
+        existing_issues = list({r["issue"] for r in existing_rows.data if r["issue"]})
+        print(f"  기존 issue 목록: {len(existing_issues)}건")
 
     async with httpx.AsyncClient() as http_client:
         items = await fetch_editorial_list(http_client, date)
 
         # API로 page=1부터 전체 수집 (HTML 스크래핑 보완 + 누락 방지)
-        api_date = date or datetime.now(KST).strftime("%Y%m%d")
-        edition_date = f"{api_date[:4]}-{api_date[4:6]}-{api_date[6:8]}"
+        page = 1
         page = 1
         while True:
             extra = await fetch_editorial_api_page(http_client, api_date, page)
@@ -307,7 +335,7 @@ async def main(dry_run: bool, date: Optional[str] = None, reanalyze: bool = Fals
             body, article_published_at = await fetch_article_body(http_client, url)
             body_preview = f"{len(body)}자" if body else "본문 없음"
 
-            ai = await analyze_with_ai(title, body)
+            ai = await analyze_with_ai(title, body, existing_issues)
 
             published_at = article_published_at or dt.isoformat()
 
@@ -331,8 +359,12 @@ async def main(dry_run: bool, date: Optional[str] = None, reanalyze: bool = Fals
                 print(f"        본문: {body_preview} | AI: {ai}")
             else:
                 supabase.table("editorial").upsert(row, on_conflict="url").execute()
-                print(f"  [saved] [{press_name}] {title[:40]} | stance={ai.get('stance_score') if ai else 'N/A'}")
+                print(f"  [saved] [{press_name}] {title[:40]} | stance={ai.get('stance_score') if ai else 'N/A'} | issue={ai.get('issue') if ai else 'N/A'}")
                 saved += 1
+                # 새 issue를 누적해 다음 사설 분석 시 재사용 유도
+                new_issue = ai.get("issue") if ai else None
+                if new_issue and new_issue not in existing_issues:
+                    existing_issues.append(new_issue)
 
     if not dry_run:
         print(f"[collect_editorials] 완료: {saved}건 저장")

@@ -194,6 +194,7 @@ async def _generate_trend_content(keyword: str, related_news: list[dict]) -> dic
             response_format_json=True,
         )
         result = json.loads(content)
+        await asyncio.sleep(1)
         return {
             "summary": (result.get("summary") or "").strip(),
             "title_suggestions": result.get("title_suggestions") or [],

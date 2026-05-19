@@ -77,6 +77,7 @@ async def _fetch_one(
                 resp = await client.get(url, timeout=10.0)
                 resp.raise_for_status()
                 count = _parse_jsonp_count(resp.text)
+                await asyncio.sleep(0.5)
                 return count
             except httpx.HTTPStatusError as e:
                 if e.response.status_code in (429, 500, 502, 503) and attempt < 2:

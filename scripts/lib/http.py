@@ -34,6 +34,7 @@ async def fetch_json(
             try:
                 resp = await client.get(url)
                 resp.raise_for_status()
+                await asyncio.sleep(0.5)
                 try:
                     return resp.json()
                 except _json.JSONDecodeError:
@@ -66,6 +67,7 @@ async def fetch_html(
             try:
                 resp = await client.get(url)
                 resp.raise_for_status()
+                await asyncio.sleep(0.5)
                 return resp.text
             except httpx.HTTPStatusError as e:
                 last_err = e

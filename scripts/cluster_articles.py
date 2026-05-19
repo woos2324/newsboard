@@ -227,6 +227,7 @@ async def main() -> None:
         else:
             try:
                 meta, meta_model = await generate_cluster_metadata(group_titles)
+                await asyncio.sleep(1)
                 repr_title = meta.get("title") or repr_article["title"]
                 summary = meta.get("summary")
                 kw_raw = meta.get("keywords") or []

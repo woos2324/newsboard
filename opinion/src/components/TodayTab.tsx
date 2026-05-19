@@ -34,7 +34,7 @@ function formatTime(iso: string | null) {
   })
 }
 
-function EditorialCard({ item, onClick }: { item: Editorial; onClick: () => void }) {
+function EditorialRow({ item, onClick }: { item: Editorial; onClick: () => void }) {
   const isOurs = item.media_company?.is_our_company
   return (
     <div
@@ -42,28 +42,18 @@ function EditorialCard({ item, onClick }: { item: Editorial; onClick: () => void
       tabIndex={0}
       onClick={onClick}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick() }}
-      className={`editorial-card rounded-xl p-4 cursor-pointer ${isOurs ? 'our-card' : 'bg-white border border-gray-200'}`}
+      className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors"
     >
-      <div className="flex items-center justify-between mb-2">
-        <span className={`text-xs font-semibold ${isOurs ? 'text-blue-800' : 'text-gray-600'}`}>
-          {item.media_company?.name ?? '알 수 없음'}{isOurs ? ' ★' : ''}
+      <span className={`w-20 flex-shrink-0 truncate text-xs font-semibold ${isOurs ? 'text-blue-800' : 'text-gray-500'}`}>
+        {item.media_company?.name ?? '알 수 없음'}{isOurs ? ' ★' : ''}
+      </span>
+      <span className="flex-1 text-sm text-gray-800 truncate">{item.title}</span>
+      {item.stance_label && (
+        <span className={`flex-shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${STANCE_COLORS[item.stance_label] ?? 'bg-gray-100 text-gray-600'}`}>
+          {item.stance_label}
         </span>
-        <span className="text-xs text-gray-400">{formatTime(item.published_at)}</span>
-      </div>
-      <p className="text-sm font-semibold text-gray-900 leading-snug mb-2 line-clamp-2">{item.title}</p>
-      {item.summary && (
-        <p className="text-xs text-gray-500 leading-relaxed mb-3 line-clamp-3">{item.summary}</p>
       )}
-      <div className="flex items-center gap-2 flex-wrap">
-        {item.stance_label && (
-          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STANCE_COLORS[item.stance_label] ?? 'bg-gray-100 text-gray-600'}`}>
-            {item.stance_label}
-          </span>
-        )}
-        {item.topic && (
-          <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{item.topic}</span>
-        )}
-      </div>
+      <span className="w-14 flex-shrink-0 text-right text-xs text-gray-400">{formatTime(item.published_at)}</span>
     </div>
   )
 }
@@ -169,9 +159,9 @@ export default function TodayTab({ editorials, date }: { editorials: Editorial[]
                     <span className="text-xs text-gray-400 flex-shrink-0">{items.length}개 언론사가 같은 주제</span>
                   )}
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="overflow-hidden rounded-xl border border-gray-200 bg-white divide-y divide-gray-100">
                   {items.map((e) => (
-                    <EditorialCard key={e.editorial_id} item={e} onClick={() => openModal(e)} />
+                    <EditorialRow key={e.editorial_id} item={e} onClick={() => openModal(e)} />
                   ))}
                 </div>
               </div>

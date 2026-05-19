@@ -245,10 +245,22 @@ async def reanalyze_by_date(supabase, date: str) -> None:
             print(f"  [skip] {row['title'][:40]}")
 
 
-async def main(dry_run: bool, date: Optional[str] = None, reanalyze: bool = False, reanalyze_date: Optional[str] = None, backfill_days: int = 0):
-    print(f"[collect_editorials] dry_run={dry_run} date={date or 'today'} reanalyze={reanalyze} reanalyze_date={reanalyze_date} backfill_days={backfill_days}")
+async def main(dry_run: bool, date: Optional[str] = None, reanalyze: bool = False, reanalyze_date: Optional[str] = None, backfill_days: int = 0, date_from: Optional[str] = None, date_to: Optional[str] = None):
+    print(f"[collect_editorials] dry_run={dry_run} date={date or 'today'} backfill_days={backfill_days} date_from={date_from} date_to={date_to}")
 
-    # 백필 모드: 오늘부터 N일 전까지 순차 수집
+    # 날짜 범위 백필: --date-from ~ --date-to (과거→최신 순)
+    if date_from and date_to:
+        dt_from = datetime(int(date_from[:4]), int(date_from[4:6]), int(date_from[6:8]), tzinfo=KST)
+        dt_to   = datetime(int(date_to[:4]),   int(date_to[4:6]),   int(date_to[6:8]),   tzinfo=KST)
+        total = (dt_to - dt_from).days + 1
+        print(f"[range-backfill] {date_from} ~ {date_to} ({total}일)")
+        for i in range(total):
+            target = (dt_from + timedelta(days=i)).strftime("%Y%m%d")
+            print(f"\n[backfill] {target} ({i+1}/{total})")
+            await main(dry_run=dry_run, date=target)
+        return
+
+    # 오늘부터 N일 전까지 순차 수집
     if backfill_days > 0:
         base = datetime.now(KST)
         for i in range(1, backfill_days + 1):
@@ -398,5 +410,7 @@ if __name__ == "__main__":
     parser.add_argument("--reanalyze", action="store_true", help="issue 없는 기존 레코드 AI 재분석")
     parser.add_argument("--reanalyze-date", type=str, help="특정 날짜 사설 전체 재분석 YYYYMMDD")
     parser.add_argument("--backfill-days", type=int, default=0, help="오늘부터 N일 전까지 순차 백필 수집")
+    parser.add_argument("--date-from", type=str, help="수집 시작일 YYYYMMDD")
+    parser.add_argument("--date-to", type=str, help="수집 종료일 YYYYMMDD")
     args = parser.parse_args()
-    asyncio.run(main(args.dry_run, args.date, args.reanalyze, args.reanalyze_date, args.backfill_days))
+    asyncio.run(main(args.dry_run, args.date, args.reanalyze, args.reanalyze_date, args.backfill_days, args.date_from, args.date_to))

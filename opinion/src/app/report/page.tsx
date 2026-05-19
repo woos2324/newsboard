@@ -17,5 +17,5 @@ export default async function ReportPage({
     return null
   })
 
-  return <ReportClient initialReport={report} date={date} />
+  return <ReportClient key={date} initialReport={report} date={date} />
 }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { Plus, Trash2, X, Copy, Printer, Eye, Edit3, ChevronLeft, ChevronRight } from 'lucide-react'
 import type { DailyReport, ReportSection, ReportArticle, ReportSource } from '@/lib/report-queries'
 import { getMediaColor } from '@/lib/media-colors'
@@ -42,6 +43,7 @@ function formatSavedAt(ts: number) {
 }
 
 export default function ReportClient({ initialReport, date }: Props) {
+  const router = useRouter()
   const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' })
   const [reportId, setReportId] = useState<number | null>(initialReport?.report_id ?? null)
   const [sections, setSections] = useState<ReportSection[]>(initialReport?.sections ?? [])
@@ -250,7 +252,7 @@ export default function ReportClient({ initialReport, date }: Props) {
   function goToDate(target: string) {
     const url = target >= today ? '/report' : `/report?date=${target}`
     startTransition(() => {
-      window.location.href = url
+      router.push(url)
     })
   }
 

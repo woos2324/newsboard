@@ -56,19 +56,11 @@ export async function updateSection(
 }
 
 export async function deleteSection(sectionId: number): Promise<void> {
-  const { data: sec } = await supabaseAdmin
-    .from('daily_report_section')
-    .select('report_id')
-    .eq('section_id', sectionId)
-    .maybeSingle()
-
   const { error } = await supabaseAdmin
     .from('daily_report_section')
     .delete()
     .eq('section_id', sectionId)
   if (error) throw error
-
-  if (sec) touchReportAsync(sec.report_id)
 }
 
 export async function addArticle(

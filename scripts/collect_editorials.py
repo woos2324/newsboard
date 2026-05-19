@@ -176,28 +176,39 @@ async def analyze_with_ai(title: str, body: Optional[str], existing_issues: list
     system_prompt = build_system_prompt(existing_issues or [])
 
     async with httpx.AsyncClient() as ai_client:
-        try:
-            resp = await ai_client.post(
-                f"{base_url}/chat/completions",
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                json={
-                    "model": model,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": content},
-                    ],
-                    "temperature": 0.3,
-                    "max_tokens": 800,
-                },
-                timeout=30,
-            )
-            resp.raise_for_status()
-            raw = resp.json()["choices"][0]["message"]["content"].strip()
-            m = re.search(r"\{.*\}", raw, re.DOTALL)
-            if m:
-                return json.loads(m.group())
-        except Exception as e:
-            print(f"  [AI error] {e}", file=sys.stderr)
+        for attempt in range(3):
+            try:
+                resp = await ai_client.post(
+                    f"{base_url}/chat/completions",
+                    headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                    json={
+                        "model": model,
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": content},
+                        ],
+                        "temperature": 0.3,
+                        "max_tokens": 800,
+                    },
+                    timeout=30,
+                )
+                resp.raise_for_status()
+                raw = resp.json()["choices"][0]["message"]["content"].strip()
+                m = re.search(r"\{.*\}", raw, re.DOTALL)
+                if m:
+                    return json.loads(m.group())
+                return None
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 429:
+                    wait = 60 * (attempt + 1)
+                    print(f"  [rate limit] {wait}초 대기 후 재시도 ({attempt+1}/3)...", file=sys.stderr)
+                    await asyncio.sleep(wait)
+                else:
+                    print(f"  [AI error] {e}", file=sys.stderr)
+                    return None
+            except Exception as e:
+                print(f"  [AI error] {e}", file=sys.stderr)
+                return None
     return None
 
 

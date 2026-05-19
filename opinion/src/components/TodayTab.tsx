@@ -58,10 +58,13 @@ function EditorialRow({ item, onClick }: { item: Editorial; onClick: () => void 
   )
 }
 
+const GROUP_PREVIEW = 5
+
 export default function TodayTab({ editorials, date }: { editorials: Editorial[]; date: string }) {
   const [filter, setFilter] = useState<FilterType>('전체')
   const [selected, setSelected] = useState<Editorial | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
 
   async function openModal(item: Editorial) {
     setSelected(item)
@@ -148,6 +151,9 @@ export default function TodayTab({ editorials, date }: { editorials: Editorial[]
         <div className="space-y-8">
           {mainGroups.map(([topic, items, issue]) => {
             const isSingle = topic === '__single__'
+            const isExpanded = expandedGroups.has(topic)
+            const visibleItems = isExpanded ? items : items.slice(0, GROUP_PREVIEW)
+            const hiddenCount = items.length - GROUP_PREVIEW
             return (
               <div key={topic}>
                 <div className="flex items-center gap-3 mb-3 pb-2 border-b border-gray-200">
@@ -160,9 +166,17 @@ export default function TodayTab({ editorials, date }: { editorials: Editorial[]
                   )}
                 </div>
                 <div className="overflow-hidden rounded-xl border border-gray-200 bg-white divide-y divide-gray-100">
-                  {items.map((e) => (
+                  {visibleItems.map((e) => (
                     <EditorialRow key={e.editorial_id} item={e} onClick={() => openModal(e)} />
                   ))}
+                  {!isExpanded && hiddenCount > 0 && (
+                    <button
+                      onClick={() => setExpandedGroups((prev) => new Set([...prev, topic]))}
+                      className="w-full px-4 py-2.5 text-xs font-semibold text-blue-600 hover:bg-blue-50 transition-colors"
+                    >
+                      더보기 +{hiddenCount}건
+                    </button>
+                  )}
                 </div>
               </div>
             )

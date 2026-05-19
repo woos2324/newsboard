@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Trash2, X, Copy, Printer, Eye, Edit3, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Plus, Trash2, X, Copy, Printer, Eye, Edit3, ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
 import type { DailyReport, ReportSection, ReportArticle, ReportSource } from '@/lib/report-queries'
 import { getMediaColor } from '@/lib/media-colors'
 import ArticleSearchModal from '@/components/ArticleSearchModal'
@@ -45,6 +45,7 @@ function formatSavedAt(ts: number) {
 export default function ReportClient({ initialReport, date }: Props) {
   const router = useRouter()
   const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' })
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false)
   const [reportId, setReportId] = useState<number | null>(initialReport?.report_id ?? null)
   const [sections, setSections] = useState<ReportSection[]>(initialReport?.sections ?? [])
   const [viewMode, setViewMode] = useState(false)
@@ -299,14 +300,23 @@ export default function ReportClient({ initialReport, date }: Props) {
 
       {/* 헤더 */}
       <div className="mb-6 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+        <div className="relative flex items-center gap-2">
           <button
             onClick={() => goToDate(shiftDate(date, -1))}
             className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100"
           >
             <ChevronLeft className="h-5 w-5" />
           </button>
-          <h1 className="text-xl font-bold text-gray-900">{formatHeader(date)}</h1>
+          <div className="flex items-center gap-1.5">
+            <h1 className="text-xl font-bold text-gray-900">{formatHeader(date)}</h1>
+            <button
+              onClick={() => setIsCalendarOpen((o) => !o)}
+              className="rounded p-0.5 hover:bg-gray-100 transition-colors"
+              aria-label="달력 열기"
+            >
+              <Calendar className="h-4 w-4 text-blue-600" />
+            </button>
+          </div>
           <button
             onClick={() => goToDate(shiftDate(date, 1))}
             disabled={isToday}
@@ -314,6 +324,14 @@ export default function ReportClient({ initialReport, date }: Props) {
           >
             <ChevronRight className="h-5 w-5" />
           </button>
+          {isCalendarOpen && (
+            <CalendarPopup
+              date={date}
+              today={today}
+              onSelect={(d) => goToDate(d)}
+              onClose={() => setIsCalendarOpen(false)}
+            />
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -627,6 +645,120 @@ function ArticleChip({ article, onDelete }: { article: ReportArticle; onDelete: 
       >
         <X className="h-3.5 w-3.5" />
       </button>
+    </div>
+  )
+}
+
+// ─────────────── 달력 팝업 ───────────────
+function toDateStr(year: number, month: number, day: number): string {
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+function CalendarPopup({
+  date,
+  today,
+  onSelect,
+  onClose,
+}: {
+  date: string
+  today: string
+  onSelect: (d: string) => void
+  onClose: () => void
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [year, setYear] = useState(() => parseInt(date.slice(0, 4)))
+  const [month, setMonth] = useState(() => parseInt(date.slice(5, 7)))
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [onClose])
+
+  const todayYear = parseInt(today.slice(0, 4))
+  const todayMonth = parseInt(today.slice(5, 7))
+  const isNextDisabled = year > todayYear || (year === todayYear && month >= todayMonth)
+
+  function prevMonth() {
+    if (month === 1) { setYear((y) => y - 1); setMonth(12) } else setMonth((m) => m - 1)
+  }
+  function nextMonth() {
+    if (isNextDisabled) return
+    if (month === 12) { setYear((y) => y + 1); setMonth(1) } else setMonth((m) => m + 1)
+  }
+
+  const firstDay = new Date(year, month - 1, 1).getDay()
+  const daysInMonth = new Date(year, month, 0).getDate()
+  const cells: (number | null)[] = [
+    ...Array(firstDay).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ]
+  while (cells.length % 7 !== 0) cells.push(null)
+
+  const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
+
+  return (
+    <div
+      ref={ref}
+      className="absolute z-50 top-full mt-2 left-0 bg-white rounded-2xl shadow-xl border border-gray-200 p-4 w-72"
+    >
+      <div className="flex items-center justify-between mb-3">
+        <button onClick={prevMonth} className="p-1 rounded-lg hover:bg-gray-100 text-gray-500">
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+        <div className="flex items-center gap-2">
+          <span className="font-bold text-gray-800">{year}.{String(month).padStart(2, '0')}</span>
+          <button
+            onClick={() => { setYear(todayYear); setMonth(todayMonth) }}
+            className="text-xs px-2 py-0.5 rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50"
+          >
+            오늘
+          </button>
+        </div>
+        <button
+          onClick={nextMonth}
+          disabled={isNextDisabled}
+          className={`p-1 rounded-lg ${isNextDisabled ? 'text-gray-200 cursor-not-allowed' : 'hover:bg-gray-100 text-gray-500'}`}
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
+      <div className="grid grid-cols-7 mb-1">
+        {WEEKDAYS.map((w, i) => (
+          <div key={w} className={`text-center text-xs font-medium py-1 ${i === 0 ? 'text-red-500' : 'text-gray-400'}`}>
+            {w}
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 gap-y-0.5">
+        {cells.map((day, idx) => {
+          if (!day) return <div key={idx} />
+          const dateStr = toDateStr(year, month, day)
+          const isFuture = dateStr > today
+          const isSelected = dateStr === date
+          const isToday = dateStr === today
+          const isSunday = idx % 7 === 0
+          return (
+            <button
+              key={idx}
+              disabled={isFuture}
+              onClick={() => { onSelect(dateStr); onClose() }}
+              className={`
+                mx-auto flex items-center justify-center w-8 h-8 rounded-full text-sm transition-colors
+                ${isSelected ? 'bg-blue-600 text-white font-bold' : ''}
+                ${!isSelected && isToday ? 'text-red-500 font-bold hover:bg-gray-100' : ''}
+                ${!isSelected && !isToday && isFuture ? 'text-gray-300 cursor-not-allowed' : ''}
+                ${!isSelected && !isToday && !isFuture && isSunday ? 'text-red-400 hover:bg-gray-100' : ''}
+                ${!isSelected && !isToday && !isFuture && !isSunday ? 'text-gray-700 hover:bg-gray-100' : ''}
+              `}
+            >
+              {day}
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }

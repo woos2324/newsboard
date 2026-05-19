@@ -83,38 +83,29 @@ export default function TodayTab({ editorials, date }: { editorials: Editorial[]
 
   const mediaCount = new Set(filtered.map((e) => e.media_company?.name).filter(Boolean)).size
 
-  // 토픽별 그룹화 후 1건짜리는 "기타" 통합
-  const topicMap = new Map<string, Editorial[]>()
+  // issue 기준 그룹화, 1건짜리는 "기타" 통합
+  const issueMap = new Map<string, Editorial[]>()
   for (const e of filtered) {
-    const key = e.topic ?? '기타'
-    const arr = topicMap.get(key) ?? []
+    const key = e.issue ?? '기타'
+    const arr = issueMap.get(key) ?? []
     arr.push(e)
-    topicMap.set(key, arr)
+    issueMap.set(key, arr)
   }
 
-  function pickIssue(items: Editorial[]): string | null {
-    const freq = new Map<string, number>()
-    for (const e of items) {
-      if (e.issue) freq.set(e.issue, (freq.get(e.issue) ?? 0) + 1)
-    }
-    if (freq.size === 0) return null
-    return [...freq.entries()].sort((a, b) => b[1] - a[1])[0][0]
-  }
-
-  const mainGroups: [string, Editorial[], string | null][] = []
+  const mainGroups: [string, Editorial[]][] = []
   const singleItems: Editorial[] = []
-  for (const [topic, items] of topicMap.entries()) {
+  for (const [issue, items] of issueMap.entries()) {
     const sorted = [...items].sort((a, b) =>
       (b.media_company?.is_our_company ? 1 : 0) - (a.media_company?.is_our_company ? 1 : 0)
     )
     if (sorted.length === 1) {
       singleItems.push(...sorted)
     } else {
-      mainGroups.push([topic, sorted, pickIssue(sorted)])
+      mainGroups.push([issue, sorted])
     }
   }
   mainGroups.sort((a, b) => b[1].length - a[1].length)
-  if (singleItems.length > 0) mainGroups.push(['__single__', singleItems, null])
+  if (singleItems.length > 0) mainGroups.push(['__single__', singleItems])
 
   const FILTERS: FilterType[] = ['전체', '종합일간지', '경제지']
 
@@ -149,17 +140,17 @@ export default function TodayTab({ editorials, date }: { editorials: Editorial[]
         </div>
       ) : (
         <div className="space-y-8">
-          {mainGroups.map(([topic, items, issue]) => {
-            const isSingle = topic === '__single__'
-            const isExpanded = expandedGroups.has(topic)
+          {mainGroups.map(([issue, items]) => {
+            const isSingle = issue === '__single__'
+            const isExpanded = expandedGroups.has(issue)
             const visibleItems = isExpanded ? items : items.slice(0, GROUP_PREVIEW)
             const hiddenCount = items.length - GROUP_PREVIEW
             return (
-              <div key={topic}>
+              <div key={issue}>
                 <div className="flex items-center gap-3 mb-3 pb-2 border-b border-gray-200">
                   <div className="w-1 h-5 bg-blue-700 rounded flex-shrink-0" />
                   <span className="text-sm font-bold text-gray-800">
-                    {isSingle ? '기타 — 단독 주제' : issue ? `${topic} — ${issue}` : topic}
+                    {isSingle ? '기타 — 단독 주제' : issue}
                   </span>
                   {!isSingle && (
                     <span className="text-xs text-gray-400 flex-shrink-0">{items.length}개 언론사가 같은 주제</span>
@@ -171,7 +162,7 @@ export default function TodayTab({ editorials, date }: { editorials: Editorial[]
                   ))}
                   {!isExpanded && hiddenCount > 0 && (
                     <button
-                      onClick={() => setExpandedGroups((prev) => new Set([...prev, topic]))}
+                      onClick={() => setExpandedGroups((prev) => new Set([...prev, issue]))}
                       className="w-full px-4 py-2.5 text-xs font-semibold text-blue-600 hover:bg-blue-50 transition-colors"
                     >
                       더보기 +{hiddenCount}건

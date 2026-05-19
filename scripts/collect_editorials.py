@@ -239,6 +239,7 @@ async def reanalyze_by_date(supabase, date: str) -> None:
     existing_issues: list[str] = []
     for row in rows.data:
         ai = await analyze_with_ai(row["title"], row["body"], existing_issues)
+        await asyncio.sleep(1)  # rate limit 방지
         if ai:
             supabase.table("editorial").update({
                 "summary": ai.get("summary"),
@@ -380,6 +381,7 @@ async def main(dry_run: bool, date: Optional[str] = None, reanalyze: bool = Fals
             body_preview = f"{len(body)}자" if body else "본문 없음"
 
             ai = await analyze_with_ai(title, body, existing_issues)
+            await asyncio.sleep(1)  # rate limit 방지
 
             published_at = article_published_at or dt.isoformat()
 

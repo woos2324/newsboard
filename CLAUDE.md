@@ -61,38 +61,65 @@
 **로컬 .env.local 추가 항목** (GitHub Secrets에 없는 것):
 - `HEADLESS=0` — Playwright 브라우저 표시 (로컬 디버깅용, 운영은 기본값 1)
 
-## 재개 지점 (2026-05-19, 22차 세션 종료)
+## 재개 지점 (2026-05-20, 23차 세션 종료)
 
-**이번 세션 (22차) 완료**:
-- **`/report` 사설 일일 동향 보고서** (opinion 앱)
-  - 마이그레이션 0019: daily_report / daily_report_section / daily_report_article 3개 테이블 + RLS (anon 읽기, service role 전체)
-  - 구조: 보고서(1) → 보고 항목(N, 좌우 2열) → 기사(N, 세계일보 좌 / 타매체 우) + 항목별 코멘트
-  - **자동 저장** (1초 debounce) — title/comment, 항목/기사 추가·삭제는 즉시 저장
-  - **Optimistic UI** — tempId 음수로 즉시 UI 반영, 백그라운드 DB 저장, 실패 시 롤백 (체감 0ms)
-  - 기사 검색 모달: 제목 ILIKE + 매체 자동 필터 (세계일보 / 타매체), 250ms debounce
-  - 매체별 색상 매핑: 9색 팔레트, 매체명 hash 기반 결정적 배지
-  - 코멘트 textarea 자동 높이 조정 (scrollHeight 기반)
-  - 보기 모드 토글 (사장 화면 공유용 / 편집 UI 숨김)
-  - 클립보드 복사, 인쇄, 좌우 화살표 날짜 이동
-  - 보고서 영역 max-w-screen-2xl (1536px), 코멘트 전체 폭
-- **사이드바 메뉴**: "사설 일일 동향" 추가 (ClipboardList 아이콘), "성향 비교" 주석 처리
-- 신규 파일: `opinion/src/app/report/`, `opinion/src/components/ArticleSearchModal.tsx`, `opinion/src/lib/{supabase-admin,report-queries,media-colors}.ts`
+**이번 세션 (23차) 완료**:
+- **opinion 리포트 페이지 성능 개선**
+  - DB 3-hop → nested select 1-hop (supabaseAdmin으로 RLS 우회), JS 정렬로 order 대체
+  - 날짜 이동 `window.location.href` → `router.push()` + `key={date}` 강제 리마운트
+  - `deleteSection` 불필요한 SELECT 제거
+  - 리포트 날짜 헤더에 달력 팝업 추가 (DateNav와 동일한 CalendarPopup)
+- **오늘의 사설 UI 개선**
+  - 카드 그리드 → 리스트 형태 (`EditorialRow`: 언론사|제목|성향|시간)
+  - 그룹별 5개 미리보기 + "더보기 +N건" 버튼
+  - 로딩 스켈레톤 카드 → 리스트 형태로 교체
+  - 캐싱: 오늘 5분 / 과거 영구 (`getTodayEditorials` / `getPastEditorials` 분리)
+- **AI issue 레이블 일관성 개선** (`collect_editorials.py`)
+  - `build_system_prompt()`: 당일 기존 issue 목록을 프롬프트에 주입 → 동일 사안 재사용 유도
+  - `reanalyze_by_date()`에도 동일 누적 로직 적용
+  - 그룹핑 기준 `topic` → `issue`로 변경 (TodayTab.tsx)
+  - 오늘치 사설 재분석으로 검증 (삼성전자 파업 관련 19건 동일 레이블로 통일)
+- **15개 매체 필터링** (`collect_editorials.py`)
+  - `ALLOWED_MEDIA_IDS`: 9대 종합일간지 + 3대 경제지 + 문화일보 + 헤럴드경제 + 동행미디어시대
+  - 비대상 사설 163건 DB 삭제
+  - 동행미디어시대 `naver_media_id=417` 업데이트
+- **백필 옵션 추가** (`collect_editorials.py`)
+  - `--backfill-days N`: 오늘부터 N일 전까지
+  - `--date-from YYYYMMDD --date-to YYYYMMDD`: 월별 범위 수집
+  - 5월치(05-01~05-19) 수집 완료 (~500건)
+- **Rate limit 및 딜레이 개선**
+  - 429 자동 재시도 (60/120/180초, 최대 3회)
+  - AI 호출 후 `asyncio.sleep(1)` 추가 (collect_editorials.py)
+  - 모든 수집 스크립트 사전 딜레이 추가:
+    - `lib/http.py`: 0.5초 (ranking, publications, section_ranking, subscribers 공통)
+    - `cluster_articles.py`: AI 메타 생성 후 1초
+    - `collect_trends.py`: AI 콘텐츠 생성 후 1초
+    - `collect_comments.py`: 댓글 API 후 0.5초
 
-**21차 세션 미완료 (이어받기)**:
+**미완료 (다음 세션 이어받을 것)**:
+- ⚠ **사설 과거 데이터 백필** — 4월부터 역순으로 월별 수집. 명령어:
+  ```bash
+  # 주 단위로 나눠서 실행 (타임아웃 방지)
+  python -m scripts.collect_editorials --date-from 20260401 --date-to 20260407
+  python -m scripts.collect_editorials --date-from 20260408 --date-to 20260414
+  python -m scripts.collect_editorials --date-from 20260415 --date-to 20260421
+  python -m scripts.collect_editorials --date-from 20260422 --date-to 20260430
+  # 이후 3월, 2월, ... 순서로 진행
+  ```
 - ⚠ **cron-naver-pv 첫 GitHub Actions 실행 확인** — Actions 탭에서 stealth 로그인 동작 여부 미검증
-- ⚠ **/traffic 페이지 UI 구현** — 기사 PV 순위 / 시간대별 조회수 / 유입 경로 + 검색 키워드 4탭. 메뉴명 "트래픽 분석", 아이콘 BarChart3
+- ⚠ **/traffic 페이지 UI 구현** — 기사 PV 순위 / 시간대별 조회수 / 유입 경로 + 검색 키워드 4탭
 - ⚠ **/articles 페이지에 PV 컬럼 추가** — article_pv_snapshot.pv를 기사 목록에 표시
-- ⚠ **과거 날짜 category backfill** — `python -m scripts.collect_publications --date 20260425` ~ `20260429` 수동 실행
 - ⚠ **subscriber_snapshot / daily_publication_count 보존 기간 미결정**
 - ⚠ **미보도 탐지 3단계** (임베딩 기반) — article.body 수집 + NCP 이전 후
 - ⚠ **StanceTab 차트 레이블 겹침** — 스태거드 방식 적용, 데이터 늘면 툴팁(Option B)으로 전환 검토
-- ⚠ **On-demand Revalidation** — 수집 스크립트 완료 시 `/api/revalidate` 호출로 즉시 캐시 갱신 (미구현)
-- ⚠ **/report 과거 보고서 아카이브 페이지** (M3, 선택) — 현재는 `?date=YYYY-MM-DD`로만 과거 조회 가능
+- ⚠ **On-demand Revalidation** — 수집 스크립트 완료 시 `/api/revalidate` 호출로 즉시 캐시 갱신
+- ⚠ **/report 과거 보고서 아카이브 페이지** — 현재는 `?date=YYYY-MM-DD`로만 과거 조회 가능
 
 ## 다음 작업 로드맵
 
-- **(당장) cron-naver-pv GitHub Actions 동작 확인** — Actions 탭에서 첫 자동 실행 로그 확인. 실패 시 headless=True 환경 추가 디버깅
-- **(당장) /traffic 페이지 UI 구현** — 수집된 PV 데이터 시각화
+- **(당장) 사설 과거 데이터 백필** — 4월부터 역순으로 주 단위 실행 (위 명령어 참고)
+- **(당장) cron-naver-pv GitHub Actions 동작 확인**
+- **(당장) /traffic 페이지 UI 구현**
 - **(당장) /articles 페이지 PV 컬럼 추가**
 - **(미래) 편집회의 자동 일간 보고서** — 기존 데이터 + PV 통합한 매일 아침 보고서
 - **(미래) 미보도 탐지 + 클러스터 품질 개선** — 설계 완료. 상세: `documents/decisions.md`

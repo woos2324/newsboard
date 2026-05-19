@@ -36,7 +36,7 @@
 
 **cron chain**: `ranking → cluster → gap` (매시 자동 연쇄)
 
-## DB 스키마 (마이그레이션 18건)
+## DB 스키마 (마이그레이션 19건)
 
 - `0001_init` — 11개 코어 테이블
 - `0002` ~ `0006` — daily_publication_count, section_ranking, 성능 인덱스, section_ranking_unique, gap_verdict
@@ -46,6 +46,7 @@
 - `0016` — PV 데이터 4개 테이블 (article_pv_snapshot, hourly_pv_snapshot, traffic_source_daily, search_keyword_daily) (21차)
 - `0017` — article_pv_snapshot.article_url 컬럼 추가 (21차)
 - `0018` — naver_session 쿠키 캐시 테이블 (21차)
+- `0019` — daily_report / daily_report_section / daily_report_article 3개 테이블 (사설 일일 동향 보고서, 22차)
 - 마이그레이션 상세: [supabase/migrations/](supabase/migrations/)
 - 매체 51개 (naver_media_id 보유 47개)
 
@@ -60,21 +61,25 @@
 **로컬 .env.local 추가 항목** (GitHub Secrets에 없는 것):
 - `HEADLESS=0` — Playwright 브라우저 표시 (로컬 디버깅용, 운영은 기본값 1)
 
-## 재개 지점 (2026-05-19, 21차 세션 종료)
+## 재개 지점 (2026-05-19, 22차 세션 종료)
 
-**이번 세션 완료**:
-- **네이버 파트너센터 PV 수집 자동화** (JSON API 방식)
-  - 수집 데이터: 기사 PV 순위(Top 100) / 시간대별 조회수(24h) / 유입분석(카테고리) / 유입키워드(Top 100)
-  - Playwright stealth 로그인 (`navigator.webdriver` 우회, `keyboard.type` 실제 타이핑)
-  - **쿠키 캐시**: `naver_session` 테이블에 14일 유효 쿠키 저장 → 매시간 실행 시 로그인 없이 재사용
-  - **로그인 빈도**: 14일에 1회 자동 재로그인 (만료 시) + HTTP 401 감지 시 즉시 재로그인
-  - **article 매칭률 100%**: JSON uri의 `aid` 파라미터로 `article.url` 자동 매칭
-  - 마이그레이션 0016~0018 적용
-  - `cron-naver-pv` 워크플로 추가 (매시 30분)
-  - 로컬 검증 완료 (2026-05-17, 05-18 데이터 적재 확인)
+**이번 세션 (22차) 완료**:
+- **`/report` 사설 일일 동향 보고서** (opinion 앱)
+  - 마이그레이션 0019: daily_report / daily_report_section / daily_report_article 3개 테이블 + RLS (anon 읽기, service role 전체)
+  - 구조: 보고서(1) → 보고 항목(N, 좌우 2열) → 기사(N, 세계일보 좌 / 타매체 우) + 항목별 코멘트
+  - **자동 저장** (1초 debounce) — title/comment, 항목/기사 추가·삭제는 즉시 저장
+  - **Optimistic UI** — tempId 음수로 즉시 UI 반영, 백그라운드 DB 저장, 실패 시 롤백 (체감 0ms)
+  - 기사 검색 모달: 제목 ILIKE + 매체 자동 필터 (세계일보 / 타매체), 250ms debounce
+  - 매체별 색상 매핑: 9색 팔레트, 매체명 hash 기반 결정적 배지
+  - 코멘트 textarea 자동 높이 조정 (scrollHeight 기반)
+  - 보기 모드 토글 (사장 화면 공유용 / 편집 UI 숨김)
+  - 클립보드 복사, 인쇄, 좌우 화살표 날짜 이동
+  - 보고서 영역 max-w-screen-2xl (1536px), 코멘트 전체 폭
+- **사이드바 메뉴**: "사설 일일 동향" 추가 (ClipboardList 아이콘), "성향 비교" 주석 처리
+- 신규 파일: `opinion/src/app/report/`, `opinion/src/components/ArticleSearchModal.tsx`, `opinion/src/lib/{supabase-admin,report-queries,media-colors}.ts`
 
-**미완료 (다음 세션 이어받을 것)**:
-- ⚠ **cron-naver-pv 첫 GitHub Actions 실행 확인** — GitHub Actions (미국 IP + headless=True) 환경에서 stealth 로그인 동작 여부 미검증. push 완료되었으므로 Actions 탭에서 확인 필요
+**21차 세션 미완료 (이어받기)**:
+- ⚠ **cron-naver-pv 첫 GitHub Actions 실행 확인** — Actions 탭에서 stealth 로그인 동작 여부 미검증
 - ⚠ **/traffic 페이지 UI 구현** — 기사 PV 순위 / 시간대별 조회수 / 유입 경로 + 검색 키워드 4탭. 메뉴명 "트래픽 분석", 아이콘 BarChart3
 - ⚠ **/articles 페이지에 PV 컬럼 추가** — article_pv_snapshot.pv를 기사 목록에 표시
 - ⚠ **과거 날짜 category backfill** — `python -m scripts.collect_publications --date 20260425` ~ `20260429` 수동 실행
@@ -82,6 +87,7 @@
 - ⚠ **미보도 탐지 3단계** (임베딩 기반) — article.body 수집 + NCP 이전 후
 - ⚠ **StanceTab 차트 레이블 겹침** — 스태거드 방식 적용, 데이터 늘면 툴팁(Option B)으로 전환 검토
 - ⚠ **On-demand Revalidation** — 수집 스크립트 완료 시 `/api/revalidate` 호출로 즉시 캐시 갱신 (미구현)
+- ⚠ **/report 과거 보고서 아카이브 페이지** (M3, 선택) — 현재는 `?date=YYYY-MM-DD`로만 과거 조회 가능
 
 ## 다음 작업 로드맵
 
@@ -135,8 +141,17 @@ d:\newsboard\
 │   ├── detect_gap.py
 │   ├── collect_naver_pv.py   # 네이버 파트너센터 PV 수집 (21차)
 │   └── lib/              # db.py, http.py, naver.py, cluster.py, naver_pv_json_parser.py
+├── opinion/              # 별도 Next.js 앱 (사설 분석 도메인, opinion-eta.vercel.app)
+│   ├── src/app/
+│   │   ├── page.tsx              # 오늘의 사설
+│   │   ├── stance/               # 성향 비교 (사이드바 주석 처리됨)
+│   │   ├── trend/                # 세계일보 트렌드
+│   │   ├── label/                # 성향 레이블링
+│   │   └── report/               # 사설 일일 동향 보고서 (22차)
+│   ├── src/components/   # OpinionShell, EditorialModal, ArticleSearchModal, DateNav, ...
+│   └── src/lib/          # queries.ts, supabase.ts, supabase-admin.ts, report-queries.ts, media-colors.ts
 ├── .github/workflows/    # GitHub Actions (10종)
-├── supabase/migrations/  # DB 마이그레이션 (0001~0018)
+├── supabase/migrations/  # DB 마이그레이션 (0001~0019)
 ├── vercel.json
 └── .env.local.example
 ```
@@ -168,10 +183,32 @@ d:\newsboard\
 ## 개발 실행
 
 ```bash
-npm run dev          # 프론트 (turbopack)
-vercel dev           # 프론트 + Python API 동시
+npm run dev          # newsboard 프론트 (turbopack)
+vercel dev           # newsboard 프론트 + Python API 동시
 pip install -r requirements.txt
+
+cd opinion           # opinion 앱은 별도
+npm run dev
 ```
+
+## 배포
+
+**newsboard (메인)**: production `https://newsboard-two.vercel.app`
+
+**opinion**: production `https://opinion-eta.vercel.app`
+- ⚠ **GitHub 미연동 — 수동 배포 필수** (git push로 자동 배포 안 됨)
+- 배포 명령:
+  ```powershell
+  cd opinion
+  vercel --prod --yes
+  ```
+  (30~60초 소요)
+- Vercel 프로젝트 ID: `prj_MOzajSwRz774IxlzgBsQ13AAXzjD` (woos2324/opinion)
+- 등록된 환경변수 (Vercel Production):
+  - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (조회용)
+  - `SUPABASE_SERVICE_ROLE_KEY` (Server Action mutation용, JWT eyJ... 포맷 필수)
+- 새 환경변수 추가: `vercel env add <NAME> production` (인터랙티브 stdin)
+- 자동 배포 원하면: Vercel 대시보드 → opinion → Settings → Git → GitHub 연결 + Root Directory `opinion` 설정
 
 ## 다른 PC 셋업
 

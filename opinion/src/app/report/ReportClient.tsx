@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useTransition } from 'react'
 import { Plus, Trash2, X, Copy, Printer, Eye, Edit3, ChevronLeft, ChevronRight } from 'lucide-react'
 import type { DailyReport, ReportSection, ReportArticle, ReportSource } from '@/lib/report-queries'
+import { getMediaColor } from '@/lib/media-colors'
 import ArticleSearchModal from '@/components/ArticleSearchModal'
 import {
   ensureReport,
@@ -64,30 +65,62 @@ export default function ReportClient({ initialReport, date }: Props) {
   }
 
   async function handleAddSection() {
+    const tempId = -(Date.now() * 1000 + Math.floor(Math.random() * 1000))
+    const maxOrder = sections.reduce((m, s) => Math.max(m, s.sort_order), 0)
+    const nextSortOrder = maxOrder + 1
+
+    // 1. 즉시 UI 추가 (낙관적)
+    setSections((prev) => [
+      ...prev,
+      {
+        section_id: tempId,
+        report_id: reportId ?? 0,
+        sort_order: nextSortOrder,
+        title: '',
+        comment: '',
+        articles: [],
+      },
+    ])
+    setGlobalSaveState('saving')
+
+    // 2. 백그라운드 저장
     try {
-      setGlobalSaveState('saving')
-      const id = await getOrCreateReportId()
-      const sectionId = await addSection(id)
-      setSections((prev) => [
-        ...prev,
-        { section_id: sectionId, report_id: id, sort_order: prev.length + 1, title: '', comment: '', articles: [] },
-      ])
+      const rid = await getOrCreateReportId()
+      const realId = await addSection(rid, nextSortOrder)
+      // 3. 실제 ID로 교체
+      setSections((prev) =>
+        prev.map((s) =>
+          s.section_id === tempId ? { ...s, section_id: realId, report_id: rid } : s,
+        ),
+      )
       bumpSavedAt()
     } catch (e) {
       console.error(e)
+      // 4. 롤백
+      setSections((prev) => prev.filter((s) => s.section_id !== tempId))
       setGlobalSaveState('error')
     }
   }
 
   async function handleDeleteSection(sectionId: number) {
     if (!confirm('이 보고 항목을 삭제하시겠습니까?')) return
+    const removed = sections.find((s) => s.section_id === sectionId)
+    if (!removed) return
+
+    // 1. 즉시 제거
+    setSections((prev) => prev.filter((s) => s.section_id !== sectionId))
+    setGlobalSaveState('saving')
+
+    // 2. 서버 삭제 (음수 tempId는 DB에 없으므로 스킵)
     try {
-      setGlobalSaveState('saving')
-      await deleteSection(sectionId)
-      setSections((prev) => prev.filter((s) => s.section_id !== sectionId))
+      if (sectionId > 0) {
+        await deleteSection(sectionId)
+      }
       bumpSavedAt()
     } catch (e) {
       console.error(e)
+      // 3. 롤백
+      setSections((prev) => [...prev, removed].sort((a, b) => a.sort_order - b.sort_order))
       setGlobalSaveState('error')
     }
   }
@@ -111,9 +144,41 @@ export default function ReportClient({ initialReport, date }: Props) {
   async function handleAddArticle(item: { article_id: number; title: string; url: string; published_at: string | null; media_name: string }) {
     if (!searchTarget) return
     const { sectionId, source } = searchTarget
+
+    // 음수 tempId 상태(아직 서버 저장 안 됨)면 잠시 무시
+    if (sectionId < 0) {
+      alert('항목이 아직 저장 중입니다. 잠시 후 다시 시도해주세요.')
+      return
+    }
+
+    const tempRefId = -(Date.now() * 1000 + Math.floor(Math.random() * 1000))
+    const currentSection = sections.find((s) => s.section_id === sectionId)
+    const nextSortOrder = (currentSection?.articles.filter((a) => a.source === source).length ?? 0) + 1
+
+    const newArticle: ReportArticle = {
+      article_ref_id: tempRefId,
+      section_id: sectionId,
+      sort_order: nextSortOrder,
+      source,
+      article_id: item.article_id,
+      article_url: item.url,
+      article_title: item.title,
+      media_name: item.media_name,
+      published_at: item.published_at,
+    }
+
+    // 1. 즉시 UI 추가 + 모달 닫기
+    setSections((prev) =>
+      prev.map((s) =>
+        s.section_id === sectionId ? { ...s, articles: [...s.articles, newArticle] } : s,
+      ),
+    )
+    setSearchTarget(null)
+    setGlobalSaveState('saving')
+
+    // 2. 백그라운드 저장
     try {
-      setGlobalSaveState('saving')
-      const refId = await addArticle(sectionId, {
+      const realRefId = await addArticle(sectionId, nextSortOrder, {
         source,
         article_id: item.article_id,
         article_url: item.url,
@@ -121,51 +186,63 @@ export default function ReportClient({ initialReport, date }: Props) {
         media_name: item.media_name,
         published_at: item.published_at,
       })
+      // 3. 실제 ref_id로 교체
       setSections((prev) =>
         prev.map((s) =>
           s.section_id === sectionId
             ? {
                 ...s,
-                articles: [
-                  ...s.articles,
-                  {
-                    article_ref_id: refId,
-                    section_id: sectionId,
-                    sort_order: s.articles.filter((a) => a.source === source).length + 1,
-                    source,
-                    article_id: item.article_id,
-                    article_url: item.url,
-                    article_title: item.title,
-                    media_name: item.media_name,
-                    published_at: item.published_at,
-                  },
-                ],
+                articles: s.articles.map((a) =>
+                  a.article_ref_id === tempRefId ? { ...a, article_ref_id: realRefId } : a,
+                ),
               }
             : s,
         ),
       )
       bumpSavedAt()
-      setSearchTarget(null)
     } catch (e) {
       console.error(e)
+      // 4. 롤백
+      setSections((prev) =>
+        prev.map((s) =>
+          s.section_id === sectionId
+            ? { ...s, articles: s.articles.filter((a) => a.article_ref_id !== tempRefId) }
+            : s,
+        ),
+      )
       setGlobalSaveState('error')
     }
   }
 
   async function handleDeleteArticle(sectionId: number, refId: number) {
+    const currentSection = sections.find((s) => s.section_id === sectionId)
+    const removed = currentSection?.articles.find((a) => a.article_ref_id === refId)
+    if (!removed) return
+
+    // 1. 즉시 제거
+    setSections((prev) =>
+      prev.map((s) =>
+        s.section_id === sectionId
+          ? { ...s, articles: s.articles.filter((a) => a.article_ref_id !== refId) }
+          : s,
+      ),
+    )
+    setGlobalSaveState('saving')
+
+    // 2. 서버 삭제 (음수 tempId는 DB에 없으므로 스킵)
     try {
-      setGlobalSaveState('saving')
-      await deleteArticle(refId)
-      setSections((prev) =>
-        prev.map((s) =>
-          s.section_id === sectionId
-            ? { ...s, articles: s.articles.filter((a) => a.article_ref_id !== refId) }
-            : s,
-        ),
-      )
+      if (refId > 0) {
+        await deleteArticle(refId)
+      }
       bumpSavedAt()
     } catch (e) {
       console.error(e)
+      // 3. 롤백
+      setSections((prev) =>
+        prev.map((s) =>
+          s.section_id === sectionId ? { ...s, articles: [...s.articles, removed] } : s,
+        ),
+      )
       setGlobalSaveState('error')
     }
   }
@@ -201,7 +278,7 @@ export default function ReportClient({ initialReport, date }: Props) {
   const isToday = date >= today
 
   return (
-    <div className={`mx-auto max-w-6xl px-6 py-6 ${viewMode ? 'view-mode' : ''}`}>
+    <div className={`mx-auto max-w-screen-2xl px-8 py-6 ${viewMode ? 'view-mode' : ''}`}>
       <style jsx global>{`
         .view-mode .edit-only { display: none !important; }
         .view-mode textarea {
@@ -294,12 +371,12 @@ export default function ReportClient({ initialReport, date }: Props) {
         </div>
       )}
 
-      {/* 보고 항목 그리드 */}
+      {/* 보고 항목 (1열 세로) */}
       {sections.length > 0 && (
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <div className="space-y-5">
           {sections.map((s, idx) => (
             <SectionCard
-              key={s.section_id}
+              key={s.sort_order}
               section={s}
               index={idx + 1}
               onDelete={() => handleDeleteSection(s.section_id)}
@@ -388,12 +465,19 @@ function SectionCard({
   const [comment, setComment] = useState(section.comment)
   const initialMount = useRef(true)
   const saveTimer = useRef<NodeJS.Timeout | null>(null)
+  const sectionIdRef = useRef(section.section_id)
+  const commentRef = useRef<HTMLTextAreaElement>(null)
 
-  // section prop이 외부에서 갱신되면 동기화
+  // 코멘트 textarea 내용에 맞춰 자동 높이 조정
   useEffect(() => {
-    setTitle(section.title)
-    setComment(section.comment)
-  }, [section.section_id])
+    const el = commentRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [comment])
+
+  // section_id가 tempId → realId로 교체될 때 ref 갱신 (state는 건드리지 않음 — 사용자 입력 보존)
+  sectionIdRef.current = section.section_id
 
   // title/comment 변경 시 debounce save
   useEffect(() => {
@@ -404,9 +488,14 @@ function SectionCard({
     onPending()
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(async () => {
+      // 아직 서버에 저장 안 된 section (tempId)이면 다음 변경 때 다시 시도되도록 wait
+      if (sectionIdRef.current < 0) {
+        onPending()
+        return
+      }
       try {
         onSaving()
-        await updateSection(section.section_id, { title, comment })
+        await updateSection(sectionIdRef.current, { title, comment })
         onPatched()
       } catch (e) {
         console.error(e)
@@ -444,57 +533,61 @@ function SectionCard({
         </button>
       </div>
 
-      {/* 세계일보 */}
-      <div className="mb-4">
-        <div className="mb-2 flex items-center justify-between">
-          <span className="text-xs font-bold text-blue-800">세계일보 ★</span>
-          <span className="text-xs text-gray-400">{segyeArticles.length}건</span>
-        </div>
-        {segyeArticles.length > 0 && (
-          <div className="mb-2 space-y-1.5">
-            {segyeArticles.map((a) => (
-              <ArticleChip key={a.article_ref_id} article={a} onDelete={() => onDeleteArticle(a.article_ref_id)} />
-            ))}
+      {/* 기사 영역: 세계일보 | 타 매체 (좌우 2열) */}
+      <div className="mb-4 grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* 세계일보 */}
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-bold text-blue-800">세계일보 ★</span>
+            <span className="text-xs text-gray-400">{segyeArticles.length}건</span>
           </div>
-        )}
-        <button
-          onClick={() => onOpenSearch('segye')}
-          className="edit-only w-full rounded-lg border border-dashed border-blue-300 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
-        >
-          + 세계일보 기사 검색
-        </button>
-      </div>
+          {segyeArticles.length > 0 && (
+            <div className="mb-2 space-y-1.5">
+              {segyeArticles.map((a) => (
+                <ArticleChip key={a.article_ref_id} article={a} onDelete={() => onDeleteArticle(a.article_ref_id)} />
+              ))}
+            </div>
+          )}
+          <button
+            onClick={() => onOpenSearch('segye')}
+            className="edit-only w-full rounded-lg border border-dashed border-blue-300 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+          >
+            + 세계일보 기사 검색
+          </button>
+        </div>
 
-      {/* 타 매체 */}
-      <div className="mb-4">
-        <div className="mb-2 flex items-center justify-between">
-          <span className="text-xs font-bold text-gray-700">타 매체</span>
-          <span className="text-xs text-gray-400">{otherArticles.length}건</span>
-        </div>
-        {otherArticles.length > 0 && (
-          <div className="mb-2 space-y-1.5">
-            {otherArticles.map((a) => (
-              <ArticleChip key={a.article_ref_id} article={a} onDelete={() => onDeleteArticle(a.article_ref_id)} />
-            ))}
+        {/* 타 매체 */}
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-bold text-gray-700">타 매체</span>
+            <span className="text-xs text-gray-400">{otherArticles.length}건</span>
           </div>
-        )}
-        <button
-          onClick={() => onOpenSearch('other')}
-          className="edit-only w-full rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-100"
-        >
-          + 타 매체 기사 검색
-        </button>
+          {otherArticles.length > 0 && (
+            <div className="mb-2 space-y-1.5">
+              {otherArticles.map((a) => (
+                <ArticleChip key={a.article_ref_id} article={a} onDelete={() => onDeleteArticle(a.article_ref_id)} />
+              ))}
+            </div>
+          )}
+          <button
+            onClick={() => onOpenSearch('other')}
+            className="edit-only w-full rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-100"
+          >
+            + 타 매체 기사 검색
+          </button>
+        </div>
       </div>
 
       {/* 코멘트 */}
       <div className="rounded-lg" style={{ background: '#F9FAFB', borderLeft: '3px solid #1E40AF', padding: '10px 14px' }}>
         <label className="edit-only mb-2 block text-xs font-semibold text-blue-700">💬 논설위원 코멘트</label>
         <textarea
+          ref={commentRef}
           value={comment}
           onChange={(e) => setComment(e.target.value)}
           rows={4}
           placeholder="이 보고 항목에 대한 코멘트..."
-          className="w-full resize-y rounded-lg border border-gray-200 bg-white p-3 text-sm leading-relaxed text-gray-700 focus:border-blue-400 focus:outline-none"
+          className="w-full resize-none overflow-hidden rounded-lg border border-gray-200 bg-white p-3 text-sm leading-relaxed text-gray-700 focus:border-blue-400 focus:outline-none"
         />
       </div>
     </div>
@@ -504,14 +597,17 @@ function SectionCard({
 // ─────────────── 기사 chip ───────────────
 function ArticleChip({ article, onDelete }: { article: ReportArticle; onDelete: () => void }) {
   const isOurs = article.source === 'segye'
+  const mediaColor = isOurs ? null : getMediaColor(article.media_name)
   return (
     <div
       className={`flex items-center gap-2 rounded-lg border px-3 py-2 ${
         isOurs ? 'border-blue-200 bg-gradient-to-br from-blue-50 to-white' : 'border-gray-200 bg-white'
       }`}
     >
-      {!isOurs && (
-        <span className="flex-shrink-0 text-xs font-semibold text-gray-700">{article.media_name}</span>
+      {!isOurs && mediaColor && (
+        <span className={`flex-shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold ${mediaColor.bg} ${mediaColor.text}`}>
+          {article.media_name}
+        </span>
       )}
       <a
         href={article.article_url}

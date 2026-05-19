@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { X, Search } from 'lucide-react'
 import { searchArticlesAction } from '@/app/report/actions'
+import { getMediaColor } from '@/lib/media-colors'
 
 interface SearchResult {
   article_id: number
@@ -124,26 +125,30 @@ export default function ArticleSearchModal({ source, sectionIndex, onSelect, onC
           ) : (
             <>
               <p className="mb-3 text-xs text-gray-400">검색 결과 {results.length}건</p>
-              {results.map((r) => (
-                <button
-                  key={r.article_id}
-                  onClick={() => onSelect(r)}
-                  className="mb-2 w-full rounded-lg border border-gray-200 p-3 text-left hover:border-blue-400 hover:bg-blue-50"
-                >
-                  <div className="mb-1 flex items-center gap-2">
-                    <span
-                      className={`text-xs font-semibold ${
-                        source === 'segye' ? 'text-blue-800' : 'text-gray-700'
-                      }`}
-                    >
-                      {r.media_name}
-                      {source === 'segye' ? ' ★' : ''}
-                    </span>
-                    <span className="text-xs text-gray-400">{formatDate(r.published_at)}</span>
-                  </div>
-                  <p className="text-sm font-medium text-gray-900">{r.title}</p>
-                </button>
-              ))}
+              {results.map((r) => {
+                const color = source === 'segye' ? null : getMediaColor(r.media_name)
+                return (
+                  <button
+                    key={r.article_id}
+                    onClick={() => onSelect(r)}
+                    className="mb-2 w-full rounded-lg border border-gray-200 p-3 text-left hover:border-blue-400 hover:bg-blue-50"
+                  >
+                    <div className="mb-1 flex items-center gap-2">
+                      {source === 'segye' ? (
+                        <span className="text-xs font-semibold text-blue-800">
+                          {r.media_name} ★
+                        </span>
+                      ) : (
+                        <span className={`rounded px-1.5 py-0.5 text-xs font-semibold ${color!.bg} ${color!.text}`}>
+                          {r.media_name}
+                        </span>
+                      )}
+                      <span className="text-xs text-gray-400">{formatDate(r.published_at)}</span>
+                    </div>
+                    <p className="text-sm font-medium text-gray-900">{r.title}</p>
+                  </button>
+                )
+              })}
             </>
           )}
         </div>

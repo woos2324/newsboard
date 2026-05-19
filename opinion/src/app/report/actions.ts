@@ -1,13 +1,14 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
-async function touchReport(reportId: number) {
-  await supabaseAdmin
+// fire-and-forget: 응답 안 기다림. 실패해도 무시 (updated_at 갱신은 비핵심)
+function touchReportAsync(reportId: number) {
+  supabaseAdmin
     .from('daily_report')
     .update({ updated_at: new Date().toISOString() })
     .eq('report_id', reportId)
+    .then(() => {})
 }
 
 export async function ensureReport(date: string): Promise<number> {
@@ -25,31 +26,18 @@ export async function ensureReport(date: string): Promise<number> {
     .select('report_id')
     .single()
   if (error) throw error
-
-  revalidatePath('/report')
   return data.report_id
 }
 
-export async function addSection(reportId: number): Promise<number> {
-  const { data: maxRow } = await supabaseAdmin
-    .from('daily_report_section')
-    .select('sort_order')
-    .eq('report_id', reportId)
-    .order('sort_order', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  const nextOrder = (maxRow?.sort_order ?? 0) + 1
-
+export async function addSection(reportId: number, sortOrder: number): Promise<number> {
   const { data, error } = await supabaseAdmin
     .from('daily_report_section')
-    .insert({ report_id: reportId, sort_order: nextOrder })
+    .insert({ report_id: reportId, sort_order: sortOrder })
     .select('section_id')
     .single()
   if (error) throw error
 
-  await touchReport(reportId)
-  revalidatePath('/report')
+  touchReportAsync(reportId)
   return data.section_id
 }
 
@@ -64,7 +52,7 @@ export async function updateSection(
     .select('report_id')
     .single()
   if (error) throw error
-  if (sec) await touchReport(sec.report_id)
+  if (sec) touchReportAsync(sec.report_id)
 }
 
 export async function deleteSection(sectionId: number): Promise<void> {
@@ -80,12 +68,12 @@ export async function deleteSection(sectionId: number): Promise<void> {
     .eq('section_id', sectionId)
   if (error) throw error
 
-  if (sec) await touchReport(sec.report_id)
-  revalidatePath('/report')
+  if (sec) touchReportAsync(sec.report_id)
 }
 
 export async function addArticle(
   sectionId: number,
+  sortOrder: number,
   payload: {
     source: 'segye' | 'other'
     article_id: number | null
@@ -95,61 +83,37 @@ export async function addArticle(
     published_at: string | null
   },
 ): Promise<number> {
-  const { data: maxRow } = await supabaseAdmin
-    .from('daily_report_article')
-    .select('sort_order')
-    .eq('section_id', sectionId)
-    .eq('source', payload.source)
-    .order('sort_order', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  const nextOrder = (maxRow?.sort_order ?? 0) + 1
-
   const { data, error } = await supabaseAdmin
     .from('daily_report_article')
     .insert({
       section_id: sectionId,
-      sort_order: nextOrder,
+      sort_order: sortOrder,
       ...payload,
     })
     .select('article_ref_id, section_id')
     .single()
   if (error) throw error
 
-  const { data: sec } = await supabaseAdmin
+  // section의 report_id 조회는 비동기로 (UI는 이미 응답 받음)
+  supabaseAdmin
     .from('daily_report_section')
     .select('report_id')
     .eq('section_id', sectionId)
     .maybeSingle()
-  if (sec) await touchReport(sec.report_id)
+    .then(({ data: sec }) => {
+      if (sec) touchReportAsync(sec.report_id)
+    })
 
-  revalidatePath('/report')
   return data.article_ref_id
 }
 
 export async function deleteArticle(articleRefId: number): Promise<void> {
-  const { data: row } = await supabaseAdmin
-    .from('daily_report_article')
-    .select('section_id')
-    .eq('article_ref_id', articleRefId)
-    .maybeSingle()
-
   const { error } = await supabaseAdmin
     .from('daily_report_article')
     .delete()
     .eq('article_ref_id', articleRefId)
   if (error) throw error
-
-  if (row) {
-    const { data: sec } = await supabaseAdmin
-      .from('daily_report_section')
-      .select('report_id')
-      .eq('section_id', row.section_id)
-      .maybeSingle()
-    if (sec) await touchReport(sec.report_id)
-  }
-  revalidatePath('/report')
+  // updated_at 갱신은 생략 (삭제 후 section 조회 비효율)
 }
 
 export async function searchArticlesAction(

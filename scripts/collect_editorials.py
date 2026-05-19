@@ -37,6 +37,9 @@ API_HEADERS = {
     "Referer": EDITORIAL_URL,
 }
 
+# 수집 대상 매체 (15개): 9대 종합일간지 + 3대 경제지 + 문화일보 + 헤럴드경제 + 동행미디어시대
+ALLOWED_MEDIA_IDS: set[int] = {1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 19, 60}
+
 BASE_SYSTEM_PROMPT = """당신은 언론사 사설을 분석하는 전문가입니다.
 다음 사설을 읽고 JSON 형식으로 분석하세요.
 
@@ -242,8 +245,17 @@ async def reanalyze_by_date(supabase, date: str) -> None:
             print(f"  [skip] {row['title'][:40]}")
 
 
-async def main(dry_run: bool, date: Optional[str] = None, reanalyze: bool = False, reanalyze_date: Optional[str] = None):
-    print(f"[collect_editorials] dry_run={dry_run} date={date or 'today'} reanalyze={reanalyze} reanalyze_date={reanalyze_date}")
+async def main(dry_run: bool, date: Optional[str] = None, reanalyze: bool = False, reanalyze_date: Optional[str] = None, backfill_days: int = 0):
+    print(f"[collect_editorials] dry_run={dry_run} date={date or 'today'} reanalyze={reanalyze} reanalyze_date={reanalyze_date} backfill_days={backfill_days}")
+
+    # 백필 모드: 오늘부터 N일 전까지 순차 수집
+    if backfill_days > 0:
+        base = datetime.now(KST)
+        for i in range(1, backfill_days + 1):
+            target = (base - timedelta(days=i)).strftime("%Y%m%d")
+            print(f"\n[backfill] {target} ({i}/{backfill_days})")
+            await main(dry_run=dry_run, date=target)
+        return
 
     if reanalyze_date and not dry_run:
         supabase = get_client()
@@ -312,11 +324,17 @@ async def main(dry_run: bool, date: Optional[str] = None, reanalyze: bool = Fals
             return
 
         saved = 0
+        skipped_media = 0
         for item in items:
             url = item["url"]
             title = item["title"]
             press_name = item["press_name"]
             mc_id = name_map.get(press_name)
+
+            # 수집 대상 외 매체 스킵
+            if mc_id not in ALLOWED_MEDIA_IDS:
+                skipped_media += 1
+                continue
 
             if not dry_run:
                 existing = supabase.table("editorial").select("editorial_id,media_company_id").eq("url", url).execute()
@@ -370,7 +388,7 @@ async def main(dry_run: bool, date: Optional[str] = None, reanalyze: bool = Fals
                     existing_issues.append(new_issue)
 
     if not dry_run:
-        print(f"[collect_editorials] 완료: {saved}건 저장")
+        print(f"[collect_editorials] 완료: {saved}건 저장 / {skipped_media}건 대상 외 매체 스킵")
 
 
 if __name__ == "__main__":
@@ -379,5 +397,6 @@ if __name__ == "__main__":
     parser.add_argument("--date", type=str, help="수집 날짜 YYYYMMDD (기본: 오늘)")
     parser.add_argument("--reanalyze", action="store_true", help="issue 없는 기존 레코드 AI 재분석")
     parser.add_argument("--reanalyze-date", type=str, help="특정 날짜 사설 전체 재분석 YYYYMMDD")
+    parser.add_argument("--backfill-days", type=int, default=0, help="오늘부터 N일 전까지 순차 백필 수집")
     args = parser.parse_args()
-    asyncio.run(main(args.dry_run, args.date, args.reanalyze, args.reanalyze_date))
+    asyncio.run(main(args.dry_run, args.date, args.reanalyze, args.reanalyze_date, args.backfill_days))

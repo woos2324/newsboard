@@ -50,19 +50,28 @@ export async function getEditorialById(id: number): Promise<Editorial | null> {
   return (data ?? null) as Editorial | null
 }
 
-export const getTodayEditorials = unstable_cache(
-  async (date: string): Promise<Editorial[]> => {
-    const { data, error } = await supabase
-      .from('editorial')
-      .select(EDITORIAL_LIST_COLS)
-      .eq('edition_date', date)
-      .order('published_at', { ascending: false })
+const fetchEditorialsByDate = async (date: string): Promise<Editorial[]> => {
+  const { data, error } = await supabase
+    .from('editorial')
+    .select(EDITORIAL_LIST_COLS)
+    .eq('edition_date', date)
+    .order('published_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []) as unknown as Editorial[]
+}
 
-    if (error) throw error
-    return (data ?? []) as unknown as Editorial[]
-  },
-  ['editorial-by-date'],
+// 오늘: 5분 캐시 (하루 3회 수집 반영)
+export const getTodayEditorials = unstable_cache(
+  fetchEditorialsByDate,
+  ['editorial-today'],
   { revalidate: 300 }
+)
+
+// 과거 날짜: 영구 캐시 (데이터 변경 없음)
+export const getPastEditorials = unstable_cache(
+  fetchEditorialsByDate,
+  ['editorial-past'],
+  { revalidate: false }
 )
 
 export async function getRecentEditorials(days = 30): Promise<Editorial[]> {

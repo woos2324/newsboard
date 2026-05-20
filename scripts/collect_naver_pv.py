@@ -273,6 +273,8 @@ def upsert_article_pv(
             "article_url": it.article_url,
             "article_id": article_id,
         })
+    if not rows:
+        return 0
     if dry_run:
         matched = sum(1 for r in rows if r["article_id"])
         print(f"     [dry-run] article_pv ({device_label}/{section}/{time_dimension}): {len(rows)}건 (매칭 {matched}) skipped")

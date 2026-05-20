@@ -68,6 +68,8 @@ DEVICES = ["TOTAL", "PC", "MOBILE"]
 DEVICE_LABEL = {"TOTAL": "all", "PC": "pc", "MOBILE": "mobile"}
 
 SECTIONS = ["total", "정치", "경제", "사회", "IT", "생활", "세계", "엔터", "스포츠", "기타"]
+# "total" 섹션은 DB에 "all"로 저장 (기존 데이터 및 쿼리와 일관성 유지)
+SECTION_LABEL = {"total": "all"}
 
 LOGIN_URL   = "https://friend.navercorp.com/login/loginForm.sec"
 NEWS_STAND  = "https://pub-iims.navercorp.com/view/svc/main?svcId=STD&lz=ko_KR&tz=Asia%2FSeoul%3A%2B09%3A00"
@@ -410,7 +412,8 @@ def collect_daily(
                     payload_a = _call_one(client, cookies, ENDPOINTS["article_pv"],
                                           data_date, device=dev, section=sec, time_dim="DATE")
                     items_a = parse_article_pv_json(payload_a)
-                    total += upsert_article_pv(items_a, aid_map, DEVICE_LABEL[dev], sec, time_dimension, dry_run)
+                    sec_label = SECTION_LABEL.get(sec, sec)
+                    total += upsert_article_pv(items_a, aid_map, DEVICE_LABEL[dev], sec_label, time_dimension, dry_run)
                 except httpx.HTTPStatusError as e:
                     if e.response.status_code in (401, 403):
                         cookies = _playwright_login(); _save_cookies(cookies)
@@ -419,13 +422,14 @@ def collect_daily(
                     print(f"    [WARN] article_pv {dev}/{sec}: {e}")
 
         for sec in SECTIONS:
+            sec_label = SECTION_LABEL.get(sec, sec)
             try:
                 # TOTAL 한 번 호출로 all/pc/mobile 동시 추출
                 payload_c = _call_one(client, cookies, ENDPOINTS["daily_cv"],
                                       data_date, device="TOTAL", section=sec, time_dim="DATE")
                 cv_map = parse_daily_cv_all_devices(payload_c)
                 for dev_label, pv in cv_map.items():
-                    total += upsert_daily_cv(pv, data_date, dev_label, sec, time_dimension, dry_run)
+                    total += upsert_daily_cv(pv, data_date, dev_label, sec_label, time_dimension, dry_run)
             except httpx.HTTPStatusError as e:
                 if e.response.status_code in (401, 403):
                     cookies = _playwright_login(); _save_cookies(cookies)
@@ -474,7 +478,8 @@ def collect_period(
                     payload_a = _call_one(client, cookies, ENDPOINTS["article_pv"],
                                           start_date, device=dev, section=sec, time_dim=time_dim_api)
                     items_a = parse_article_pv_json(payload_a)
-                    total += upsert_article_pv(items_a, aid_map, DEVICE_LABEL[dev], sec, time_dimension, dry_run)
+                    sec_label = SECTION_LABEL.get(sec, sec)
+                    total += upsert_article_pv(items_a, aid_map, DEVICE_LABEL[dev], sec_label, time_dimension, dry_run)
                 except httpx.HTTPStatusError as e:
                     if e.response.status_code in (401, 403):
                         cookies = _playwright_login(); _save_cookies(cookies)
@@ -483,12 +488,13 @@ def collect_period(
                     print(f"    [WARN] article_pv {dev}/{sec}: {e}")
 
         for sec in SECTIONS:
+            sec_label = SECTION_LABEL.get(sec, sec)
             try:
                 payload_c = _call_one(client, cookies, ENDPOINTS["daily_cv"],
                                       start_date, device="TOTAL", section=sec, time_dim=time_dim_api)
                 cv_map = parse_daily_cv_all_devices(payload_c)
                 for dev_label, pv in cv_map.items():
-                    total += upsert_daily_cv(pv, start_date, dev_label, sec, time_dimension, dry_run)
+                    total += upsert_daily_cv(pv, start_date, dev_label, sec_label, time_dimension, dry_run)
             except httpx.HTTPStatusError as e:
                 if e.response.status_code in (401, 403):
                     cookies = _playwright_login(); _save_cookies(cookies)

@@ -144,7 +144,7 @@ export default function ReportClient({ initialReport, date }: Props) {
     setGlobalSaveState('error')
   }
 
-  async function handleAddArticle(item: { article_id: number; title: string; url: string; published_at: string | null; media_name: string }) {
+  async function handleAddArticle(item: { article_id: number | null; title: string; url: string; published_at: string | null; media_name: string }) {
     if (!searchTarget) return
     const { sectionId, source } = searchTarget
 

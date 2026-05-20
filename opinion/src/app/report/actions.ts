@@ -108,6 +108,9 @@ export async function deleteArticle(articleRefId: number): Promise<void> {
   // updated_at 갱신은 생략 (삭제 후 section 조회 비효율)
 }
 
+// editorial 테이블 기반 검색 (사설 일일 동향 보고서용)
+// daily_report_article.article_id는 article 테이블 FK라 editorial 결과는 article_id=null로 저장.
+// 본문/제목/매체명/URL은 daily_report_article의 스냅샷 컬럼에 그대로 저장됨.
 export async function searchArticlesAction(
   keyword: string,
   source: 'segye' | 'other',
@@ -117,9 +120,9 @@ export async function searchArticlesAction(
   since.setDate(since.getDate() - days)
 
   let query = supabaseAdmin
-    .from('article')
+    .from('editorial')
     .select(`
-      article_id, title, url, published_at,
+      editorial_id, title, url, published_at,
       media_company!inner (name, is_our_company)
     `)
     .gte('published_at', since.toISOString())
@@ -141,7 +144,7 @@ export async function searchArticlesAction(
   return (data ?? []).map((row) => {
     const mc = (row as unknown as { media_company: { name: string; is_our_company: boolean } }).media_company
     return {
-      article_id: row.article_id as number,
+      article_id: null,
       title: row.title as string,
       url: row.url as string,
       published_at: row.published_at as string | null,

@@ -126,6 +126,7 @@
 - ⚠ **StanceTab 차트 레이블 겹침** — 스태거드 방식 적용, 데이터 늘면 툴팁(Option B)으로 전환 검토
 - ⚠ **On-demand Revalidation** — 수집 스크립트 완료 시 `/api/revalidate` 호출로 즉시 캐시 갱신
 - ⚠ **/report 과거 보고서 아카이브 페이지** — 현재는 `?date=YYYY-MM-DD`로만 과거 조회 가능
+- ⚠ **opinion 앱 사설 검색 기능** — Topbar 드롭다운 자동완성 방식 확정. 제목 ILIKE 검색, 최대 10건, 결과 클릭 시 해당 날짜 페이지 + EditorialModal 자동 오픈. 신규 컴포넌트 `SearchBar.tsx` + `OpinionTopbar.tsx`/`TodayTab.tsx`/`queries.ts` 수정 필요
 
 ## 다음 작업 로드맵
 

@@ -291,6 +291,19 @@ async def main(dry_run: bool, date: Optional[str] = None, reanalyze: bool = Fals
         await reanalyze_issue(supabase)
         return
 
+    # date 미지정 (cron 기본 모드): 어제+오늘 둘 다 수집.
+    # Why: GitHub Actions cron 지연으로 KST 자정을 넘어 실행되면 datetime.now(KST)가 다음 날을 가리켜
+    # 전날 사설이 누락됨 (특히 매일경제처럼 Naver가 다음날 버킷에 안 넣어주는 매체).
+    # 이미 DB에 있는 URL은 AI 재호출 없이 메타데이터만 업데이트되므로 비용 영향 미미.
+    if date is None:
+        today = datetime.now(KST).strftime("%Y%m%d")
+        yesterday = (datetime.now(KST) - timedelta(days=1)).strftime("%Y%m%d")
+        print(f"[cron-mode] 어제({yesterday}) + 오늘({today}) 순차 수집")
+        await main(dry_run=dry_run, date=yesterday)
+        print()
+        await main(dry_run=dry_run, date=today)
+        return
+
     supabase = get_client() if not dry_run else None
 
     # DB에서 매체명 → media_company_id 매핑

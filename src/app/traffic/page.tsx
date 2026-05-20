@@ -101,6 +101,7 @@ export default async function TrafficPage({ searchParams }: Props) {
     topArticlePv,
     searchRatio,
     totalHourlyToday,
+    totalHourlyYesterday,
   } = data;
 
   const noData = articles.length === 0 && hourlyToday.length === 0;
@@ -136,24 +137,25 @@ export default async function TrafficPage({ searchParams }: Props) {
         <>
           {/* KPI Row */}
           <div className="grid grid-cols-4 gap-4 mb-5">
-            {/* 총 PV */}
+            {/* 총 PV — hourly 합산 (실제 전체 조회수) */}
             <div className="card">
-              <p className="text-xs text-muted mb-2">총 PV (Top {articles.length})</p>
+              <p className="text-xs text-muted mb-2">총 조회수</p>
               <p className="text-3xl font-bold leading-tight">
-                {fmtPv(totalPvTop100)}
+                {fmtPv(totalHourlyToday)}
                 <span className="text-sm font-medium text-muted ml-1">PV</span>
               </p>
               <div className="flex items-center gap-1 text-xs text-muted mt-1.5">
-                <span className={`font-semibold ${totalDelta >= 0 ? "text-success" : "text-error"}`}>
-                  {totalDelta >= 0 ? "▲" : "▼"} {Math.abs(totalDelta).toFixed(1)}%
+                <span className={`font-semibold ${totalHourlyYesterday && totalHourlyToday >= totalHourlyYesterday ? "text-success" : "text-error"}`}>
+                  {totalHourlyYesterday ? (totalHourlyToday >= totalHourlyYesterday ? "▲" : "▼") : ""}{" "}
+                  {totalHourlyYesterday ? `${Math.abs(deltaPct(totalHourlyToday, totalHourlyYesterday)).toFixed(1)}%` : "—"}
                 </span>
-                전일 {fmtPv(prevTotalPvTop100)} 대비
+                전일 {fmtPv(totalHourlyYesterday)} 대비
               </div>
               <div className="mt-2.5 h-1.5 rounded-full bg-gray-100 overflow-hidden">
                 <div
                   className="h-full rounded-full"
                   style={{
-                    width: `${prevTotalPvTop100 ? Math.min(100, (totalPvTop100 / prevTotalPvTop100) * 80) : 80}%`,
+                    width: `${totalHourlyYesterday ? Math.min(100, (totalHourlyToday / totalHourlyYesterday) * 80) : 80}%`,
                     background: "linear-gradient(90deg, #93c5fd, #1e3a8a)",
                   }}
                 />

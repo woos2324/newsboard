@@ -148,6 +148,19 @@ def parse_traffic_source_json(payload: dict) -> list[TrafficSourceJsonRow]:
     return result
 
 
+def parse_daily_cv_json(payload: dict, data_date: date) -> int:
+    """visitV2/cv 응답에서 총 PV(cv) 추출. 실패 시 0 반환."""
+    try:
+        for stat in payload.get("result", {}).get("statDataList", []):
+            rows = _to_rows(stat.get("data", {}))
+            for row in rows:
+                if "cv" in row:
+                    return int(row.get("cv", 0) or 0)
+    except Exception:
+        pass
+    return 0
+
+
 def parse_search_keyword_json(payload: dict) -> list[SearchKeywordJsonRow]:
     data = _find_stat(payload, "searchKeywordTotal")
     rows = _to_rows(data)

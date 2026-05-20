@@ -121,7 +121,7 @@ export function DateDeviceSelector({ date, device }: Props) {
             onClick={() => goDevice(opt.value)}
             className={`px-3 text-xs transition-colors ${
               device === opt.value
-                ? "bg-primary text-white"
+                ? "bg-primary-500 text-white"
                 : "text-muted hover:bg-gray-50"
             }`}
           >

@@ -238,7 +238,18 @@ export default function TodayTab({
         <EditorialModal
           item={selected}
           relatedEditorials={editorials}
-          onClose={() => setSelected(null)}
+          onClose={() => {
+            setSelected(null)
+            // ?open= 제거 — 새로고침 시 모달이 다시 뜨지 않도록.
+            // history.replaceState로 silently 갱신해 서버 재요청 없이 URL만 정리.
+            if (typeof window !== 'undefined') {
+              const url = new URL(window.location.href)
+              if (url.searchParams.has('open')) {
+                url.searchParams.delete('open')
+                window.history.replaceState({}, '', url.toString())
+              }
+            }
+          }}
           detailLoading={detailLoading}
         />
       )}

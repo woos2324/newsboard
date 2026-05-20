@@ -77,7 +77,7 @@ export function DateDeviceSelector({ date, device }: Props) {
 
         <div className="flex items-center gap-1.5 px-2">
           <span className="text-lg font-bold tracking-tight text-foreground">
-            {formatLabel(date)} 일일 보고
+            {formatLabel(date)}
           </span>
           <button
             type="button"

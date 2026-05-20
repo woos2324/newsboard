@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { X } from "lucide-react";
 import type { DailyCvRow } from "@/lib/queries";
-import { getDailyCvHistory } from "@/lib/queries";
 
 const SECTIONS = [
   { value: "all", label: "전체" },
@@ -45,7 +44,8 @@ export function TotalPvModal({ initialHistory }: Props) {
   useEffect(() => {
     if (!open) return;
     setLoading(true);
-    getDailyCvHistory(30, section)
+    fetch(`/api/traffic/daily-cv?section=${encodeURIComponent(section)}&days=30`)
+      .then((r) => r.json())
       .then(setHistory)
       .finally(() => setLoading(false));
   }, [open, section]);
@@ -135,7 +135,7 @@ export function TotalPvModal({ initialHistory }: Props) {
             </div>
 
             {/* Body */}
-            <div className={`flex-1 overflow-y-auto transition-opacity ${loading ? "opacity-40" : ""}`}>
+            <div className={`flex-1 overflow-y-auto px-4 transition-opacity ${loading ? "opacity-40" : ""}`}>
               <table className="w-full border-collapse text-sm">
                 <thead>
                   <tr>

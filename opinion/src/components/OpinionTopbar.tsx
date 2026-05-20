@@ -2,6 +2,7 @@
 
 import { Calendar, Menu } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import SearchBar from './SearchBar'
 
 function formatDateTime(date: Date): string {
   const month = date.getMonth() + 1
@@ -34,6 +35,9 @@ export default function OpinionTopbar({ onMenuOpen }: { onMenuOpen?: () => void 
       <div className="flex items-center gap-2 text-sm text-gray-500">
         <Calendar className="h-4 w-4" />
         <span>{datetime ?? ''}</span>
+      </div>
+      <div className="ml-auto">
+        <SearchBar />
       </div>
     </header>
   )

@@ -4,9 +4,9 @@ import DateNav from '@/components/DateNav'
 
 export const dynamic = 'force-dynamic'
 
-export default async function Page({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
+export default async function Page({ searchParams }: { searchParams: Promise<{ date?: string; open?: string }> }) {
   const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' })
-  const { date: dateParam } = await searchParams
+  const { date: dateParam, open: openParam } = await searchParams
   const date = dateParam && dateParam < today ? dateParam : today
   const isToday = date >= today
 
@@ -15,10 +15,16 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
     return []
   })
 
+  const initialOpenId = openParam ? Number(openParam) : null
+
   return (
     <div className="page-wrapper">
       <DateNav date={date} today={today} />
-      <TodayTab editorials={editorials} date={date} />
+      <TodayTab
+        editorials={editorials}
+        date={date}
+        initialOpenId={Number.isFinite(initialOpenId) ? initialOpenId : null}
+      />
     </div>
   )
 }

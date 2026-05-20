@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Editorial, getEditorialById } from '@/lib/queries'
 import EditorialModal from './EditorialModal'
 
@@ -75,7 +75,15 @@ function EditorialRow({ item, onClick }: { item: Editorial; onClick: () => void 
 
 const GROUP_PREVIEW = 5
 
-export default function TodayTab({ editorials, date }: { editorials: Editorial[]; date: string }) {
+export default function TodayTab({
+  editorials,
+  date,
+  initialOpenId,
+}: {
+  editorials: Editorial[]
+  date: string
+  initialOpenId?: number | null
+}) {
   const [filter, setFilter] = useState<FilterType>('전체')
   const [selected, setSelected] = useState<Editorial | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
@@ -91,6 +99,22 @@ export default function TodayTab({ editorials, date }: { editorials: Editorial[]
       setDetailLoading(false)
     }
   }
+
+  // ?open=ID URL 파라미터로 진입 시 해당 사설 모달 자동 오픈 (Topbar 검색에서 결과 클릭)
+  useEffect(() => {
+    if (initialOpenId == null) return
+    let cancelled = false
+    setDetailLoading(true)
+    ;(async () => {
+      try {
+        const full = await getEditorialById(initialOpenId)
+        if (!cancelled && full) setSelected(full)
+      } finally {
+        if (!cancelled) setDetailLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [initialOpenId])
 
   const filtered = filter === '전체' || filter === '매체별'
     ? editorials

@@ -50,6 +50,20 @@ export async function getEditorialById(id: number): Promise<Editorial | null> {
   return (data ?? null) as Editorial | null
 }
 
+// 자동완성용 사설 제목 검색 (Topbar SearchBar에서 호출)
+export async function searchEditorials(keyword: string, limit = 10): Promise<Editorial[]> {
+  const q = keyword.trim()
+  if (q.length < 2) return []
+  const { data, error } = await supabase
+    .from('editorial')
+    .select(EDITORIAL_LIST_COLS)
+    .ilike('title', `%${q}%`)
+    .order('published_at', { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return (data ?? []) as unknown as Editorial[]
+}
+
 const fetchEditorialsByDate = async (date: string): Promise<Editorial[]> => {
   const { data, error } = await supabase
     .from('editorial')

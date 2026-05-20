@@ -218,8 +218,8 @@ export function HourlyChart({ hourlyToday, hourlyYesterday, date }: Props) {
           <thead>
             <tr>
               <th className="text-center pb-2.5 border-b border-gray-100 text-[12px] font-medium text-gray-400 uppercase tracking-wide">시간</th>
-              <th className="text-right pb-2.5 border-b border-gray-100 text-[12px] font-medium text-gray-400 uppercase tracking-wide">{prevDateStr}</th>
               <th className="text-right pb-2.5 border-b border-gray-100 text-[12px] font-medium text-gray-400 uppercase tracking-wide">{todayDateStr}</th>
+              <th className="text-right pb-2.5 border-b border-gray-100 text-[12px] font-medium text-gray-400 uppercase tracking-wide">{prevDateStr}</th>
               <th className="text-right pb-2.5 border-b border-gray-100 text-[12px] font-medium text-gray-400 uppercase tracking-wide">Δ</th>
             </tr>
           </thead>
@@ -238,15 +238,15 @@ export function HourlyChart({ hourlyToday, hourlyYesterday, date }: Props) {
                     {String(hour).padStart(2, "0")}
                     {isPeak ? " ★" : ""}
                   </td>
-                  <td className="text-right py-2.5 border-b border-gray-50 tabular-nums text-gray-500 text-sm">
-                    {yPv ? yPv.toLocaleString() : "—"}
-                  </td>
                   <td
                     className={`text-right py-2.5 border-b border-gray-50 tabular-nums font-semibold text-sm ${
                       isPeak ? "text-blue-700" : "text-gray-700"
                     }`}
                   >
                     {pv ? pv.toLocaleString() : "—"}
+                  </td>
+                  <td className="text-right py-2.5 border-b border-gray-50 tabular-nums text-gray-500 text-sm">
+                    {yPv ? yPv.toLocaleString() : "—"}
                   </td>
                   <td
                     className={`text-right py-2.5 border-b border-gray-50 tabular-nums text-xs font-semibold ${

@@ -241,8 +241,6 @@ export default async function TrafficPage({ searchParams }: Props) {
                 </div>
                 <ArticleListModal
                   articles={articles}
-                  totalPv={totalPvTop100}
-                  topArticlePv={topArticlePv}
                   date={date}
                 />
               </div>

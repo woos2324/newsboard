@@ -61,40 +61,35 @@
 **로컬 .env.local 추가 항목** (GitHub Secrets에 없는 것):
 - `HEADLESS=0` — Playwright 브라우저 표시 (로컬 디버깅용, 운영은 기본값 1)
 
-## 재개 지점 (2026-05-20, 23차 세션 종료)
+## 재개 지점 (2026-05-20, 24차 세션 종료)
 
-**이번 세션 (23차) 완료**:
-- **opinion 리포트 페이지 성능 개선**
-  - DB 3-hop → nested select 1-hop (supabaseAdmin으로 RLS 우회), JS 정렬로 order 대체
-  - 날짜 이동 `window.location.href` → `router.push()` + `key={date}` 강제 리마운트
-  - `deleteSection` 불필요한 SELECT 제거
-  - 리포트 날짜 헤더에 달력 팝업 추가 (DateNav와 동일한 CalendarPopup)
-- **오늘의 사설 UI 개선**
-  - 카드 그리드 → 리스트 형태 (`EditorialRow`: 언론사|제목|성향|시간)
-  - 그룹별 5개 미리보기 + "더보기 +N건" 버튼
-  - 로딩 스켈레톤 카드 → 리스트 형태로 교체
-  - 캐싱: 오늘 5분 / 과거 영구 (`getTodayEditorials` / `getPastEditorials` 분리)
-- **AI issue 레이블 일관성 개선** (`collect_editorials.py`)
-  - `build_system_prompt()`: 당일 기존 issue 목록을 프롬프트에 주입 → 동일 사안 재사용 유도
-  - `reanalyze_by_date()`에도 동일 누적 로직 적용
-  - 그룹핑 기준 `topic` → `issue`로 변경 (TodayTab.tsx)
-  - 오늘치 사설 재분석으로 검증 (삼성전자 파업 관련 19건 동일 레이블로 통일)
-- **15개 매체 필터링** (`collect_editorials.py`)
-  - `ALLOWED_MEDIA_IDS`: 9대 종합일간지 + 3대 경제지 + 문화일보 + 헤럴드경제 + 동행미디어시대
-  - 비대상 사설 163건 DB 삭제
-  - 동행미디어시대 `naver_media_id=417` 업데이트
-- **백필 옵션 추가** (`collect_editorials.py`)
-  - `--backfill-days N`: 오늘부터 N일 전까지
-  - `--date-from YYYYMMDD --date-to YYYYMMDD`: 월별 범위 수집
-  - 5월치(05-01~05-19) 수집 완료 (~500건)
-- **Rate limit 및 딜레이 개선**
-  - 429 자동 재시도 (60/120/180초, 최대 3회)
-  - AI 호출 후 `asyncio.sleep(1)` 추가 (collect_editorials.py)
-  - 모든 수집 스크립트 사전 딜레이 추가:
-    - `lib/http.py`: 0.5초 (ranking, publications, section_ranking, subscribers 공통)
-    - `cluster_articles.py`: AI 메타 생성 후 1초
-    - `collect_trends.py`: AI 콘텐츠 생성 후 1초
-    - `collect_comments.py`: 댓글 API 후 0.5초
+**이번 세션 (24차) 완료**:
+- **사설 수집 누락 버그 fix** (`collect_editorials.py`)
+  - 원인: GitHub Actions cron 지연으로 KST 자정을 넘어 실행되면 `datetime.now(KST)`가 다음 날을 가리켜 전날 사설 누락 (특히 매일경제처럼 Naver가 다음날 버킷에 안 넣어주는 매체)
+  - 수정: `--date` 미지정 시 어제+오늘 둘 다 수집. 기존 URL은 AI 재호출 없이 메타만 업데이트되므로 비용 증가 미미
+  - 5/19 매일경제 누락 3건 수동 백필
+- **Windows 인코딩 크래시 방지** (`collect_editorials.py`)
+  - 한글 방점(〮 U+302E) 등 포함된 사설 제목을 cp949 콘솔에서 print 시 UnicodeEncodeError로 백필 중단
+  - sys.stdout/stderr를 utf-8로 강제 reconfigure (Linux는 영향 없음)
+- **사설 백필 진행**: 4월 전체 (~1,000건) + 3/25~3/31 (236건) 완료
+- **opinion 모달 그룹핑 일관성 fix** (`EditorialModal.tsx`)
+  - "같은 주제 타사 사설" 필터를 `topic`(7개 광의 분류) → `issue`(구체 쟁점)로 변경
+  - TodayTab 헤드라인 그룹핑과 동일 기준 적용. 무관 사설 노출 방지
+- **오늘의 사설 "매체별" 필터** (`TodayTab.tsx`)
+  - 필터 옵션 4번째 "매체별" 추가 (전체/종합일간지/경제지/매체별)
+  - 매체별 선택 시 매체 단위로 그룹핑 (세계일보 → 종합일간지 가나다 → 경제지 가나다)
+  - 세계일보는 ★ 강조
+- **/report 검색을 editorial 기반으로 전환**
+  - `article.category=opinion`이 114건뿐이라 너무 적어 editorial 테이블(~2,000건) 사용
+  - daily_report_article.article_id는 nullable로 저장, URL/제목/매체명/발행일 스냅샷 컬럼은 그대로
+  - 모달 문구 "기사 검색" → "사설 검색"
+- **Topbar 사설 제목 검색 기능** (신규 `SearchBar.tsx`)
+  - editorial 제목 ILIKE 검색, 자동완성 드롭다운 최대 10건, 250ms debounce
+  - 키보드 ↑↓/Enter/Esc 지원, 외부 클릭 시 닫힘
+  - 결과 클릭 시 `?open=ID`만 갱신해 현재 날짜 보존 (리스트 그대로 유지)
+  - 모달 backdrop(fixed inset-0 z-50) 클릭은 outside-click 무시해 dropdown 유지
+  - 모달 닫을 때 `history.replaceState`로 `?open=` 조용히 제거 (새로고침 시 모달 재오픈 방지)
+  - useSearchParams로 인한 prerender bailout 방지 위해 Suspense로 wrapping
 
 **미완료 (다음 세션 이어받을 것)**:
 - ⚠ **사설 과거 데이터 백필** — 4월 + 3/25~3/31 완료. 남은 구간 역순 진행:
@@ -126,7 +121,6 @@
 - ⚠ **StanceTab 차트 레이블 겹침** — 스태거드 방식 적용, 데이터 늘면 툴팁(Option B)으로 전환 검토
 - ⚠ **On-demand Revalidation** — 수집 스크립트 완료 시 `/api/revalidate` 호출로 즉시 캐시 갱신
 - ⚠ **/report 과거 보고서 아카이브 페이지** — 현재는 `?date=YYYY-MM-DD`로만 과거 조회 가능
-- ⚠ **opinion 앱 사설 검색 기능** — Topbar 드롭다운 자동완성 방식 확정. 제목 ILIKE 검색, 최대 10건, 결과 클릭 시 해당 날짜 페이지 + EditorialModal 자동 오픈. 신규 컴포넌트 `SearchBar.tsx` + `OpinionTopbar.tsx`/`TodayTab.tsx`/`queries.ts` 수정 필요
 
 ## 다음 작업 로드맵
 

@@ -147,7 +147,7 @@ export default async function TrafficPage({ searchParams }: Props) {
             <div className="card">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs text-muted">총 조회수</p>
-                {dailyCvHistory.length > 0 && <TotalPvModal history={dailyCvHistory} />}
+                {dailyCvHistory.length > 0 && <TotalPvModal initialHistory={dailyCvHistory} />}
               </div>
               <p className="text-3xl font-bold leading-tight">
                 {fmtPv(totalHourlyToday)}

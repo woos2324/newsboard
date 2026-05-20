@@ -1679,12 +1679,12 @@ export type DailyCvRow = {
   mobile: number;
 };
 
-export async function getDailyCvHistory(days = 30): Promise<DailyCvRow[]> {
+export async function getDailyCvHistory(days = 30, section = "all"): Promise<DailyCvRow[]> {
   const sb = getSupabase();
   const { data } = await sb
     .from("daily_cv_snapshot")
     .select("data_date, device, pv")
-    .eq("section", "all")
+    .eq("section", section)
     .eq("time_dimension", "daily")
     .order("data_date", { ascending: false })
     .limit(days * 3); // 3 devices per day

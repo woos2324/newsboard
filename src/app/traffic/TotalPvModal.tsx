@@ -1,12 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X } from "lucide-react";
 import type { DailyCvRow } from "@/lib/queries";
+import { getDailyCvHistory } from "@/lib/queries";
 
-type Props = {
-  history: DailyCvRow[];
-};
+const SECTIONS = [
+  { value: "all", label: "전체" },
+  { value: "정치", label: "정치" },
+  { value: "경제", label: "경제" },
+  { value: "사회", label: "사회" },
+  { value: "IT", label: "IT" },
+  { value: "생활", label: "생활" },
+  { value: "세계", label: "세계" },
+  { value: "엔터", label: "엔터" },
+  { value: "스포츠", label: "스포츠" },
+  { value: "기타", label: "기타" },
+];
 
 const WEEKDAY_KR = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -19,11 +29,26 @@ function formatDateLabel(dateStr: string): string {
 }
 
 function fmtN(n: number): string {
-  return n.toLocaleString();
+  return n > 0 ? n.toLocaleString() : "—";
 }
 
-export function TotalPvModal({ history }: Props) {
+type Props = {
+  initialHistory: DailyCvRow[];
+};
+
+export function TotalPvModal({ initialHistory }: Props) {
   const [open, setOpen] = useState(false);
+  const [section, setSection] = useState("all");
+  const [history, setHistory] = useState<DailyCvRow[]>(initialHistory);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setLoading(true);
+    getDailyCvHistory(30, section)
+      .then(setHistory)
+      .finally(() => setLoading(false));
+  }, [open, section]);
 
   const today = history[0];
   const maxTotal = Math.max(...history.map((r) => r.total), 1);
@@ -33,7 +58,7 @@ export function TotalPvModal({ history }: Props) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="text-xs text-blue-700 hover:text-blue-900 underline underline-offset-2"
+        className="text-xs text-blue-700 hover:text-blue-900 whitespace-nowrap"
       >
         더보기 →
       </button>
@@ -65,43 +90,68 @@ export function TotalPvModal({ history }: Props) {
                   <X size={14} />
                 </button>
               </div>
+
               {/* 오늘 요약 */}
               {today && (
                 <div className="flex gap-4 mt-3 px-3.5 py-2.5 bg-gray-50 rounded-lg text-xs">
                   <div className="flex-1">
-                    <strong className="block text-base font-bold text-green-600">{fmtN(today.total)}</strong>
+                    <strong className={`block text-base font-bold ${today.total > 0 ? "text-green-600" : "text-gray-400"}`}>
+                      {today.total > 0 ? today.total.toLocaleString() : "—"}
+                    </strong>
                     <span className="text-gray-400">전체</span>
                   </div>
                   <div className="flex-1">
-                    <strong className="block text-base font-bold text-gray-700">{fmtN(today.pc)}</strong>
+                    <strong className="block text-base font-bold text-gray-700">
+                      {today.pc > 0 ? today.pc.toLocaleString() : "—"}
+                    </strong>
                     <span className="text-gray-400">PC</span>
                   </div>
                   <div className="flex-1">
-                    <strong className="block text-base font-bold text-gray-700">{fmtN(today.mobile)}</strong>
+                    <strong className="block text-base font-bold text-gray-700">
+                      {today.mobile > 0 ? today.mobile.toLocaleString() : "—"}
+                    </strong>
                     <span className="text-gray-400">모바일</span>
                   </div>
                 </div>
               )}
+
+              {/* 섹션 탭 */}
+              <div className="flex gap-1 mt-3 flex-wrap">
+                {SECTIONS.map((s) => (
+                  <button
+                    key={s.value}
+                    type="button"
+                    onClick={() => setSection(s.value)}
+                    className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                      section === s.value
+                        ? "bg-primary-500 text-white"
+                        : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Body */}
-            <div className="flex-1 overflow-y-auto">
+            <div className={`flex-1 overflow-y-auto transition-opacity ${loading ? "opacity-40" : ""}`}>
               <table className="w-full border-collapse text-sm">
                 <thead>
                   <tr>
-                    <th className="sticky top-0 bg-gray-50 z-10 text-center px-4 py-2.5 border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wide">
+                    <th className="sticky top-0 bg-gray-50 z-10 text-center px-6 py-2.5 border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wide">
                       날짜
                     </th>
-                    <th className="sticky top-0 bg-gray-50 z-10 text-right px-4 py-2.5 border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wide">
+                    <th className="sticky top-0 bg-gray-50 z-10 text-right px-6 py-2.5 border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wide">
                       전체
                     </th>
-                    <th className="sticky top-0 bg-gray-50 z-10 text-right px-4 py-2.5 border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wide">
+                    <th className="sticky top-0 bg-gray-50 z-10 text-right px-6 py-2.5 border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wide">
                       PC
                     </th>
-                    <th className="sticky top-0 bg-gray-50 z-10 text-right px-4 py-2.5 border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wide">
+                    <th className="sticky top-0 bg-gray-50 z-10 text-right px-6 py-2.5 border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wide">
                       모바일
                     </th>
-                    <th className="sticky top-0 bg-gray-50 z-10 px-4 py-2.5 border-b border-gray-100 w-28">
+                    <th className="sticky top-0 bg-gray-50 z-10 px-6 py-2.5 border-b border-gray-100 w-32 text-[11px] font-medium text-gray-400 uppercase tracking-wide text-left">
                       분포
                     </th>
                   </tr>
@@ -112,19 +162,19 @@ export function TotalPvModal({ history }: Props) {
                       key={row.data_date}
                       className={i === 0 ? "bg-green-50" : "hover:bg-gray-50"}
                     >
-                      <td className={`text-center px-4 py-3 border-b border-gray-50 text-xs font-medium ${i === 0 ? "text-green-600" : "text-gray-500"}`}>
+                      <td className={`text-center px-6 py-3 border-b border-gray-50 text-xs font-medium ${i === 0 ? "text-green-600" : "text-gray-500"}`}>
                         {formatDateLabel(row.data_date)}
                       </td>
-                      <td className={`text-right px-4 py-3 border-b border-gray-50 tabular-nums font-semibold ${i === 0 ? "text-green-600" : "text-gray-700"}`}>
+                      <td className={`text-right px-6 py-3 border-b border-gray-50 tabular-nums font-semibold ${i === 0 ? "text-green-600" : "text-gray-700"}`}>
                         {fmtN(row.total)}
                       </td>
-                      <td className="text-right px-4 py-3 border-b border-gray-50 tabular-nums text-gray-500">
+                      <td className="text-right px-6 py-3 border-b border-gray-50 tabular-nums text-gray-500">
                         {fmtN(row.pc)}
                       </td>
-                      <td className="text-right px-4 py-3 border-b border-gray-50 tabular-nums text-gray-500">
+                      <td className="text-right px-6 py-3 border-b border-gray-50 tabular-nums text-gray-500">
                         {fmtN(row.mobile)}
                       </td>
-                      <td className="px-4 py-3 border-b border-gray-50">
+                      <td className="px-6 py-3 border-b border-gray-50">
                         <div className="h-[5px] bg-gray-100 rounded-full overflow-hidden">
                           <div
                             className="h-full rounded-full"

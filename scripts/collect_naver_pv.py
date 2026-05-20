@@ -3,7 +3,7 @@
 
 수집 조합:
   - device   : TOTAL / PC / MOBILE
-  - section  : total / 정치 / 경제 / 사회 / IT / 생활 / 세계 / 엔터 / 스포츠 / 기타
+  - section  : total / 정치 / 경제 / 사회 / IT / 생활 / 세계 / 연예 / 스포츠 / 기타
   - timeDim  : daily(DATE) / weekly(WEEK, 매주 화요일) / monthly(MONTH, 매월 2일)
 
 저장 테이블:
@@ -67,7 +67,7 @@ ENDPOINTS = {
 DEVICES = ["TOTAL", "PC", "MOBILE"]
 DEVICE_LABEL = {"TOTAL": "all", "PC": "pc", "MOBILE": "mobile"}
 
-SECTIONS = ["total", "정치", "경제", "사회", "IT", "생활", "세계", "엔터", "스포츠", "기타"]
+SECTIONS = ["total", "정치", "경제", "사회", "IT", "생활", "세계", "연예", "스포츠", "기타"]
 # "total" 섹션은 DB에 "all"로 저장 (기존 데이터 및 쿼리와 일관성 유지)
 SECTION_LABEL = {"total": "all"}
 

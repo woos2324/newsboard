@@ -12,7 +12,7 @@ const SECTIONS = [
   { value: "IT", label: "IT" },
   { value: "생활", label: "생활" },
   { value: "세계", label: "세계" },
-  { value: "엔터", label: "엔터" },
+  { value: "연예", label: "엔터" },
   { value: "스포츠", label: "스포츠" },
   { value: "기타", label: "기타" },
 ];

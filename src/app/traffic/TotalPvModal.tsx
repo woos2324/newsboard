@@ -35,7 +35,7 @@ export function TotalPvModal({ history }: Props) {
         onClick={() => setOpen(true)}
         className="text-xs text-blue-700 hover:text-blue-900 underline underline-offset-2"
       >
-        더보기
+        더보기 →
       </button>
 
       {open && (

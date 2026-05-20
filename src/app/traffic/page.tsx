@@ -2,7 +2,7 @@ import { PageShell } from "@/components/PageShell";
 import { getTrafficPageData, getLatestTrafficDate, getDailyCvHistory } from "@/lib/queries";
 import { TrafficContent } from "./TrafficContent";
 
-export const revalidate = 1800;
+export const revalidate = 86400; // 하루 1회 수집이므로 24시간 캐시
 
 function todayKST(): string {
   const now = new Date();

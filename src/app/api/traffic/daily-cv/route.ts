@@ -9,5 +9,7 @@ export async function GET(req: NextRequest) {
   const timeDimension = searchParams.get("time_dimension") ?? "daily";
   const days = Math.min(120, Math.max(1, parseInt(searchParams.get("days") ?? "7")));
   const data = await getDailyCvHistory(days, section, timeDimension);
-  return NextResponse.json(data);
+  return NextResponse.json(data, {
+    headers: { "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=3600" },
+  });
 }

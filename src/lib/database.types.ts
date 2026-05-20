@@ -163,6 +163,59 @@ export type Database = {
           },
         ]
       }
+      article_pv_snapshot: {
+        Row: {
+          article_id: number | null
+          article_published_at: string
+          article_url: string | null
+          captured_at: string
+          category: string
+          data_date: string
+          device: string
+          pv: number
+          pv_snapshot_id: number
+          rank: number
+          reporter_name: string | null
+          title: string
+        }
+        Insert: {
+          article_id?: number | null
+          article_published_at: string
+          article_url?: string | null
+          captured_at?: string
+          category?: string
+          data_date: string
+          device?: string
+          pv: number
+          pv_snapshot_id?: number
+          rank: number
+          reporter_name?: string | null
+          title: string
+        }
+        Update: {
+          article_id?: number | null
+          article_published_at?: string
+          article_url?: string | null
+          captured_at?: string
+          category?: string
+          data_date?: string
+          device?: string
+          pv?: number
+          pv_snapshot_id?: number
+          rank?: number
+          reporter_name?: string | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "article_pv_snapshot_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "article"
+            referencedColumns: ["article_id"]
+          },
+        ]
+      }
       comment_metric: {
         Row: {
           article_id: number
@@ -244,6 +297,246 @@ export type Database = {
             referencedColumns: ["media_company_id"]
           },
         ]
+      }
+      daily_report: {
+        Row: {
+          created_at: string
+          report_date: string
+          report_id: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          report_date: string
+          report_id?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          report_date?: string
+          report_id?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      daily_report_article: {
+        Row: {
+          article_id: number | null
+          article_ref_id: number
+          article_title: string
+          article_url: string
+          created_at: string
+          media_name: string
+          published_at: string | null
+          section_id: number
+          sort_order: number
+          source: string
+        }
+        Insert: {
+          article_id?: number | null
+          article_ref_id?: number
+          article_title: string
+          article_url: string
+          created_at?: string
+          media_name: string
+          published_at?: string | null
+          section_id: number
+          sort_order: number
+          source: string
+        }
+        Update: {
+          article_id?: number | null
+          article_ref_id?: number
+          article_title?: string
+          article_url?: string
+          created_at?: string
+          media_name?: string
+          published_at?: string | null
+          section_id?: number
+          sort_order?: number
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_report_article_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "article"
+            referencedColumns: ["article_id"]
+          },
+          {
+            foreignKeyName: "daily_report_article_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "daily_report_section"
+            referencedColumns: ["section_id"]
+          },
+        ]
+      }
+      daily_report_section: {
+        Row: {
+          comment: string
+          created_at: string
+          report_id: number
+          section_id: number
+          sort_order: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          comment?: string
+          created_at?: string
+          report_id: number
+          section_id?: number
+          sort_order: number
+          title?: string
+          updated_at?: string
+        }
+        Update: {
+          comment?: string
+          created_at?: string
+          report_id?: number
+          section_id?: number
+          sort_order?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_report_section_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "daily_report"
+            referencedColumns: ["report_id"]
+          },
+        ]
+      }
+      editorial: {
+        Row: {
+          ai_analysis: Json | null
+          body: string | null
+          created_at: string | null
+          edition_date: string | null
+          editorial_id: number
+          fetched_at: string | null
+          issue: string | null
+          media_company_id: number | null
+          published_at: string | null
+          stance_label: string | null
+          stance_score: number | null
+          summary: string | null
+          title: string
+          topic: string | null
+          url: string
+        }
+        Insert: {
+          ai_analysis?: Json | null
+          body?: string | null
+          created_at?: string | null
+          edition_date?: string | null
+          editorial_id?: number
+          fetched_at?: string | null
+          issue?: string | null
+          media_company_id?: number | null
+          published_at?: string | null
+          stance_label?: string | null
+          stance_score?: number | null
+          summary?: string | null
+          title: string
+          topic?: string | null
+          url: string
+        }
+        Update: {
+          ai_analysis?: Json | null
+          body?: string | null
+          created_at?: string | null
+          edition_date?: string | null
+          editorial_id?: number
+          fetched_at?: string | null
+          issue?: string | null
+          media_company_id?: number | null
+          published_at?: string | null
+          stance_label?: string | null
+          stance_score?: number | null
+          summary?: string | null
+          title?: string
+          topic?: string | null
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "editorial_media_company_id_fkey"
+            columns: ["media_company_id"]
+            isOneToOne: false
+            referencedRelation: "media_company"
+            referencedColumns: ["media_company_id"]
+          },
+        ]
+      }
+      editorial_label: {
+        Row: {
+          editorial_id: number
+          label_id: number
+          labeled_at: string
+          labeled_by: string
+          note: string | null
+          stance_label: string
+        }
+        Insert: {
+          editorial_id: number
+          label_id?: number
+          labeled_at?: string
+          labeled_by: string
+          note?: string | null
+          stance_label: string
+        }
+        Update: {
+          editorial_id?: number
+          label_id?: number
+          labeled_at?: string
+          labeled_by?: string
+          note?: string | null
+          stance_label?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "editorial_label_editorial_id_fkey"
+            columns: ["editorial_id"]
+            isOneToOne: false
+            referencedRelation: "editorial"
+            referencedColumns: ["editorial_id"]
+          },
+        ]
+      }
+      hourly_pv_snapshot: {
+        Row: {
+          captured_at: string
+          category: string
+          data_date: string
+          device: string
+          hour: number
+          hourly_pv_id: number
+          pv: number
+        }
+        Insert: {
+          captured_at?: string
+          category?: string
+          data_date: string
+          device?: string
+          hour: number
+          hourly_pv_id?: number
+          pv: number
+        }
+        Update: {
+          captured_at?: string
+          category?: string
+          data_date?: string
+          device?: string
+          hour?: number
+          hourly_pv_id?: number
+          pv?: number
+        }
+        Relationships: []
       }
       issue_cluster: {
         Row: {
@@ -439,6 +732,27 @@ export type Database = {
           },
         ]
       }
+      naver_session: {
+        Row: {
+          cookies_json: string
+          expires_at: string
+          id: number
+          updated_at: string
+        }
+        Insert: {
+          cookies_json: string
+          expires_at: string
+          id?: number
+          updated_at?: string
+        }
+        Update: {
+          cookies_json?: string
+          expires_at?: string
+          id?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       ranking_news_item: {
         Row: {
           article_id: number
@@ -518,6 +832,36 @@ export type Database = {
             referencedColumns: ["media_company_id"]
           },
         ]
+      }
+      search_keyword_daily: {
+        Row: {
+          captured_at: string
+          clicks: number
+          data_date: string
+          keyword: string
+          rank: number
+          ratio: number
+          search_keyword_id: number
+        }
+        Insert: {
+          captured_at?: string
+          clicks: number
+          data_date: string
+          keyword: string
+          rank: number
+          ratio: number
+          search_keyword_id?: number
+        }
+        Update: {
+          captured_at?: string
+          clicks?: number
+          data_date?: string
+          keyword?: string
+          rank?: number
+          ratio?: number
+          search_keyword_id?: number
+        }
+        Relationships: []
       }
       section_ranking_snapshot: {
         Row: {
@@ -601,6 +945,36 @@ export type Database = {
           },
         ]
       }
+      traffic_source_daily: {
+        Row: {
+          captured_at: string
+          category_ratio: number
+          data_date: string
+          detail_ratio: number
+          source_category: string
+          source_detail_url: string | null
+          traffic_source_id: number
+        }
+        Insert: {
+          captured_at?: string
+          category_ratio: number
+          data_date: string
+          detail_ratio: number
+          source_category: string
+          source_detail_url?: string | null
+          traffic_source_id?: number
+        }
+        Update: {
+          captured_at?: string
+          category_ratio?: number
+          data_date?: string
+          detail_ratio?: number
+          source_category?: string
+          source_detail_url?: string | null
+          traffic_source_id?: number
+        }
+        Relationships: []
+      }
       trending_keyword: {
         Row: {
           ai_summary: string | null
@@ -635,7 +1009,15 @@ export type Database = {
           traffic_rank?: number
           trending_id?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "fk_trending_cluster"
+            columns: ["matched_cluster_id"]
+            isOneToOne: false
+            referencedRelation: "issue_cluster"
+            referencedColumns: ["issue_cluster_id"]
+          },
+        ]
       }
     }
     Views: {

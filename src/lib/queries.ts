@@ -1590,3 +1590,178 @@ export async function getIssueAISummary(
     sources: [],
   };
 }
+
+// ===================================================================
+// Traffic / PV — 네이버 파트너센터 PV 데이터
+// ===================================================================
+
+export type ArticlePvItem = {
+  rank: number;
+  title: string;
+  reporter_name: string | null;
+  pv: number;
+  category: string;
+  article_published_at: string;
+  article_id: number | null;
+  article_url: string | null;
+};
+
+export type HourlyPvItem = {
+  hour: number;
+  pv: number;
+};
+
+export type TrafficSourceItem = {
+  source_category: string;
+  category_ratio: number;
+};
+
+export type SearchKeywordItem = {
+  rank: number;
+  keyword: string;
+  clicks: number;
+  ratio: number;
+};
+
+export type TrafficPageData = {
+  data_date: string;
+  articles: ArticlePvItem[];
+  totalArticles: number;
+  hourlyToday: HourlyPvItem[];
+  hourlyYesterday: HourlyPvItem[];
+  trafficSources: TrafficSourceItem[];
+  keywords: SearchKeywordItem[];
+  totalKeywords: number;
+  totalPvTop100: number;
+  prevTotalPvTop100: number;
+  totalHourlyToday: number;
+  totalHourlyYesterday: number;
+  topArticlePv: number;
+  searchRatio: number; // 검색 유입 비중 (%)
+};
+
+export async function getTrafficPageData(
+  date: string,
+  articlesLimit = 100,
+  keywordsLimit = 100
+): Promise<TrafficPageData> {
+  const sb = getSupabase();
+  const prev = shiftDateString(date, -1);
+
+  const [
+    articlesRes,
+    prevArticlesRes,
+    hourlyTodayRes,
+    hourlyYestRes,
+    sourcesRes,
+    keywordsRes,
+  ] = await Promise.all([
+    sb
+      .from("article_pv_snapshot")
+      .select("rank, title, reporter_name, pv, category, article_published_at, article_id, article_url")
+      .eq("data_date", date)
+      .eq("device", "all")
+      .eq("category", "all")
+      .order("rank", { ascending: true })
+      .limit(articlesLimit),
+    sb
+      .from("article_pv_snapshot")
+      .select("pv")
+      .eq("data_date", prev)
+      .eq("device", "all")
+      .eq("category", "all"),
+    sb
+      .from("hourly_pv_snapshot")
+      .select("hour, pv")
+      .eq("data_date", date)
+      .eq("device", "all")
+      .eq("category", "all")
+      .order("hour", { ascending: true }),
+    sb
+      .from("hourly_pv_snapshot")
+      .select("hour, pv")
+      .eq("data_date", prev)
+      .eq("device", "all")
+      .eq("category", "all")
+      .order("hour", { ascending: true }),
+    sb
+      .from("traffic_source_daily")
+      .select("source_category, category_ratio")
+      .eq("data_date", date)
+      .is("source_detail_url", null)
+      .order("category_ratio", { ascending: false }),
+    sb
+      .from("search_keyword_daily")
+      .select("rank, keyword, clicks, ratio")
+      .eq("data_date", date)
+      .order("rank", { ascending: true })
+      .limit(keywordsLimit),
+  ]);
+
+  if (articlesRes.error) throw articlesRes.error;
+  if (hourlyTodayRes.error) throw hourlyTodayRes.error;
+
+  const articleRows = articlesRes.data ?? [];
+  const articles: ArticlePvItem[] = articleRows.map((r) => ({
+    rank: r.rank,
+    title: r.title,
+    reporter_name: r.reporter_name,
+    pv: r.pv,
+    category: r.category,
+    article_published_at: r.article_published_at,
+    article_id: r.article_id,
+    article_url: r.article_url,
+  }));
+
+  const hourlyToday: HourlyPvItem[] = (hourlyTodayRes.data ?? []).map((r) => ({
+    hour: r.hour,
+    pv: r.pv,
+  }));
+  const hourlyYesterday: HourlyPvItem[] = (hourlyYestRes.data ?? []).map((r) => ({
+    hour: r.hour,
+    pv: r.pv,
+  }));
+
+  const trafficSources: TrafficSourceItem[] = (sourcesRes.data ?? []).map((r) => ({
+    source_category: r.source_category,
+    category_ratio: Number(r.category_ratio),
+  }));
+
+  const keywords: SearchKeywordItem[] = (keywordsRes.data ?? []).map((r) => ({
+    rank: r.rank,
+    keyword: r.keyword,
+    clicks: r.clicks,
+    ratio: Number(r.ratio),
+  }));
+
+  const totalPvTop100 = articles.reduce((s, a) => s + a.pv, 0);
+  const prevTotalPvTop100 = (prevArticlesRes.data ?? []).reduce(
+    (s, r) => s + (r.pv ?? 0),
+    0
+  );
+  const totalHourlyToday = hourlyToday.reduce((s, h) => s + h.pv, 0);
+  const totalHourlyYesterday = hourlyYesterday.reduce((s, h) => s + h.pv, 0);
+  const topArticlePv = articles[0]?.pv ?? 0;
+
+  // 검색 유입 비중 = 검색 카테고리 source_category들의 ratio 합
+  const searchRatio = trafficSources
+    .filter((s) => s.source_category.includes("검색"))
+    .reduce((sum, s) => sum + s.category_ratio, 0);
+
+  return {
+    data_date: date,
+    articles,
+    totalArticles: articles.length,
+    hourlyToday,
+    hourlyYesterday,
+    trafficSources,
+    keywords,
+    totalKeywords: keywords.length,
+    totalPvTop100,
+    prevTotalPvTop100,
+    totalHourlyToday,
+    totalHourlyYesterday,
+    topArticlePv,
+    searchRatio,
+  };
+}

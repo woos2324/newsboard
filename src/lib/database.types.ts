@@ -176,6 +176,7 @@ export type Database = {
           pv_snapshot_id: number
           rank: number
           reporter_name: string | null
+          time_dimension: string
           title: string
         }
         Insert: {
@@ -190,6 +191,7 @@ export type Database = {
           pv_snapshot_id?: number
           rank: number
           reporter_name?: string | null
+          time_dimension?: string
           title: string
         }
         Update: {
@@ -204,6 +206,7 @@ export type Database = {
           pv_snapshot_id?: number
           rank?: number
           reporter_name?: string | null
+          time_dimension?: string
           title?: string
         }
         Relationships: [
@@ -259,6 +262,36 @@ export type Database = {
             referencedColumns: ["article_id"]
           },
         ]
+      }
+      daily_cv_snapshot: {
+        Row: {
+          captured_at: string
+          daily_cv_id: number
+          data_date: string
+          device: string
+          pv: number
+          section: string
+          time_dimension: string
+        }
+        Insert: {
+          captured_at?: string
+          daily_cv_id?: number
+          data_date: string
+          device?: string
+          pv: number
+          section?: string
+          time_dimension?: string
+        }
+        Update: {
+          captured_at?: string
+          daily_cv_id?: number
+          data_date?: string
+          device?: string
+          pv?: number
+          section?: string
+          time_dimension?: string
+        }
+        Relationships: []
       }
       daily_publication_count: {
         Row: {

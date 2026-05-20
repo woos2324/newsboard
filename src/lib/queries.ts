@@ -1672,6 +1672,36 @@ export type TrafficPageData = {
   searchRatio: number; // 검색 유입 비중 (%)
 };
 
+export type DailyCvRow = {
+  data_date: string;
+  total: number;
+  pc: number;
+  mobile: number;
+};
+
+export async function getDailyCvHistory(days = 30): Promise<DailyCvRow[]> {
+  const sb = getSupabase();
+  const { data } = await sb
+    .from("daily_cv_snapshot")
+    .select("data_date, device, pv")
+    .eq("section", "all")
+    .eq("time_dimension", "daily")
+    .order("data_date", { ascending: false })
+    .limit(days * 3); // 3 devices per day
+
+  const map = new Map<string, { total: number; pc: number; mobile: number }>();
+  for (const r of data ?? []) {
+    if (!map.has(r.data_date)) map.set(r.data_date, { total: 0, pc: 0, mobile: 0 });
+    const entry = map.get(r.data_date)!;
+    if (r.device === "all") entry.total = r.pv;
+    else if (r.device === "pc") entry.pc = r.pv;
+    else if (r.device === "mobile") entry.mobile = r.pv;
+  }
+  return Array.from(map.entries())
+    .map(([data_date, pvs]) => ({ data_date, ...pvs }))
+    .sort((a, b) => b.data_date.localeCompare(a.data_date));
+}
+
 export async function getLatestTrafficDate(): Promise<string | null> {
   const sb = getSupabase();
   const { data } = await sb

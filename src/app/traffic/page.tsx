@@ -1,5 +1,6 @@
 import { PageShell } from "@/components/PageShell";
-import { getTrafficPageData, getLatestTrafficDate, type TrafficPageData } from "@/lib/queries";
+import { getTrafficPageData, getLatestTrafficDate, getDailyCvHistory, type TrafficPageData } from "@/lib/queries";
+import { TotalPvModal } from "./TotalPvModal";
 import { HourlyChart } from "./HourlyChart";
 import { ArticleListModal } from "./ArticleListModal";
 import { KeywordListModal } from "./KeywordListModal";
@@ -67,11 +68,16 @@ export default async function TrafficPage({ searchParams }: Props) {
 
   let data: TrafficPageData | null = null;
   let loadError = false;
-  try {
-    data = await getTrafficPageData(date, 100, 100, device);
-  } catch {
+  const [dataResult, cvHistory] = await Promise.allSettled([
+    getTrafficPageData(date, 100, 100, device),
+    getDailyCvHistory(30),
+  ]);
+  if (dataResult.status === "fulfilled") {
+    data = dataResult.value;
+  } else {
     loadError = true;
   }
+  const dailyCvHistory = cvHistory.status === "fulfilled" ? cvHistory.value : [];
 
   const dateLabel = new Date(date + "T00:00:00+09:00").toLocaleDateString("ko-KR", {
     year: "numeric",
@@ -139,7 +145,10 @@ export default async function TrafficPage({ searchParams }: Props) {
           <div className="grid grid-cols-4 gap-4 mb-5">
             {/* 총 PV — hourly 합산 (실제 전체 조회수) */}
             <div className="card">
-              <p className="text-xs text-muted mb-2">총 조회수</p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs text-muted">총 조회수</p>
+                {dailyCvHistory.length > 0 && <TotalPvModal history={dailyCvHistory} />}
+              </div>
               <p className="text-3xl font-bold leading-tight">
                 {fmtPv(totalHourlyToday)}
                 <span className="text-sm font-medium text-muted ml-1">PV</span>

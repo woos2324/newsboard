@@ -37,9 +37,11 @@ export default function EditorialModal({
   const score = item.stance_score ?? 0
   const leftPercent = Math.min(100, Math.max(0, ((score + 2) / 4) * 100))
 
-  const others = relatedEditorials
-    .filter((e) => e.editorial_id !== item.editorial_id && e.topic === item.topic)
-    .slice(0, 5)
+  const others = item.issue
+    ? relatedEditorials
+        .filter((e) => e.editorial_id !== item.editorial_id && e.issue === item.issue)
+        .slice(0, 5)
+    : []
 
   return (
     <div

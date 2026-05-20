@@ -60,7 +60,14 @@ def _to_rows(data: dict) -> list[dict]:
     if not cols:
         return []
     n = len(rows_map.get(cols[0], []))
-    return [{col: rows_map[col][i] for col in cols} for i in range(n)]
+    result = []
+    for i in range(n):
+        row = {}
+        for col in cols:
+            col_data = rows_map.get(col, [])
+            row[col] = col_data[i] if i < len(col_data) else None
+        result.append(row)
+    return result
 
 
 def _find_stat(payload: dict, data_id: str) -> dict:
@@ -94,9 +101,9 @@ def parse_article_pv_json(payload: dict) -> list[ArticlePvJsonRow]:
         aid = _extract_aid(uri)
         date_str = row.get("date", "")
         data_date = date.fromisoformat(date_str) if date_str else date.today()
-        create_str = row.get("createDate", "")
+        create_str = row.get("createDate") or ""
         try:
-            published_at = _parse_kst_datetime(create_str)
+            published_at = _parse_kst_datetime(create_str) if create_str else datetime.now(KST)
         except ValueError:
             published_at = datetime.now(KST)
         result.append(ArticlePvJsonRow(
@@ -148,17 +155,26 @@ def parse_traffic_source_json(payload: dict) -> list[TrafficSourceJsonRow]:
     return result
 
 
-def parse_daily_cv_json(payload: dict, data_date: date) -> int:
-    """visitV2/cv 응답에서 총 PV(cv) 추출. 실패 시 0 반환."""
+def parse_daily_cv_all_devices(payload: dict) -> dict[str, int]:
+    """visitV2/cv 응답에서 device별 총 PV 추출.
+    반환: {"all": N, "pc": N, "mobile": N}  — 값 없으면 0.
+    응답 컬럼: date / total / pc / mobile / ...
+    """
+    result = {"all": 0, "pc": 0, "mobile": 0}
     try:
         for stat in payload.get("result", {}).get("statDataList", []):
             rows = _to_rows(stat.get("data", {}))
-            for row in rows:
-                if "cv" in row:
-                    return int(row.get("cv", 0) or 0)
+            if not rows:
+                continue
+            row = rows[0]  # 단일 날짜 조회이므로 첫 행 사용
+            if "total" in row:
+                result["all"]    = int(row.get("total",  0) or 0)
+                result["pc"]     = int(row.get("pc",     0) or 0)
+                result["mobile"] = int(row.get("mobile", 0) or 0)
+                return result
     except Exception:
         pass
-    return 0
+    return result
 
 
 def parse_search_keyword_json(payload: dict) -> list[SearchKeywordJsonRow]:

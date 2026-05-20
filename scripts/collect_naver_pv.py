@@ -38,7 +38,7 @@ from scripts.lib.naver_pv_json_parser import (
     parse_hourly_pv_json,
     parse_search_keyword_json,
     parse_traffic_source_json,
-    parse_daily_cv_json,
+    parse_daily_cv_all_devices,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -255,6 +255,8 @@ def upsert_article_pv(
 ) -> int:
     rows = []
     for it in items:
+        if not it.title:  # title null 행 스킵
+            continue
         article_id = aid_map.get(it.article_aid)
         rows.append({
             "data_date": it.data_date.isoformat(),
@@ -398,31 +400,38 @@ def collect_daily(
                 else:
                     print(f"    [WARN] hourly_pv {dev}: {e}")
 
-        # ── article_pv + daily_cv: device × section 루프
+        # ── article_pv: device × section 루프
+        # ── daily_cv: section 루프만 (TOTAL 1회 호출로 3개 device 동시 추출)
         combo_count = len(DEVICES) * len(SECTIONS)
-        print(f"  [article_pv + daily_cv] {combo_count}개 조합...")
+        print(f"  [article_pv] {combo_count}개 조합 / [daily_cv] {len(SECTIONS)}개 섹션...")
         for dev in DEVICES:
             for sec in SECTIONS:
-                label = f"{dev}/{sec}"
                 try:
-                    # article_pv
                     payload_a = _call_one(client, cookies, ENDPOINTS["article_pv"],
                                           data_date, device=dev, section=sec, time_dim="DATE")
                     items_a = parse_article_pv_json(payload_a)
                     total += upsert_article_pv(items_a, aid_map, DEVICE_LABEL[dev], sec, time_dimension, dry_run)
-
-                    # daily_cv
-                    payload_c = _call_one(client, cookies, ENDPOINTS["daily_cv"],
-                                          data_date, device=dev, section=sec, time_dim="DATE")
-                    pv = parse_daily_cv_json(payload_c, data_date)
-                    total += upsert_daily_cv(pv, data_date, DEVICE_LABEL[dev], sec, time_dimension, dry_run)
-
                 except httpx.HTTPStatusError as e:
                     if e.response.status_code in (401, 403):
                         cookies = _playwright_login(); _save_cookies(cookies)
-                    print(f"    [WARN] {label}: {e}")
+                    print(f"    [WARN] article_pv {dev}/{sec}: {e}")
                 except Exception as e:
-                    print(f"    [WARN] {label}: {e}")
+                    print(f"    [WARN] article_pv {dev}/{sec}: {e}")
+
+        for sec in SECTIONS:
+            try:
+                # TOTAL 한 번 호출로 all/pc/mobile 동시 추출
+                payload_c = _call_one(client, cookies, ENDPOINTS["daily_cv"],
+                                      data_date, device="TOTAL", section=sec, time_dim="DATE")
+                cv_map = parse_daily_cv_all_devices(payload_c)
+                for dev_label, pv in cv_map.items():
+                    total += upsert_daily_cv(pv, data_date, dev_label, sec, time_dimension, dry_run)
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code in (401, 403):
+                    cookies = _playwright_login(); _save_cookies(cookies)
+                print(f"    [WARN] daily_cv {sec}: {e}")
+            except Exception as e:
+                print(f"    [WARN] daily_cv {sec}: {e}")
 
         # ── traffic_source (TOTAL/total 고정)
         try:
@@ -466,18 +475,26 @@ def collect_period(
                                           start_date, device=dev, section=sec, time_dim=time_dim_api)
                     items_a = parse_article_pv_json(payload_a)
                     total += upsert_article_pv(items_a, aid_map, DEVICE_LABEL[dev], sec, time_dimension, dry_run)
-
-                    payload_c = _call_one(client, cookies, ENDPOINTS["daily_cv"],
-                                          start_date, device=dev, section=sec, time_dim=time_dim_api)
-                    pv = parse_daily_cv_json(payload_c, start_date)
-                    total += upsert_daily_cv(pv, start_date, DEVICE_LABEL[dev], sec, time_dimension, dry_run)
-
                 except httpx.HTTPStatusError as e:
                     if e.response.status_code in (401, 403):
                         cookies = _playwright_login(); _save_cookies(cookies)
-                    print(f"    [WARN] {dev}/{sec}: {e}")
+                    print(f"    [WARN] article_pv {dev}/{sec}: {e}")
                 except Exception as e:
-                    print(f"    [WARN] {dev}/{sec}: {e}")
+                    print(f"    [WARN] article_pv {dev}/{sec}: {e}")
+
+        for sec in SECTIONS:
+            try:
+                payload_c = _call_one(client, cookies, ENDPOINTS["daily_cv"],
+                                      start_date, device="TOTAL", section=sec, time_dim=time_dim_api)
+                cv_map = parse_daily_cv_all_devices(payload_c)
+                for dev_label, pv in cv_map.items():
+                    total += upsert_daily_cv(pv, start_date, dev_label, sec, time_dimension, dry_run)
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code in (401, 403):
+                    cookies = _playwright_login(); _save_cookies(cookies)
+                print(f"    [WARN] daily_cv {sec}: {e}")
+            except Exception as e:
+                print(f"    [WARN] daily_cv {sec}: {e}")
 
     return cookies, total
 

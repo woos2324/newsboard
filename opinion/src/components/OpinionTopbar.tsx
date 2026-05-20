@@ -1,7 +1,7 @@
 'use client'
 
 import { Calendar, Menu } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import SearchBar from './SearchBar'
 
 function formatDateTime(date: Date): string {
@@ -37,7 +37,9 @@ export default function OpinionTopbar({ onMenuOpen }: { onMenuOpen?: () => void 
         <span>{datetime ?? ''}</span>
       </div>
       <div className="ml-auto">
-        <SearchBar />
+        <Suspense fallback={<div className="h-9 w-80" />}>
+          <SearchBar />
+        </Suspense>
       </div>
     </header>
   )

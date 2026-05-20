@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { Search } from 'lucide-react'
 import { Editorial, searchEditorials } from '@/lib/queries'
 import { getMediaColor } from '@/lib/media-colors'
@@ -26,6 +26,8 @@ function formatRelativeDate(iso: string | null): string {
 
 export default function SearchBar() {
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const [keyword, setKeyword] = useState('')
   const [results, setResults] = useState<Editorial[]>([])
   const [loading, setLoading] = useState(false)
@@ -35,7 +37,18 @@ export default function SearchBar() {
 
   useEffect(() => {
     function onClick(e: MouseEvent) {
-      if (!containerRef.current?.contains(e.target as Node)) setOpen(false)
+      const target = e.target as HTMLElement
+      if (!containerRef.current || containerRef.current.contains(target)) return
+
+      // 모달 backdrop(fixed inset-0 z-50) 또는 그 자손 클릭은 무시 — 모달 닫을 때 dropdown까지 닫히지 않도록.
+      let el: HTMLElement | null = target
+      while (el && el !== document.body) {
+        const cls = el.classList
+        if (cls.contains('fixed') && cls.contains('inset-0') && cls.contains('z-50')) return
+        el = el.parentElement
+      }
+
+      setOpen(false)
     }
     document.addEventListener('mousedown', onClick)
     return () => document.removeEventListener('mousedown', onClick)
@@ -71,11 +84,15 @@ export default function SearchBar() {
   }, [keyword])
 
   function selectResult(e: Editorial) {
-    if (!e.edition_date) return
-    router.push(`/?date=${e.edition_date}&open=${e.editorial_id}`)
-    setKeyword('')
-    setResults([])
-    setOpen(false)
+    // 현재 보고 있는 페이지·날짜는 유지하고 ?open=만 갱신.
+    // 사용자가 모달 닫고 같은 검색 결과에서 다른 사설을 바로 클릭할 수 있도록 keyword/results는 보존.
+    if (pathname === '/') {
+      const params = new URLSearchParams(searchParams.toString())
+      params.set('open', String(e.editorial_id))
+      router.push(`/?${params.toString()}`)
+    } else {
+      router.push(`/?open=${e.editorial_id}`)
+    }
   }
 
   function handleKeyDown(ev: React.KeyboardEvent) {

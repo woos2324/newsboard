@@ -24,6 +24,11 @@ function formatTime(iso: string | null): string {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
+function fmtPv(n: number): string {
+  if (n >= 10000) return (n / 10000).toFixed(1) + "만";
+  return n.toLocaleString();
+}
+
 type ArticleRowProps = {
   num: number;
   article: OurArticleItem;
@@ -62,6 +67,11 @@ function ArticleRow({ num, article, isLeft }: ArticleRowProps) {
           {article.cluster_id && (
             <span className="badge badge-muted text-[10px] text-primary-500">
               이슈 #{article.cluster_id}
+            </span>
+          )}
+          {article.pv != null && (
+            <span className="badge badge-muted text-[10px] tabular-nums">
+              👁 {fmtPv(article.pv)}
             </span>
           )}
           {article.url && (

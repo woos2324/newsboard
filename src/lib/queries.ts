@@ -1241,6 +1241,7 @@ export type OurArticleItem = {
   author_name: string | null;
   published_at: string | null;
   cluster_id: number | null;
+  pv: number | null;
 };
 
 export type OurArticlePageData = {
@@ -1276,6 +1277,26 @@ function shiftDateString(date: string, days: number): string {
   const m = String(shifted.getUTCMonth() + 1).padStart(2, "0");
   const d = String(shifted.getUTCDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+}
+
+async function fetchArticlePvMap(
+  sb: ReturnType<typeof getSupabase>,
+  articleIds: number[],
+  date: string
+): Promise<Map<number, number>> {
+  if (articleIds.length === 0) return new Map();
+  const { data } = await sb
+    .from("article_pv_snapshot")
+    .select("article_id, pv")
+    .in("article_id", articleIds)
+    .eq("data_date", date)
+    .eq("device", "all")
+    .eq("category", "all");
+  const map = new Map<number, number>();
+  for (const r of data ?? []) {
+    if (r.article_id != null) map.set(r.article_id, r.pv);
+  }
+  return map;
 }
 
 export async function getOurArticlesPage(
@@ -1334,16 +1355,20 @@ export async function getOurArticlesPage(
   const prevRes = countResults[trendDates.length];
   const articleIds = allArticles.map((a) => a.article_id);
 
-  // 클러스터 연결 조회
+  // 클러스터 + PV 병렬 조회
   const clusterMap = new Map<number, number>();
-  if (articleIds.length > 0) {
-    const { data: clusterRows } = await sb
-      .from("issue_cluster_article")
-      .select("article_id, issue_cluster_id")
-      .in("article_id", articleIds);
-    for (const r of clusterRows ?? []) {
-      if (!clusterMap.has(r.article_id)) clusterMap.set(r.article_id, r.issue_cluster_id);
-    }
+  const [clusterRows, pvMap] = await Promise.all([
+    articleIds.length > 0
+      ? sb
+          .from("issue_cluster_article")
+          .select("article_id, issue_cluster_id")
+          .in("article_id", articleIds)
+          .then((r) => r.data ?? [])
+      : Promise.resolve([]),
+    fetchArticlePvMap(sb, articleIds, date),
+  ]);
+  for (const r of clusterRows) {
+    if (!clusterMap.has(r.article_id)) clusterMap.set(r.article_id, r.issue_cluster_id);
   }
 
   const articles: OurArticleItem[] = allArticles.map((a) => ({
@@ -1354,6 +1379,7 @@ export async function getOurArticlesPage(
     author_name: a.author_name ?? null,
     published_at: a.published_at,
     cluster_id: clusterMap.get(a.article_id) ?? null,
+    pv: pvMap.get(a.article_id) ?? null,
   }));
 
   // 섹션별 집계
@@ -1413,15 +1439,20 @@ export async function getArticleList(
   const start = (page - 1) * perPage;
   const sliced = all.slice(start, start + perPage);
 
+  const slicedIds = sliced.map((a) => a.article_id);
   const clusterMap = new Map<number, number>();
-  if (sliced.length > 0) {
-    const { data: clusterRows } = await sb
-      .from("issue_cluster_article")
-      .select("article_id, issue_cluster_id")
-      .in("article_id", sliced.map((a) => a.article_id));
-    for (const r of clusterRows ?? []) {
-      if (!clusterMap.has(r.article_id)) clusterMap.set(r.article_id, r.issue_cluster_id);
-    }
+  const [clusterRows, pvMap] = await Promise.all([
+    slicedIds.length > 0
+      ? sb
+          .from("issue_cluster_article")
+          .select("article_id, issue_cluster_id")
+          .in("article_id", slicedIds)
+          .then((r) => r.data ?? [])
+      : Promise.resolve([]),
+    fetchArticlePvMap(sb, slicedIds, date),
+  ]);
+  for (const r of clusterRows) {
+    if (!clusterMap.has(r.article_id)) clusterMap.set(r.article_id, r.issue_cluster_id);
   }
 
   return {
@@ -1433,6 +1464,7 @@ export async function getArticleList(
       author_name: a.author_name ?? null,
       published_at: a.published_at,
       cluster_id: clusterMap.get(a.article_id) ?? null,
+      pv: pvMap.get(a.article_id) ?? null,
     })),
     total,
   };

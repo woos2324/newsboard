@@ -61,9 +61,37 @@
 **로컬 .env.local 추가 항목** (GitHub Secrets에 없는 것):
 - `HEADLESS=0` — Playwright 브라우저 표시 (로컬 디버깅용, 운영은 기본값 1)
 
-## 재개 지점 (2026-05-20, 24차 세션 종료)
+## 재개 지점 (2026-05-20, 25차 세션 진행 중)
 
-**이번 세션 (24차) 완료**:
+**이번 세션 (25차) 진행 중** — `/traffic` 페이지 UI 구현:
+- **트래픽 분석 미리보기 디자인 확정** (`_traffic-preview-claude.html`)
+  - 단일 화면 정보 밀도형 대시보드 (탭 분리 X)
+  - 상단 KPI 4개 (총 PV / 1위 PV / 피크 시간 / 검색 유입 비중)
+  - 인기 기사 Top 25 카드 (PV 막대 + 검색 매칭 표시)
+  - 시간대별 조회수 카드: SVG 24시간 막대 + 어제 동시간 점선 비교 + 출근/점심/퇴근 구간 음영 + 평균선 + 시간대별 PV 상세표 (오늘/어제/04월 평균/Δ)
+  - 유입 경로 도넛 차트 + 리스트
+  - 검색 키워드 Top 15 카드 (순위 변동 ▲▼/NEW + 매칭 기사)
+  - "전체 100건 보기" 모달 2개 (인기 기사 / 검색 키워드, 검색·정렬·필터·CSV·페이저 UI 포함)
+  - codex 버전(`_traffic-preview.html`)과 별도로 보관해 비교 가능
+- **Sidebar 메뉴 추가** (`/traffic` → "트래픽 분석", `BarChart3` 아이콘)
+  - ⚠ 현재 메뉴 클릭 시 404 (page.tsx 미작성, 다음 세션에 해소)
+- **database.types.ts 재생성**: article_pv_snapshot / hourly_pv_snapshot / traffic_source_daily / search_keyword_daily / naver_session / daily_report* 타입 반영
+- **queries.ts에 `getTrafficPageData()` + 4개 타입 추가** (`ArticlePvItem`, `HourlyPvItem`, `TrafficSourceItem`, `SearchKeywordItem`, `TrafficPageData`)
+  - 오늘+어제 hourly PV, traffic source, search keyword, article PV Top 100을 병렬 조회
+  - 검색 유입 비중은 source_category에 "검색" 포함된 항목 ratio 합산
+- **커밋 + push 완료**: `19d2c43`
+
+**남은 작업 (다음 세션 한꺼번에)**:
+- `src/app/traffic/page.tsx` (Server Component) — `getTrafficPageData(date)` 호출 + KPI 4 + 4 카드 그리드
+- `src/app/traffic/HourlyChart.tsx` — SVG 24시간 막대 차트 + 어제 점선 비교 + 시간대 구간 음영 + 상세표
+- `src/app/traffic/ArticleListModal.tsx`, `KeywordListModal.tsx` (Client Components) — 열고/닫기만, 검색·정렬·CSV·페이저는 정적 UI (기능은 그 다음 세션)
+- `npm run build` 검증 후 push → 사이드바 404 해소
+
+설계 기준: `_traffic-preview-claude.html`을 그대로 Tailwind로 컨버전. 디자인 변경 X.
+
+---
+
+**지난 세션 (24차) 완료**:
 - **사설 수집 누락 버그 fix** (`collect_editorials.py`)
   - 원인: GitHub Actions cron 지연으로 KST 자정을 넘어 실행되면 `datetime.now(KST)`가 다음 날을 가리켜 전날 사설 누락 (특히 매일경제처럼 Naver가 다음날 버킷에 안 넣어주는 매체)
   - 수정: `--date` 미지정 시 어제+오늘 둘 다 수집. 기존 URL은 AI 재호출 없이 메타만 업데이트되므로 비용 증가 미미
@@ -113,8 +141,8 @@
   python -m scripts.collect_editorials --date-from 20260101 --date-to 20260103
   ```
   진행 전 OpenAI 결제 잔액 확인 필수 (호출당 ~$0.01, 주당 ~$2.50).
-- ⚠ **cron-naver-pv 첫 GitHub Actions 실행 확인** — Actions 탭에서 stealth 로그인 동작 여부 미검증
-- ⚠ **/traffic 페이지 UI 구현** — 기사 PV 순위 / 시간대별 조회수 / 유입 경로 + 검색 키워드 4탭
+- ⚠ **/traffic 페이지 UI 마무리** — 25차 진행 중. 미리보기 디자인·queries·sidebar는 완료, page.tsx + HourlyChart + 2개 Modal 컴포넌트가 남음 (위 "남은 작업" 참고)
+- ⚠ **/traffic 페이지 인터랙티브 기능** — UI 완성 후 별도 세션: 모달 검색·정렬·필터·CSV 다운로드, 디바이스 토글(PC/모바일), 날짜 변경 selector, 페이저, 매칭 기사 양방향 점프
 - ⚠ **/articles 페이지에 PV 컬럼 추가** — article_pv_snapshot.pv를 기사 목록에 표시
 - ⚠ **subscriber_snapshot / daily_publication_count 보존 기간 미결정**
 - ⚠ **미보도 탐지 3단계** (임베딩 기반) — article.body 수집 + NCP 이전 후
@@ -124,10 +152,10 @@
 
 ## 다음 작업 로드맵
 
+- **(진행 중) /traffic 페이지 마무리** — page.tsx + HourlyChart + 2 Modal 작성 후 빌드 검증·push
 - **(당장) 사설 과거 데이터 백필** — 4월부터 역순으로 주 단위 실행 (위 명령어 참고)
-- **(당장) cron-naver-pv GitHub Actions 동작 확인**
-- **(당장) /traffic 페이지 UI 구현**
 - **(당장) /articles 페이지 PV 컬럼 추가**
+- **(당장) /traffic 인터랙티브 기능** — 검색·정렬·필터·CSV·페이저·날짜·디바이스 토글
 - **(미래) 편집회의 자동 일간 보고서** — 기존 데이터 + PV 통합한 매일 아침 보고서
 - **(미래) 미보도 탐지 + 클러스터 품질 개선** — 설계 완료. 상세: `documents/decisions.md`
 - **(미래) 성향 분석 정확도 개선** — `editorial_label` 테이블에 인간 레이블 충분히 쌓인 후 진행

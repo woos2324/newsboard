@@ -97,15 +97,27 @@
     - `collect_comments.py`: 댓글 API 후 0.5초
 
 **미완료 (다음 세션 이어받을 것)**:
-- ⚠ **사설 과거 데이터 백필** — 4월부터 역순으로 월별 수집. 명령어:
+- ⚠ **사설 과거 데이터 백필** — 4월 + 3/25~3/31 완료. 남은 구간 역순 진행:
   ```bash
   # 주 단위로 나눠서 실행 (타임아웃 방지)
-  python -m scripts.collect_editorials --date-from 20260401 --date-to 20260407
-  python -m scripts.collect_editorials --date-from 20260408 --date-to 20260414
-  python -m scripts.collect_editorials --date-from 20260415 --date-to 20260421
-  python -m scripts.collect_editorials --date-from 20260422 --date-to 20260430
-  # 이후 3월, 2월, ... 순서로 진행
+  # 3월 남은 구간 (예상 비용 약 11,000원, gpt-4o)
+  python -m scripts.collect_editorials --date-from 20260318 --date-to 20260324
+  python -m scripts.collect_editorials --date-from 20260311 --date-to 20260317
+  python -m scripts.collect_editorials --date-from 20260304 --date-to 20260310
+  python -m scripts.collect_editorials --date-from 20260301 --date-to 20260303
+  # 2월 전체 (예상 비용 약 13,000원)
+  python -m scripts.collect_editorials --date-from 20260222 --date-to 20260228
+  python -m scripts.collect_editorials --date-from 20260215 --date-to 20260221
+  python -m scripts.collect_editorials --date-from 20260208 --date-to 20260214
+  python -m scripts.collect_editorials --date-from 20260201 --date-to 20260207
+  # 1월 전체 (예상 비용 약 14,000원)
+  python -m scripts.collect_editorials --date-from 20260125 --date-to 20260131
+  python -m scripts.collect_editorials --date-from 20260118 --date-to 20260124
+  python -m scripts.collect_editorials --date-from 20260111 --date-to 20260117
+  python -m scripts.collect_editorials --date-from 20260104 --date-to 20260110
+  python -m scripts.collect_editorials --date-from 20260101 --date-to 20260103
   ```
+  진행 전 OpenAI 결제 잔액 확인 필수 (호출당 ~$0.01, 주당 ~$2.50).
 - ⚠ **cron-naver-pv 첫 GitHub Actions 실행 확인** — Actions 탭에서 stealth 로그인 동작 여부 미검증
 - ⚠ **/traffic 페이지 UI 구현** — 기사 PV 순위 / 시간대별 조회수 / 유입 경로 + 검색 키워드 4탭
 - ⚠ **/articles 페이지에 PV 컬럼 추가** — article_pv_snapshot.pv를 기사 목록에 표시

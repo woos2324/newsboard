@@ -1,5 +1,5 @@
 import { PageShell } from "@/components/PageShell";
-import { getTrafficPageData, type TrafficPageData } from "@/lib/queries";
+import { getTrafficPageData, getLatestTrafficDate, type TrafficPageData } from "@/lib/queries";
 import { HourlyChart } from "./HourlyChart";
 import { ArticleListModal } from "./ArticleListModal";
 import { KeywordListModal } from "./KeywordListModal";
@@ -56,8 +56,14 @@ type Props = { searchParams: Promise<{ date?: string; device?: string }> };
 
 export default async function TrafficPage({ searchParams }: Props) {
   const { date: rawDate, device: rawDevice } = await searchParams;
-  const date = rawDate ?? todayKST();
   const device = VALID_DEVICES.includes(rawDevice ?? "") ? (rawDevice as string) : "all";
+
+  // 날짜 미지정 시 오늘 → 데이터 없으면 마지막 수집일로 fallback
+  let date = rawDate ?? todayKST();
+  if (!rawDate) {
+    const latest = await getLatestTrafficDate();
+    if (latest && latest < date) date = latest;
+  }
 
   let data: TrafficPageData | null = null;
   let loadError = false;

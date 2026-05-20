@@ -1672,6 +1672,17 @@ export type TrafficPageData = {
   searchRatio: number; // 검색 유입 비중 (%)
 };
 
+export async function getLatestTrafficDate(): Promise<string | null> {
+  const sb = getSupabase();
+  const { data } = await sb
+    .from("article_pv_snapshot")
+    .select("data_date")
+    .order("data_date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data?.data_date ?? null;
+}
+
 export async function getTrafficPageData(
   date: string,
   articlesLimit = 100,

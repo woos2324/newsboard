@@ -515,6 +515,8 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--weekly", action="store_true", help="주간 수집 강제 실행")
     ap.add_argument("--monthly", action="store_true", help="월간 수집 강제 실행")
+    ap.add_argument("--week-date", help="주간 수집 시작일(월요일) YYYYMMDD — --weekly 함께 사용")
+    ap.add_argument("--month-date", help="월간 수집 시작일(1일) YYYYMMDD — --monthly 함께 사용")
     args = ap.parse_args()
 
     kst_today = datetime.now(KST).date()
@@ -549,21 +551,27 @@ def main() -> int:
     total += n
     print(f"  일간: {n}건 완료")
 
-    # ── 주간 수집 (매주 화요일 또는 --weekly 플래그)
-    run_weekly = args.weekly or (not args.date and kst_today.weekday() == 1)
+    # ── 주간 수집 (매주 월요일 또는 --weekly 플래그)
+    run_weekly = args.weekly or (not args.date and kst_today.weekday() == 0)
     if run_weekly:
-        # 지난 주 월요일 = 오늘 - 8일 (화요일 기준)
-        last_monday = kst_today - timedelta(days=8)
+        if args.week_date:
+            last_monday = datetime.strptime(args.week_date, "%Y%m%d").date()
+        else:
+            # 지난 주 월요일: 오늘 기준 이번 주 월요일 - 7일
+            last_monday = kst_today - timedelta(days=kst_today.weekday() + 7)
         print(f"[4] 주간 수집 ({last_monday})...")
         cookies, n = collect_period(last_monday, "WEEK", "weekly", cookies, aid_map, args.dry_run)
         total += n
         print(f"  주간: {n}건 완료")
 
-    # ── 월간 수집 (매월 2일 또는 --monthly 플래그)
-    run_monthly = args.monthly or (not args.date and kst_today.day == 2)
+    # ── 월간 수집 (매월 1일 또는 --monthly 플래그)
+    run_monthly = args.monthly or (not args.date and kst_today.day == 1)
     if run_monthly:
-        # 지난달 1일
-        first_of_last_month = (kst_today.replace(day=1) - timedelta(days=1)).replace(day=1)
+        if args.month_date:
+            first_of_last_month = datetime.strptime(args.month_date, "%Y%m%d").date()
+        else:
+            # 지난달 1일
+            first_of_last_month = (kst_today.replace(day=1) - timedelta(days=1)).replace(day=1)
         print(f"[5] 월간 수집 ({first_of_last_month})...")
         cookies, n = collect_period(first_of_last_month, "MONTH", "monthly", cookies, aid_map, args.dry_run)
         total += n

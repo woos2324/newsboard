@@ -17,14 +17,28 @@ const SECTIONS = [
   { value: "기타", label: "기타" },
 ];
 
+const TIME_DIMS = [
+  { value: "daily",   label: "일간" },
+  { value: "weekly",  label: "주간" },
+  { value: "monthly", label: "월간" },
+];
+
 const WEEKDAY_KR = ["일", "월", "화", "수", "목", "금", "토"];
 
-function formatDateLabel(dateStr: string): string {
+function formatRowDate(dateStr: string, timeDimension: string): string {
   const d = new Date(dateStr + "T00:00:00+09:00");
-  const m = d.getMonth() + 1;
-  const day = d.getDate();
+  if (timeDimension === "weekly") {
+    const end = new Date(d);
+    end.setDate(end.getDate() + 6);
+    const ms = `${d.getMonth() + 1}/${d.getDate()}`;
+    const me = `${end.getMonth() + 1}/${end.getDate()}`;
+    return `${ms} ~ ${me}`;
+  }
+  if (timeDimension === "monthly") {
+    return `${d.getFullYear()}년 ${d.getMonth() + 1}월`;
+  }
   const wd = WEEKDAY_KR[d.getDay()];
-  return `${d.getFullYear()}.${String(m).padStart(2, "0")}.${String(day).padStart(2, "0")}.(${wd})`;
+  return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}.(${wd})`;
 }
 
 function fmtN(n: number): string {
@@ -37,6 +51,7 @@ type Props = {
 
 export function TotalPvModal({ initialHistory }: Props) {
   const [open, setOpen] = useState(false);
+  const [timeDim, setTimeDim] = useState("daily");
   const [section, setSection] = useState("all");
   const [history, setHistory] = useState<DailyCvRow[]>(initialHistory);
   const [loading, setLoading] = useState(false);
@@ -44,11 +59,11 @@ export function TotalPvModal({ initialHistory }: Props) {
   useEffect(() => {
     if (!open) return;
     setLoading(true);
-    fetch(`/api/traffic/daily-cv?section=${encodeURIComponent(section)}&days=30`)
+    fetch(`/api/traffic/daily-cv?section=${encodeURIComponent(section)}&time_dimension=${timeDim}`)
       .then((r) => r.json())
       .then(setHistory)
       .finally(() => setLoading(false));
-  }, [open, section]);
+  }, [open, section, timeDim]);
 
   const today = history[0];
   const maxTotal = Math.max(...history.map((r) => r.total), 1);
@@ -76,10 +91,24 @@ export function TotalPvModal({ initialHistory }: Props) {
             {/* Head */}
             <div className="px-6 pt-5 pb-4 border-b border-gray-100">
               <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-lg font-bold">일별 조회수</h2>
-                  <div className="text-xs text-gray-400 mt-0.5">
-                    최근 {history.length}일 · 전체 / PC / 모바일
+                <div className="flex items-center gap-3">
+                  <h2 className="text-lg font-bold">조회수</h2>
+                  {/* 일간/주간/월간 탭 */}
+                  <div className="flex border border-gray-200 rounded-lg overflow-hidden h-7">
+                    {TIME_DIMS.map((t) => (
+                      <button
+                        key={t.value}
+                        type="button"
+                        onClick={() => { setTimeDim(t.value); setSection("all"); }}
+                        className={`px-3 text-xs font-medium transition-colors ${
+                          timeDim === t.value
+                            ? "bg-primary-500 text-white"
+                            : "text-muted hover:bg-gray-50"
+                        }`}
+                      >
+                        {t.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
                 <button
@@ -91,7 +120,7 @@ export function TotalPvModal({ initialHistory }: Props) {
                 </button>
               </div>
 
-              {/* 오늘 요약 */}
+              {/* 최신 요약 */}
               {today && (
                 <div className="flex gap-4 mt-3 px-3.5 py-2.5 bg-gray-50 rounded-lg text-xs">
                   <div className="flex-1">
@@ -139,42 +168,37 @@ export function TotalPvModal({ initialHistory }: Props) {
               <table className="w-full border-collapse text-sm">
                 <thead>
                   <tr>
-                    <th className="sticky top-0 bg-gray-50 z-10 text-center px-6 py-2.5 border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wide">
-                      날짜
+                    <th className="sticky top-0 bg-gray-50 z-10 text-center px-4 py-2.5 border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wide">
+                      {timeDim === "weekly" ? "주간" : timeDim === "monthly" ? "월" : "날짜"}
                     </th>
-                    <th className="sticky top-0 bg-gray-50 z-10 text-right px-6 py-2.5 border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wide">
-                      전체
-                    </th>
-                    <th className="sticky top-0 bg-gray-50 z-10 text-right px-6 py-2.5 border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wide">
-                      PC
-                    </th>
-                    <th className="sticky top-0 bg-gray-50 z-10 text-right px-6 py-2.5 border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wide">
-                      모바일
-                    </th>
-                    <th className="sticky top-0 bg-gray-50 z-10 px-6 py-2.5 border-b border-gray-100 w-32 text-[11px] font-medium text-gray-400 uppercase tracking-wide text-left">
-                      분포
-                    </th>
+                    <th className="sticky top-0 bg-gray-50 z-10 text-right px-4 py-2.5 border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wide">전체</th>
+                    <th className="sticky top-0 bg-gray-50 z-10 text-right px-4 py-2.5 border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wide">PC</th>
+                    <th className="sticky top-0 bg-gray-50 z-10 text-right px-4 py-2.5 border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wide">모바일</th>
+                    <th className="sticky top-0 bg-gray-50 z-10 px-4 py-2.5 border-b border-gray-100 w-28 text-[11px] font-medium text-gray-400 uppercase tracking-wide text-left">분포</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {history.map((row, i) => (
-                    <tr
-                      key={row.data_date}
-                      className={i === 0 ? "bg-green-50" : "hover:bg-gray-50"}
-                    >
-                      <td className={`text-center px-6 py-3 border-b border-gray-50 text-xs font-medium ${i === 0 ? "text-green-600" : "text-gray-500"}`}>
-                        {formatDateLabel(row.data_date)}
+                  {history.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="text-center py-10 text-sm text-gray-400">
+                        데이터 없음
                       </td>
-                      <td className={`text-right px-6 py-3 border-b border-gray-50 tabular-nums font-semibold ${i === 0 ? "text-green-600" : "text-gray-700"}`}>
+                    </tr>
+                  ) : history.map((row, i) => (
+                    <tr key={row.data_date} className={i === 0 ? "bg-green-50" : "hover:bg-gray-50"}>
+                      <td className={`text-center px-4 py-3 border-b border-gray-50 text-xs font-medium ${i === 0 ? "text-green-600" : "text-gray-500"}`}>
+                        {formatRowDate(row.data_date, timeDim)}
+                      </td>
+                      <td className={`text-right px-4 py-3 border-b border-gray-50 tabular-nums font-semibold ${i === 0 ? "text-green-600" : "text-gray-700"}`}>
                         {fmtN(row.total)}
                       </td>
-                      <td className="text-right px-6 py-3 border-b border-gray-50 tabular-nums text-gray-500">
+                      <td className="text-right px-4 py-3 border-b border-gray-50 tabular-nums text-gray-500">
                         {fmtN(row.pc)}
                       </td>
-                      <td className="text-right px-6 py-3 border-b border-gray-50 tabular-nums text-gray-500">
+                      <td className="text-right px-4 py-3 border-b border-gray-50 tabular-nums text-gray-500">
                         {fmtN(row.mobile)}
                       </td>
-                      <td className="px-6 py-3 border-b border-gray-50">
+                      <td className="px-4 py-3 border-b border-gray-50">
                         <div className="h-[5px] bg-gray-100 rounded-full overflow-hidden">
                           <div
                             className="h-full rounded-full"
@@ -195,7 +219,11 @@ export function TotalPvModal({ initialHistory }: Props) {
 
             {/* Footer */}
             <div className="px-6 py-3 border-t border-gray-100 text-xs text-gray-400">
-              최근 <strong className="text-gray-700">{history.length}일</strong> 기준
+              {history.length > 0 && (
+                <span>
+                  {timeDim === "daily" ? `최근 ${history.length}일` : timeDim === "weekly" ? `최근 ${history.length}주` : `최근 ${history.length}개월`} 기준
+                </span>
+              )}
             </div>
           </div>
         </div>

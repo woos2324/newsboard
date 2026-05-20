@@ -6,7 +6,9 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
   const section = searchParams.get("section") ?? "all";
-  const days = Math.min(90, Math.max(1, parseInt(searchParams.get("days") ?? "30")));
-  const data = await getDailyCvHistory(days, section);
+  const timeDimension = searchParams.get("time_dimension") ?? "daily";
+  const defaultDays = timeDimension === "daily" ? 30 : timeDimension === "weekly" ? 16 : 12;
+  const days = Math.min(120, Math.max(1, parseInt(searchParams.get("days") ?? String(defaultDays))));
+  const data = await getDailyCvHistory(days, section, timeDimension);
   return NextResponse.json(data);
 }

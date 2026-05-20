@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { X } from "lucide-react";
+import { useState, useMemo } from "react";
+import { X, Download } from "lucide-react";
 import type { SearchKeywordItem } from "@/lib/queries";
 
 type Props = {
@@ -9,16 +9,38 @@ type Props = {
   date: string;
 };
 
+function downloadCsv(items: SearchKeywordItem[], date: string) {
+  const header = ["순위", "키워드", "클릭수", "비중(%)"];
+  const rows = items.map((k) => [k.rank, k.keyword, k.clicks, k.ratio.toFixed(2)]);
+  const csv = "﻿" + [header, ...rows].map((r) => r.join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const el = document.createElement("a");
+  el.href = url;
+  el.download = `traffic_keywords_${date}.csv`;
+  el.click();
+  URL.revokeObjectURL(url);
+}
+
 export function KeywordListModal({ keywords, date }: Props) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+
   const maxClicks = keywords[0]?.clicks ?? 1;
 
   const dateLabel = new Date(date + "T00:00:00+09:00").toLocaleDateString("ko-KR", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    weekday: "short",
+    year: "numeric", month: "long", day: "numeric", weekday: "short",
   });
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return q ? keywords.filter((k) => k.keyword.toLowerCase().includes(q)) : keywords;
+  }, [keywords, query]);
+
+  function handleClose() {
+    setOpen(false);
+    setQuery("");
+  }
 
   return (
     <>
@@ -33,9 +55,7 @@ export function KeywordListModal({ keywords, date }: Props) {
       {open && (
         <div
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-6"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setOpen(false);
-          }}
+          onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}
         >
           <div
             className="bg-white rounded-2xl w-full max-w-[760px] max-h-[88vh] flex flex-col shadow-2xl overflow-hidden"
@@ -53,7 +73,7 @@ export function KeywordListModal({ keywords, date }: Props) {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setOpen(false)}
+                  onClick={handleClose}
                   className="w-8 h-8 rounded-lg border border-gray-200 grid place-items-center text-gray-400 hover:bg-gray-50 hover:text-gray-700 shrink-0"
                 >
                   <X size={14} />
@@ -61,60 +81,71 @@ export function KeywordListModal({ keywords, date }: Props) {
               </div>
             </div>
 
+            {/* Controls */}
+            <div className="px-6 py-3 border-b border-gray-100 flex gap-2 items-center">
+              <input
+                type="search"
+                placeholder="키워드 검색"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                className="flex-1 h-[34px] px-3 border border-gray-200 rounded-lg text-sm outline-none focus:border-blue-500"
+              />
+              <button
+                type="button"
+                onClick={() => downloadCsv(filtered, date)}
+                className="h-[34px] px-3 border border-gray-200 rounded-lg text-sm bg-white text-gray-700 hover:bg-gray-50 flex items-center gap-1.5"
+              >
+                <Download size={13} />
+                CSV
+              </button>
+            </div>
+
             {/* Body */}
             <div className="flex-1 overflow-y-auto">
-              <table className="w-full border-collapse text-sm">
-                <thead>
-                  <tr>
-                    <th className="sticky top-0 bg-gray-50 z-10 text-center px-4 py-2.5 border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wide w-12">
-                      순위
-                    </th>
-                    <th className="sticky top-0 bg-gray-50 z-10 text-left px-4 py-2.5 border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wide">
-                      키워드
-                    </th>
-                    <th className="sticky top-0 bg-gray-50 z-10 px-4 py-2.5 border-b border-gray-100 w-32">
-                      분포
-                    </th>
-                    <th className="sticky top-0 bg-gray-50 z-10 text-right px-4 py-2.5 border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wide w-20">
-                      클릭
-                    </th>
-                    <th className="sticky top-0 bg-gray-50 z-10 text-right px-4 py-2.5 border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wide w-16">
-                      비중
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {keywords.map((kw) => (
-                    <tr key={kw.rank} className="hover:bg-gray-50">
-                      <td className="text-center px-4 py-3 border-b border-gray-50 text-gray-400 tabular-nums text-xs">
-                        {kw.rank}
-                      </td>
-                      <td className="px-4 py-3 border-b border-gray-50 font-medium">{kw.keyword}</td>
-                      <td className="px-4 py-3 border-b border-gray-50">
-                        <div className="h-[5px] bg-gray-100 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-blue-700 rounded-full"
-                            style={{
-                              width: `${maxClicks ? (kw.clicks / maxClicks) * 100 : 0}%`,
-                            }}
-                          />
-                        </div>
-                      </td>
-                      <td className="text-right px-4 py-3 border-b border-gray-50 tabular-nums font-semibold">
-                        {kw.clicks.toLocaleString()}
-                      </td>
-                      <td className="text-right px-4 py-3 border-b border-gray-50 tabular-nums text-gray-400">
-                        {kw.ratio.toFixed(2)}%
-                      </td>
+              {filtered.length === 0 ? (
+                <div className="py-12 text-center text-sm text-gray-400">검색 결과 없음</div>
+              ) : (
+                <table className="w-full border-collapse text-sm">
+                  <thead>
+                    <tr>
+                      <th className="sticky top-0 bg-gray-50 z-10 text-center px-4 py-2.5 border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wide w-12">순위</th>
+                      <th className="sticky top-0 bg-gray-50 z-10 text-left px-4 py-2.5 border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wide">키워드</th>
+                      <th className="sticky top-0 bg-gray-50 z-10 px-4 py-2.5 border-b border-gray-100 w-32">분포</th>
+                      <th className="sticky top-0 bg-gray-50 z-10 text-right px-4 py-2.5 border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wide w-20">클릭</th>
+                      <th className="sticky top-0 bg-gray-50 z-10 text-right px-4 py-2.5 border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wide w-16">비중</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {filtered.map((kw) => (
+                      <tr key={kw.rank} className="hover:bg-gray-50">
+                        <td className="text-center px-4 py-3 border-b border-gray-50 text-gray-400 tabular-nums text-xs">
+                          {kw.rank}
+                        </td>
+                        <td className="px-4 py-3 border-b border-gray-50 font-medium">{kw.keyword}</td>
+                        <td className="px-4 py-3 border-b border-gray-50">
+                          <div className="h-[5px] bg-gray-100 rounded-full overflow-hidden">
+                            <div className="h-full bg-blue-700 rounded-full"
+                              style={{ width: `${maxClicks ? (kw.clicks / maxClicks) * 100 : 0}%` }} />
+                          </div>
+                        </td>
+                        <td className="text-right px-4 py-3 border-b border-gray-50 tabular-nums font-semibold">
+                          {kw.clicks.toLocaleString()}
+                        </td>
+                        <td className="text-right px-4 py-3 border-b border-gray-50 tabular-nums text-gray-400">
+                          {kw.ratio.toFixed(2)}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
 
             {/* Footer */}
             <div className="px-6 py-3 border-t border-gray-100 text-xs text-gray-400">
-              총 <strong className="text-gray-700">{keywords.length}건</strong>
+              {filtered.length !== keywords.length
+                ? `검색 결과 ${filtered.length}건`
+                : `총 ${keywords.length}건`}
             </div>
           </div>
         </div>

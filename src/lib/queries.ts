@@ -1675,7 +1675,8 @@ export type TrafficPageData = {
 export async function getTrafficPageData(
   date: string,
   articlesLimit = 100,
-  keywordsLimit = 100
+  keywordsLimit = 100,
+  device = "all"
 ): Promise<TrafficPageData> {
   const sb = getSupabase();
   const prev = shiftDateString(date, -1);
@@ -1692,7 +1693,7 @@ export async function getTrafficPageData(
       .from("article_pv_snapshot")
       .select("rank, title, reporter_name, pv, category, article_published_at, article_id, article_url")
       .eq("data_date", date)
-      .eq("device", "all")
+      .eq("device", device)
       .eq("category", "all")
       .order("rank", { ascending: true })
       .limit(articlesLimit),
@@ -1700,20 +1701,20 @@ export async function getTrafficPageData(
       .from("article_pv_snapshot")
       .select("pv")
       .eq("data_date", prev)
-      .eq("device", "all")
+      .eq("device", device)
       .eq("category", "all"),
     sb
       .from("hourly_pv_snapshot")
       .select("hour, pv")
       .eq("data_date", date)
-      .eq("device", "all")
+      .eq("device", device)
       .eq("category", "all")
       .order("hour", { ascending: true }),
     sb
       .from("hourly_pv_snapshot")
       .select("hour, pv")
       .eq("data_date", prev)
-      .eq("device", "all")
+      .eq("device", device)
       .eq("category", "all")
       .order("hour", { ascending: true }),
     sb

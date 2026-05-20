@@ -3,6 +3,7 @@ import { getTrafficPageData, type TrafficPageData } from "@/lib/queries";
 import { HourlyChart } from "./HourlyChart";
 import { ArticleListModal } from "./ArticleListModal";
 import { KeywordListModal } from "./KeywordListModal";
+import { DateDeviceSelector } from "./DateDeviceSelector";
 
 export const revalidate = 1800;
 
@@ -49,16 +50,19 @@ function fmtKST(iso: string) {
   return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
-type Props = { searchParams: Promise<{ date?: string }> };
+const VALID_DEVICES = ["all", "pc", "mobile"];
+
+type Props = { searchParams: Promise<{ date?: string; device?: string }> };
 
 export default async function TrafficPage({ searchParams }: Props) {
-  const { date: rawDate } = await searchParams;
+  const { date: rawDate, device: rawDevice } = await searchParams;
   const date = rawDate ?? todayKST();
+  const device = VALID_DEVICES.includes(rawDevice ?? "") ? (rawDevice as string) : "all";
 
   let data: TrafficPageData | null = null;
   let loadError = false;
   try {
-    data = await getTrafficPageData(date, 100, 100);
+    data = await getTrafficPageData(date, 100, 100, device);
   } catch {
     loadError = true;
   }
@@ -113,7 +117,7 @@ export default async function TrafficPage({ searchParams }: Props) {
 
   return (
     <PageShell title="트래픽 분석" description="네이버 파트너센터 기준 · 매시 30분 자동 갱신">
-      {/* Date subtitle */}
+      {/* Date subtitle + controls */}
       <div className="flex items-end justify-between gap-4 mb-5 -mt-2">
         <div>
           <h2 className="text-xl font-bold tracking-tight leading-none mb-1">
@@ -123,6 +127,7 @@ export default async function TrafficPage({ searchParams }: Props) {
             {dateLabel} · 일일 PV, 시간대별 흐름, 유입 경로, 검색 키워드를 한 화면에서 점검
           </p>
         </div>
+        <DateDeviceSelector date={date} device={device} />
       </div>
 
       {noData ? (

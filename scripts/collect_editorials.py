@@ -20,6 +20,12 @@ from bs4 import BeautifulSoup
 
 from scripts.lib.db import get_client
 
+# Windows 콘솔 기본 cp949에서 한글 방점(〮) 등 일부 유니코드 문자가 print 시 크래시되는 문제 방지.
+# GitHub Actions(Linux)는 기본 UTF-8이라 영향 없음.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 KST = timezone(timedelta(hours=9))
 
 EDITORIAL_URL = "https://news.naver.com/opinion/editorial"

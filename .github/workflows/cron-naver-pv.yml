@@ -2,7 +2,7 @@ name: Collect Naver PV
 
 on:
   schedule:
-    - cron: '30 * * * *'   # 매시간 30분 (쿠키 캐시 재사용, 로그인은 만료 시만)
+    - cron: '0 3 * * *'    # UTC 03:00 (KST 12:00) 1일 1회 — 전날 확정치 수집
   workflow_dispatch:
     inputs:
       dry_run:

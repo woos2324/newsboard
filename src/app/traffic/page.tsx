@@ -123,16 +123,8 @@ export default async function TrafficPage({ searchParams }: Props) {
 
   return (
     <PageShell title="트래픽 분석" description="네이버 파트너센터 기준 · 매시 30분 자동 갱신">
-      {/* Date subtitle + controls */}
-      <div className="flex items-end justify-between gap-4 mb-5 -mt-2">
-        <div>
-          <h2 className="text-xl font-bold tracking-tight leading-none mb-1">
-            세계일보 트래픽 한눈에 보기
-          </h2>
-          <p className="text-sm text-muted">
-            {dateLabel} · 일일 PV, 시간대별 흐름, 유입 경로, 검색 키워드를 한 화면에서 점검
-          </p>
-        </div>
+      {/* Date nav + device toggle */}
+      <div className="mb-5 -mt-2">
         <DateDeviceSelector date={date} device={device} />
       </div>
 

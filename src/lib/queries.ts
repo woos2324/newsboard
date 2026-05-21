@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { getSupabase } from "./supabase";
 import { SECTION_ORDER, type MediaSectionRanking, type SectionData, type SectionArticle } from "./naver-section";
 
@@ -1299,7 +1300,7 @@ async function fetchArticlePvMap(
   return map;
 }
 
-export async function getOurArticlesPage(
+async function _getOurArticlesPage(
   date: string,
   page: number,
   perPage = 10
@@ -1407,6 +1408,12 @@ export async function getOurArticlesPage(
     prevDayTotal: prevRes?.count ?? 0,
   };
 }
+
+export const getOurArticlesPage = unstable_cache(
+  _getOurArticlesPage,
+  ["our-articles-page"],
+  { revalidate: 600, tags: ["articles"] }
+);
 
 export async function getArticleList(
   date: string,
@@ -1679,7 +1686,7 @@ export type DailyCvRow = {
   mobile: number;
 };
 
-export async function getDailyCvHistory(
+async function _getDailyCvHistory(
   days = 30,
   section = "all",
   timeDimension = "daily"
@@ -1706,7 +1713,7 @@ export async function getDailyCvHistory(
     .sort((a, b) => b.data_date.localeCompare(a.data_date));
 }
 
-export async function getLatestTrafficDate(): Promise<string | null> {
+async function _getLatestTrafficDate(): Promise<string | null> {
   const sb = getSupabase();
   const { data } = await sb
     .from("article_pv_snapshot")
@@ -1717,7 +1724,7 @@ export async function getLatestTrafficDate(): Promise<string | null> {
   return data?.data_date ?? null;
 }
 
-export async function getTrafficPageData(
+async function _getTrafficPageData(
   date: string,
   articlesLimit = 100,
   keywordsLimit = 100,
@@ -1843,3 +1850,21 @@ export async function getTrafficPageData(
     searchRatio,
   };
 }
+
+export const getDailyCvHistory = unstable_cache(
+  _getDailyCvHistory,
+  ["daily-cv-history"],
+  { revalidate: 86400, tags: ["traffic"] }
+);
+
+export const getLatestTrafficDate = unstable_cache(
+  _getLatestTrafficDate,
+  ["latest-traffic-date"],
+  { revalidate: 3600, tags: ["traffic"] }
+);
+
+export const getTrafficPageData = unstable_cache(
+  _getTrafficPageData,
+  ["traffic-page-data"],
+  { revalidate: 86400, tags: ["traffic"] }
+);

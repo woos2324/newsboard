@@ -50,7 +50,7 @@ export function ArticleDateNav({ date }: Props) {
           ‹
         </button>
         <div className="text-center">
-          <p className="text-sm font-semibold">{formatDisplay(date)}</p>
+          <p className="text-lg font-bold tracking-tight text-foreground">{formatDisplay(date)}</p>
           {date === today && <p className="text-[11px] text-muted">오늘 · 최근 7일 탐색 가능</p>}
         </div>
         <button

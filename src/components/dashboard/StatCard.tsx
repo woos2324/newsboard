@@ -3,19 +3,25 @@ import type { LucideIcon } from "lucide-react";
 
 type Props = {
   label: string;
+  sublabel?: string;
   value: string;
   delta: number;
   deltaLabel?: string;
   icon: LucideIcon;
 };
 
-export function StatCard({ label, value, delta, deltaLabel, icon: Icon }: Props) {
+export function StatCard({ label, sublabel, value, delta, deltaLabel, icon: Icon }: Props) {
   const positive = delta >= 0;
   return (
     <div className="card card-hover">
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-[13px] font-medium text-muted">{label}</p>
+          <p className="text-[13px] font-medium text-muted">
+            {label}
+            {sublabel && (
+              <span className="ml-1 text-[10px] font-normal text-muted/70">({sublabel})</span>
+            )}
+          </p>
           <p className="mt-2 text-2xl font-semibold tracking-tight">{value}</p>
         </div>
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-500/10 text-primary-500">

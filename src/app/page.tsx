@@ -22,6 +22,7 @@ import {
   getOurTopComments,
   getLatestDailySummary,
   getTrendingKeywords,
+  getDailyCvHistory,
 } from "@/lib/queries";
 
 export const revalidate = 300
@@ -44,7 +45,7 @@ function formatDateTimeKr(iso: string): string {
 }
 
 export default async function DashboardPage() {
-  const [stats, issues, rankingNews, alerts, sub, topComments, aiSummary, trending] =
+  const [stats, issues, rankingNews, alerts, sub, topComments, aiSummary, trending, pvHistory] =
     await Promise.all([
       getOverviewStats(),
       getIssues(4),
@@ -54,6 +55,7 @@ export default async function DashboardPage() {
       getOurTopComments(4),
       getLatestDailySummary(),
       getTrendingKeywords(),
+      getDailyCvHistory(2),
     ]);
 
   const trendingByCluster = new Map(
@@ -61,6 +63,12 @@ export default async function DashboardPage() {
       .filter((t) => t.matched_cluster_id !== null)
       .map((t) => [t.matched_cluster_id!, t.approx_traffic])
   );
+
+  const yesterdayPv = pvHistory[0]?.total ?? 0;
+  const dayBeforePv = pvHistory[1]?.total ?? 0;
+  const pvDeltaPct = dayBeforePv > 0
+    ? Number((((yesterdayPv - dayBeforePv) / dayBeforePv) * 100).toFixed(1))
+    : 0;
 
   const statCards = [
     {
@@ -71,18 +79,18 @@ export default async function DashboardPage() {
       icon: Flame,
     },
     {
+      label: "조회수",
+      sublabel: "전일기준",
+      value: yesterdayPv > 0 ? yesterdayPv.toLocaleString() : "—",
+      delta: pvDeltaPct,
+      deltaLabel: "전일 대비",
+      icon: Eye,
+    },
+    {
       label: "자사 총 구독자",
       value: stats.total_subscribers.toLocaleString(),
       delta: sub.deltaPct,
       deltaLabel: "7일 대비",
-      icon: Eye,
-    },
-    {
-      label: "자사 일일 구독자 증감",
-      value:
-        (stats.today_subscriber_delta >= 0 ? "+" : "") +
-        stats.today_subscriber_delta.toLocaleString(),
-      delta: 0,
       icon: Users,
     },
     {

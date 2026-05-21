@@ -61,135 +61,91 @@
 **로컬 .env.local 추가 항목** (GitHub Secrets에 없는 것):
 - `HEADLESS=0` — Playwright 브라우저 표시 (로컬 디버깅용, 운영은 기본값 1)
 
-## 재개 지점 (2026-05-21, 26차 세션 종료)
+## 재개 지점 (2026-05-21, 27차 세션 종료)
 
-**이번 세션 (26차) 완료** — `/traffic` 페이지 전체 완성 + PV 수집 확장:
+**이번 세션 (27차) 완료** — UI 디테일 정리 + 대시보드 KPI 재구성 + 성능 최적화:
 
-- **`/traffic` 페이지 UI 완성**
-  - `page.tsx` + `HourlyChart.tsx` + `ArticleListModal.tsx` + `KeywordListModal.tsx` 작성
-  - KPI 4개 / 인기기사 Top25 / SVG 시간대별 차트(출근·점심·퇴근 구간 음영) / 유입경로 도넛 / 키워드 Top15
-  - 날짜 네비게이터: `< YYYY.MM.DD (요일) 📅 >` 형식, 달력 아이콘 팝업
-  - 디바이스 토글: 클라이언트 state only (URL에 device 파라미터 없음 → 새로고침 시 항상 "전체")
-  - `TrafficContent.tsx` (Client Component): 디바이스 변경 시 `/api/traffic/page-data` 재조회
-  - KPI 총 조회수: Top100 합산 → hourly 24시간 합산(실제 전체 PV)으로 교체
-  - 시간대별 PV 상세표: 오늘(좌) | 어제(우) | Δ 순서
-  - 오늘 데이터 없을 때 마지막 수집일로 자동 fallback
+- **`/traffic` 페이지 UI 디테일**
+  - 유입 경로 도넛 차트 확대 + 세로 배치 (144px → 240px, 가로→세로 배치, gap 28px, 폰트 키움)
+  - subtitle 문구 정확화: "매시 30분 자동 갱신" → "매일 KST 01:00 갱신 (일간 매일 · 주간 월요일 · 월간 1일)"
+  - footer 우측 텍스트 삭제
+  - **한국 증시 컬러 컨벤션 적용** — 상승=빨강 / 하락=파랑 (KPI 총조회수 / 시간대 차트 / 시간대 상세표 Δ 3곳)
 
-- **모달 인터랙티브 기능**
-  - `ArticleListModal`: 전체/PC/모바일 토글 + 10개 섹션 탭 + 제목/기자 검색 + PV/시간 정렬 + CSV + 30건 페이저
-  - `KeywordListModal`: 키워드 검색 + CSV
-  - `TotalPvModal` (총 조회수 더보기): 일간/주간/월간 탭 + 10개 섹션 탭 + 날짜×전체/PC/모바일 테이블 (최신 7개)
+- **PageShell 헤더 통합 + 날짜 네비 위치 변경**
+  - PageShell의 title/description optional 처리 (필요시 페이지가 자체 렌더)
+  - traffic/articles 페이지 헤더를 "title 좌측 + 날짜 네비 우측" 형태로 통일
+  - articles 날짜 네비를 기사 목록 카드 하단 → 페이지 상단으로 이동
+  - ArticleDateNav 폰트를 traffic과 동일 스타일로 통일 (text-lg font-bold tracking-tight)
 
-- **PV 수집 확장** (`collect_naver_pv.py`)
-  - device 3종(TOTAL/PC/MOBILE) × section 10종(전체+9개 한글) 루프
-  - `연예` 섹션 버그 fix (API 파라미터 "엔터"→"연예")
-  - `/api/visitV2/cv` 추가 → `daily_cv_snapshot` (섹션·디바이스별 실제 총 PV)
-  - TOTAL 1회 호출로 all/pc/mobile 동시 추출 (API 최적화)
-  - 주간: 매주 월요일 UTC 16:00 자동 / `--week-date YYYYMMDD` 수동 지정
-  - 월간: 매월 1일 UTC 16:00 자동 / `--month-date YYYYMMDD` 수동 지정
-  - 수동 백필 완료: 주간 4주(4/20~5/11), 월간 3개월(2~4월)
+- **대시보드 KPI 카드 재구성**
+  - 순서 변경: 자사 오늘 기사 / **조회수 (전일기준)** / 자사 총 구독자 / 댓글 반응
+  - "자사 일일 구독자 증감" 카드 제거
+  - 신규 "조회수" 카드: `daily_cv_snapshot` 어제 PV, 그저께 대비 delta
+  - `StatCard`에 `sublabel` prop 추가 (작은 글씨 부제 — "(전일기준)" 표시용)
+  - 4개 카드 모두 **클릭 시 관련 페이지로 이동** (`href` prop — /articles, /traffic, /analytics/subscribers, /analytics/comments)
+  - 아이콘 재배치: 조회수=Eye, 자사 총 구독자=Users
 
-- **DB 마이그레이션 0020**
-  - `article_pv_snapshot`: `time_dimension` 컬럼 추가 + unique constraint 재생성
-  - `daily_cv_snapshot` 신규 테이블 (RLS 포함)
+- **성능 최적화 — `unstable_cache` 적용** ⭐ 가장 큰 성과
+  - 문제: searchParams 사용 페이지(dynamic)는 `revalidate` 설정이 **완전히 무시**되어 매 요청마다 Supabase 쿼리 실행
+  - 응답 헤더 진단: `Cache-Control: no-cache, no-store, max-age=0`, `X-Vercel-Cache: MISS`
+  - 해결: 데이터 페칭 레이어에 `unstable_cache` 래핑
+    - `getTrafficPageData`: 24h 캐시 (KST 01:00 1회 수집)
+    - `getDailyCvHistory`: 24h
+    - `getLatestTrafficDate`: 1h
+    - `getOurArticlesPage`: 10min (cron-publications 주기 일치)
+  - 효과: **/traffic 800~1700ms → 540~840ms** (warm cache, ~50% 개선), **/articles 1800ms → 470~500ms** (warm, ~75% 개선)
 
-- **`/articles` 페이지 PV 컬럼 추가**
-  - `OurArticleItem`에 `pv: number | null` 추가
-  - `fetchArticlePvMap()` 헬퍼 + 클러스터와 병렬 조회
-  - 기사 목록에 `👁 X.Xf만` 배지 표시
-
-- **cron-naver-pv 스케줄 및 캐시**
-  - 매시 30분 → 매일 KST 01:00 (UTC 16:00) 1회로 변경
-  - `page.tsx`: revalidate 30분 → 24시간
-  - API 라우트 3개: `Cache-Control: s-maxage=86400, stale-while-revalidate=3600`
-
-- **database.types.ts 재생성**: `daily_cv_snapshot` 포함 최신 타입 반영
-
-- **API 라우트 신규**:
-  - `/api/traffic/page-data` — date/device 기반 TrafficPageData
-  - `/api/traffic/article-pv` — date/device/section 기반 기사 PV 조회
-  - `/api/traffic/daily-cv` — section/time_dimension 기반 daily_cv 조회
+- **Vercel 자동 배포 이슈 발견**
+  - newsboard는 git push로 자동 배포되는 게 정상이지만 webhook이 트리거되지 않는 경우 발견
+  - 빈 커밋 push도 재트리거 안 됨 → 이번 세션 내내 `vercel --prod --yes` 수동 배포 사용
+  - 원인 추정: Vercel "Ignored Build Step" 또는 GitHub webhook 일시 지연
+  - 다음 세션에서 Vercel 대시보드 → newsboard → Settings → Git 확인 필요
 
 **미완료 (다음 세션 이어받을 것)**:
-- ⚠ **사설 과거 데이터 백필** — 4월 + 3/25~3/31 완료. 남은 구간 역순 진행:
+- ⚠ **사설 과거 데이터 백필** — 4월 + 3/25~3/31 완료, 남은 구간 역순 진행:
   ```bash
   python -m scripts.collect_editorials --date-from 20260318 --date-to 20260324
   python -m scripts.collect_editorials --date-from 20260311 --date-to 20260317
   python -m scripts.collect_editorials --date-from 20260304 --date-to 20260310
   python -m scripts.collect_editorials --date-from 20260301 --date-to 20260303
-  python -m scripts.collect_editorials --date-from 20260222 --date-to 20260228
   # ... 2월, 1월 순서로 계속
   ```
+- ⚠ **트래픽/기사 페이지 추가 성능 최적화** (현재 warm cache 540~840ms, 더 빠르게):
+  - **Streaming SSR + Suspense** — 헤더/KPI 먼저 보이고 차트·모달 데이터는 점진 로딩 (체감 속도 큰 향상 예상)
+  - **클라이언트 캐시 (SWR/React Query)** — 페이지 간 이동 시 즉시 표시 + 백그라운드 재검증
+- ⚠ **Vercel 자동 배포 webhook 안정화 확인** — 대시보드에서 Git 연동 상태 + Ignored Build Step 점검
 - ⚠ **/traffic 인터랙티브 추가 기능** — 매칭 기사 양방향 점프, 디바이스별 시간대 차트
 - ⚠ **subscriber_snapshot / daily_publication_count 보존 기간 미결정**
 - ⚠ **미보도 탐지 3단계** (임베딩 기반) — article.body 수집 + NCP 이전 후
 - ⚠ **StanceTab 차트 레이블 겹침** — 스태거드 방식 적용
+- ⚠ **On-demand Revalidation** — 수집 스크립트 완료 시 `/api/revalidate` 호출로 즉시 캐시 갱신
 - ⚠ **/report 과거 보고서 아카이브 페이지**
 
 ---
 
-**지난 세션 (24차) 완료**:
-- **사설 수집 누락 버그 fix** (`collect_editorials.py`)
-  - 원인: GitHub Actions cron 지연으로 KST 자정을 넘어 실행되면 `datetime.now(KST)`가 다음 날을 가리켜 전날 사설 누락 (특히 매일경제처럼 Naver가 다음날 버킷에 안 넣어주는 매체)
-  - 수정: `--date` 미지정 시 어제+오늘 둘 다 수집. 기존 URL은 AI 재호출 없이 메타만 업데이트되므로 비용 증가 미미
-  - 5/19 매일경제 누락 3건 수동 백필
-- **Windows 인코딩 크래시 방지** (`collect_editorials.py`)
-  - 한글 방점(〮 U+302E) 등 포함된 사설 제목을 cp949 콘솔에서 print 시 UnicodeEncodeError로 백필 중단
-  - sys.stdout/stderr를 utf-8로 강제 reconfigure (Linux는 영향 없음)
-- **사설 백필 진행**: 4월 전체 (~1,000건) + 3/25~3/31 (236건) 완료
-- **opinion 모달 그룹핑 일관성 fix** (`EditorialModal.tsx`)
-  - "같은 주제 타사 사설" 필터를 `topic`(7개 광의 분류) → `issue`(구체 쟁점)로 변경
-  - TodayTab 헤드라인 그룹핑과 동일 기준 적용. 무관 사설 노출 방지
-- **오늘의 사설 "매체별" 필터** (`TodayTab.tsx`)
-  - 필터 옵션 4번째 "매체별" 추가 (전체/종합일간지/경제지/매체별)
-  - 매체별 선택 시 매체 단위로 그룹핑 (세계일보 → 종합일간지 가나다 → 경제지 가나다)
-  - 세계일보는 ★ 강조
-- **/report 검색을 editorial 기반으로 전환**
-  - `article.category=opinion`이 114건뿐이라 너무 적어 editorial 테이블(~2,000건) 사용
-  - daily_report_article.article_id는 nullable로 저장, URL/제목/매체명/발행일 스냅샷 컬럼은 그대로
-  - 모달 문구 "기사 검색" → "사설 검색"
-- **Topbar 사설 제목 검색 기능** (신규 `SearchBar.tsx`)
-  - editorial 제목 ILIKE 검색, 자동완성 드롭다운 최대 10건, 250ms debounce
-  - 키보드 ↑↓/Enter/Esc 지원, 외부 클릭 시 닫힘
-  - 결과 클릭 시 `?open=ID`만 갱신해 현재 날짜 보존 (리스트 그대로 유지)
-  - 모달 backdrop(fixed inset-0 z-50) 클릭은 outside-click 무시해 dropdown 유지
-  - 모달 닫을 때 `history.replaceState`로 `?open=` 조용히 제거 (새로고침 시 모달 재오픈 방지)
-  - useSearchParams로 인한 prerender bailout 방지 위해 Suspense로 wrapping
-
-**미완료 (다음 세션 이어받을 것)**:
-- ⚠ **사설 과거 데이터 백필** — 4월 + 3/25~3/31 완료. 남은 구간 역순 진행:
-  ```bash
-  # 주 단위로 나눠서 실행 (타임아웃 방지)
-  # 3월 남은 구간 (예상 비용 약 11,000원, gpt-4o)
-  python -m scripts.collect_editorials --date-from 20260318 --date-to 20260324
-  python -m scripts.collect_editorials --date-from 20260311 --date-to 20260317
-  python -m scripts.collect_editorials --date-from 20260304 --date-to 20260310
-  python -m scripts.collect_editorials --date-from 20260301 --date-to 20260303
-  # 2월 전체 (예상 비용 약 13,000원)
-  python -m scripts.collect_editorials --date-from 20260222 --date-to 20260228
-  python -m scripts.collect_editorials --date-from 20260215 --date-to 20260221
-  python -m scripts.collect_editorials --date-from 20260208 --date-to 20260214
-  python -m scripts.collect_editorials --date-from 20260201 --date-to 20260207
-  # 1월 전체 (예상 비용 약 14,000원)
-  python -m scripts.collect_editorials --date-from 20260125 --date-to 20260131
-  python -m scripts.collect_editorials --date-from 20260118 --date-to 20260124
-  python -m scripts.collect_editorials --date-from 20260111 --date-to 20260117
-  python -m scripts.collect_editorials --date-from 20260104 --date-to 20260110
-  python -m scripts.collect_editorials --date-from 20260101 --date-to 20260103
-  ```
-  진행 전 OpenAI 결제 잔액 확인 필수 (호출당 ~$0.01, 주당 ~$2.50).
-- ⚠ **/traffic 페이지 UI 마무리** — 25차 진행 중. 미리보기 디자인·queries·sidebar는 완료, page.tsx + HourlyChart + 2개 Modal 컴포넌트가 남음 (위 "남은 작업" 참고)
-- ⚠ **/traffic 페이지 인터랙티브 기능** — UI 완성 후 별도 세션: 모달 검색·정렬·필터·CSV 다운로드, 디바이스 토글(PC/모바일), 날짜 변경 selector, 페이저, 매칭 기사 양방향 점프
-- ⚠ **/articles 페이지에 PV 컬럼 추가** — article_pv_snapshot.pv를 기사 목록에 표시
-- ⚠ **subscriber_snapshot / daily_publication_count 보존 기간 미결정**
-- ⚠ **미보도 탐지 3단계** (임베딩 기반) — article.body 수집 + NCP 이전 후
-- ⚠ **StanceTab 차트 레이블 겹침** — 스태거드 방식 적용, 데이터 늘면 툴팁(Option B)으로 전환 검토
-- ⚠ **On-demand Revalidation** — 수집 스크립트 완료 시 `/api/revalidate` 호출로 즉시 캐시 갱신
-- ⚠ **/report 과거 보고서 아카이브 페이지** — 현재는 `?date=YYYY-MM-DD`로만 과거 조회 가능
+**지난 세션 (26차) 완료**:
+- **`/traffic` 페이지 UI 전체 완성** — page.tsx + HourlyChart + ArticleListModal + KeywordListModal + TotalPvModal + TrafficContent + DateDeviceSelector
+  - KPI 4개 / 인기기사 Top25 / SVG 시간대 차트(출근·점심·퇴근 구간 음영) / 유입경로 도넛 / 키워드 Top15
+  - 날짜 네비게이터 + 디바이스 토글(클라이언트 state)
+  - 시간대별 PV 상세표(오늘/어제/Δ), 오늘 데이터 없을 때 마지막 수집일 fallback
+- **모달 인터랙티브 기능**
+  - ArticleListModal: 전체/PC/모바일 + 섹션 탭 + 제목·기자 검색 + 정렬 + CSV + 30건 페이저
+  - KeywordListModal: 키워드 검색 + CSV
+  - TotalPvModal (총 조회수 더보기): 일간/주간/월간 탭 + 섹션 탭 + 날짜별 전체/PC/모바일 테이블
+- **PV 수집 확장** (`collect_naver_pv.py`)
+  - device 3종 × section 10종 루프, `연예` 섹션 버그 fix
+  - `/api/visitV2/cv` 추가 → `daily_cv_snapshot` (섹션·디바이스별 실제 PV)
+  - 주간(월요일)/월간(매월 1일) 자동 수집 + 수동 백필 완료
+- **DB 마이그레이션 0020** — `article_pv_snapshot.time_dimension` 컬럼 + `daily_cv_snapshot` 신규 테이블
+- **`/articles` PV 컬럼 추가** — `OurArticleItem.pv`, `fetchArticlePvMap()`, `👁 X.Xf만` 배지
+- **cron-naver-pv 스케줄 변경** — 매시 30분 → 매일 KST 01:00 1회
+- **API 라우트 신규 3개** — /api/traffic/page-data, article-pv, daily-cv
 
 ## 다음 작업 로드맵
 
 - **(당장) 사설 과거 데이터 백필** — 3월 남은 구간부터 역순으로 주 단위 실행
+- **(당장) 트래픽/기사 페이지 추가 성능 최적화** — Streaming SSR + Suspense / 클라이언트 캐시(SWR or React Query)
+- **(당장) Vercel 자동배포 webhook 안정화** — 대시보드 Git 연동 상태 + Ignored Build Step 확인
 - **(미래) /traffic 인터랙티브 추가** — 매칭 기사 양방향 점프, 디바이스별 시간대 차트
 - **(미래) 편집회의 자동 일간 보고서** — 기존 데이터 + PV 통합한 매일 아침 보고서
 - **(미래) 미보도 탐지 + 클러스터 품질 개선** — 설계 완료. 상세: `documents/decisions.md`

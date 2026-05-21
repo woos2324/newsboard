@@ -204,17 +204,17 @@ export function TrafficContent({ date, initialData, dailyCvHistory }: Props) {
                 <h3 className="text-sm font-semibold">유입 경로</h3>
                 <div className="text-xs text-muted mt-0.5">전체 트래픽 기준 점유율(%)</div>
               </div>
-              <div className="flex items-center gap-5 mb-4">
-                <div className="relative flex-shrink-0 w-36 h-36 rounded-full" style={{ background: conicGradient }}>
-                  <div className="absolute rounded-full bg-white" style={{ inset: 26 }} />
+              <div className="flex flex-col items-center gap-4 mb-4">
+                <div className="relative flex-shrink-0 w-52 h-52 rounded-full" style={{ background: conicGradient }}>
+                  <div className="absolute rounded-full bg-white" style={{ inset: 38 }} />
                   <div className="absolute inset-0 flex items-center justify-center text-center z-10">
                     <div>
-                      <div className="text-lg font-bold leading-none">{topSource ? topSource.category_ratio.toFixed(1) : "0"}%</div>
-                      <div className="text-[11px] text-muted mt-1 leading-tight px-1" style={{ maxWidth: 72 }}>{topSource?.source_category ?? "—"}</div>
+                      <div className="text-xl font-bold leading-none">{topSource ? topSource.category_ratio.toFixed(1) : "0"}%</div>
+                      <div className="text-xs text-muted mt-1.5 leading-tight px-1" style={{ maxWidth: 100 }}>{topSource?.source_category ?? "—"}</div>
                     </div>
                   </div>
                 </div>
-                <div className="flex-1 flex flex-col gap-1.5">
+                <div className="w-full flex flex-col gap-1.5">
                   {trafficSources.slice(0, 6).map((s, i) => (
                     <div key={s.source_category} className="flex items-center gap-2 text-xs">
                       <span className="w-2.5 h-2.5 rounded-[2px] flex-shrink-0" style={{ background: SOURCE_COLORS[i] ?? "#e5e7eb" }} />

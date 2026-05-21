@@ -120,6 +120,35 @@
 - ⚠ **StanceTab 차트 레이블 겹침** — 스태거드 방식 적용
 - ⚠ **On-demand Revalidation** — 수집 스크립트 완료 시 `/api/revalidate` 호출로 즉시 캐시 갱신
 - ⚠ **/report 과거 보고서 아카이브 페이지**
+- ⚠ **해외 주요 매체 사설 수집** — 논설실 요청. 성향 분석 없이 원문 + 한국어 번역만. 상세 설계 아래 참고.
+
+  **수집 대상 10개 매체**:
+  | 매체 | 언어 | 페이월 | 수집 방식 |
+  |---|---|---|---|
+  | Washington Times | 영어 | 없음 | httpx 직접 수집 |
+  | Washington Post | 영어 | 소프트 | Playwright + 구독 쿠키 |
+  | New York Times | 영어 | 하드 | Playwright + 구독 쿠키 |
+  | Financial Times | 영어 | 하드 | Playwright + 구독 쿠키 |
+  | South China Morning Post | 영어 | 소프트 | Playwright + 가입 쿠키 |
+  | 아사히신문 | 일본어 | 하드 | Playwright + 구독 쿠키 |
+  | 요미우리신문 | 일본어 | 하드 | Playwright + 구독 쿠키 |
+  | 니혼게이자이 | 일본어 | 하드 | Playwright + 구독 쿠키 |
+  | 마이니치신문 | 일본어 | 소프트 | Playwright + 쿠키 or 무료 |
+  | 산케이신문 | 일본어 | 소프트 | httpx or Playwright |
+
+  **구현 계획**:
+  - 새 스크립트 `scripts/collect_foreign_editorials.py`
+  - 쿠키 관리: `naver_session` 테이블 패턴 그대로 → `foreign_session` 테이블 (매체별 쿠키 + 만료일)
+  - 자동 재로그인: 쿠키 만료 감지 시 Playwright로 ID/PW 재로그인 → 쿠키 갱신
+  - GitHub Secrets: `NYT_ID`, `NYT_PW`, `WAPO_ID`, `WAPO_PW`, `FT_ID`, `FT_PW` 등 (쿠키 아닌 계정정보 저장)
+  - GPT 처리: 원문 전체 → 한국어 번역 + 3~4줄 요약 생성 (성향 분석 없음)
+  - DB: `editorial` 테이블 확장 (`source_country CHAR(2)`, `source_media VARCHAR`, `body_original TEXT`, `body_ko TEXT`, `media_id` nullable) or 새 테이블 `foreign_editorial` 분리 → **다음 세션 시작 시 결정 필요**
+  - cron: 매일 KST 07:00 수집 (아침 편집회의 전)
+  - UI: opinion 앱에 "해외 논조" 탭 추가
+
+  **다음 세션 시작 전 준비 사항**:
+  - 각 매체 구독 계정 보유 여부 확인 (어느 것 구독 중인지)
+  - 일본 신문: 일본어 원문 vs 영문판 중 어느 쪽 수집할지 결정
 
 ---
 
@@ -147,6 +176,7 @@
 - **(당장) 트래픽/기사 페이지 추가 성능 최적화** — Streaming SSR + Suspense / 클라이언트 캐시(SWR or React Query)
 - **(당장) Vercel 자동배포 webhook 안정화** — 대시보드 Git 연동 상태 + Ignored Build Step 확인
 - **(미래) /traffic 인터랙티브 추가** — 매칭 기사 양방향 점프, 디바이스별 시간대 차트
+- **(미래) 해외 주요 매체 사설 수집** — 논설실 요청. WaPo/NYT/FT/SCMP/일본 5개지. 원문+한국어 번역. 구독 계정 확인 후 착수
 - **(미래) 편집회의 자동 일간 보고서** — 기존 데이터 + PV 통합한 매일 아침 보고서
 - **(미래) 미보도 탐지 + 클러스터 품질 개선** — 설계 완료. 상세: `documents/decisions.md`
 - **(미래) 성향 분석 정확도 개선** — `editorial_label` 테이블에 인간 레이블 충분히 쌓인 후 진행

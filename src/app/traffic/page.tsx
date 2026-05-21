@@ -28,9 +28,12 @@ export default async function TrafficPage({ searchParams }: Props) {
     getDailyCvHistory(30),
   ]);
 
+  const TITLE = "트래픽 분석";
+  const DESCRIPTION = "네이버 파트너센터 기준 · 매일 KST 01:00 갱신 (일간 매일 · 주간 월요일 · 월간 1일)";
+
   if (dataResult.status === "rejected") {
     return (
-      <PageShell title="트래픽 분석" description="네이버 파트너센터 기준 · 매일 KST 01:00 갱신 (일간 매일 · 주간 월요일 · 월간 1일)">
+      <PageShell title={TITLE} description={DESCRIPTION}>
         <div className="card text-sm text-muted py-8 text-center">
           {date} 데이터를 불러오지 못했습니다.
         </div>
@@ -39,8 +42,10 @@ export default async function TrafficPage({ searchParams }: Props) {
   }
 
   return (
-    <PageShell title="트래픽 분석" description="네이버 파트너센터 기준 · 매일 KST 01:00 갱신 (일간 매일 · 주간 월요일 · 월간 1일)">
+    <PageShell>
       <TrafficContent
+        title={TITLE}
+        description={DESCRIPTION}
         date={date}
         initialData={dataResult.value}
         dailyCvHistory={cvResult.status === "fulfilled" ? cvResult.value : []}

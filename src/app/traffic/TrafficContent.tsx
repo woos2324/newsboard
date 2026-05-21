@@ -38,12 +38,14 @@ function fmtKST(iso: string) {
 }
 
 type Props = {
+  title: string;
+  description: string;
   date: string;
   initialData: TrafficPageData;
   dailyCvHistory: DailyCvRow[];
 };
 
-export function TrafficContent({ date, initialData, dailyCvHistory }: Props) {
+export function TrafficContent({ title, description, date, initialData, dailyCvHistory }: Props) {
   const [device, setDevice] = useState("all");
   const [data, setData]     = useState<TrafficPageData>(initialData);
   const [loading, setLoading] = useState(false);
@@ -75,9 +77,15 @@ export function TrafficContent({ date, initialData, dailyCvHistory }: Props) {
 
   return (
     <div className={`transition-opacity duration-150 ${loading ? "opacity-60 pointer-events-none" : ""}`}>
-      {/* 날짜 + 디바이스 */}
-      <div className="mb-5 -mt-2">
-        <DateDeviceSelector date={date} device={device} onDeviceChange={setDevice} />
+      {/* 헤더: title + description 좌측, 날짜·디바이스 우측 */}
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
+          <p className="mt-1 text-sm text-muted">{description}</p>
+        </div>
+        <div className="shrink-0">
+          <DateDeviceSelector date={date} device={device} onDeviceChange={setDevice} />
+        </div>
       </div>
 
       {noData ? (

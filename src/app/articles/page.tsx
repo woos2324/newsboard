@@ -40,11 +40,17 @@ export default async function ArticlesPage({ searchParams }: Props) {
     delta === 0 ? "" : delta > 0 ? `▲ 전일 대비 +${delta}건` : `▼ 전일 대비 ${delta}건`;
 
   return (
-    <PageShell title="자사 기사 현황" description="세계일보가 네이버에 발행한 기사 목록과 섹션별 현황">
+    <PageShell>
 
-      {/* 날짜 네비게이터 */}
-      <div className="mb-5 -mt-2 flex justify-center">
-        <ArticleDateNav date={date} />
+      {/* 헤더: title + description 좌측, 날짜 네비 우측 */}
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">자사 기사 현황</h1>
+          <p className="mt-1 text-sm text-muted">세계일보가 네이버에 발행한 기사 목록과 섹션별 현황</p>
+        </div>
+        <div className="shrink-0">
+          <ArticleDateNav date={date} />
+        </div>
       </div>
 
       {/* 통계 카드 */}

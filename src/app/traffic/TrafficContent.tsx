@@ -204,20 +204,20 @@ export function TrafficContent({ date, initialData, dailyCvHistory }: Props) {
                 <h3 className="text-sm font-semibold">유입 경로</h3>
                 <div className="text-xs text-muted mt-0.5">전체 트래픽 기준 점유율(%)</div>
               </div>
-              <div className="flex flex-col items-center gap-4 mb-4">
-                <div className="relative flex-shrink-0 w-52 h-52 rounded-full" style={{ background: conicGradient }}>
-                  <div className="absolute rounded-full bg-white" style={{ inset: 38 }} />
+              <div className="flex flex-col items-center gap-7 mb-4">
+                <div className="relative flex-shrink-0 w-60 h-60 rounded-full" style={{ background: conicGradient }}>
+                  <div className="absolute rounded-full bg-white" style={{ inset: 44 }} />
                   <div className="absolute inset-0 flex items-center justify-center text-center z-10">
                     <div>
-                      <div className="text-xl font-bold leading-none">{topSource ? topSource.category_ratio.toFixed(1) : "0"}%</div>
-                      <div className="text-xs text-muted mt-1.5 leading-tight px-1" style={{ maxWidth: 100 }}>{topSource?.source_category ?? "—"}</div>
+                      <div className="text-2xl font-bold leading-none">{topSource ? topSource.category_ratio.toFixed(1) : "0"}%</div>
+                      <div className="text-sm text-muted mt-2 leading-tight px-1" style={{ maxWidth: 120 }}>{topSource?.source_category ?? "—"}</div>
                     </div>
                   </div>
                 </div>
-                <div className="w-full flex flex-col gap-1.5">
+                <div className="w-full flex flex-col gap-2">
                   {trafficSources.slice(0, 6).map((s, i) => (
-                    <div key={s.source_category} className="flex items-center gap-2 text-xs">
-                      <span className="w-2.5 h-2.5 rounded-[2px] flex-shrink-0" style={{ background: SOURCE_COLORS[i] ?? "#e5e7eb" }} />
+                    <div key={s.source_category} className="flex items-center gap-2 text-sm">
+                      <span className="w-3 h-3 rounded-[2px] flex-shrink-0" style={{ background: SOURCE_COLORS[i] ?? "#e5e7eb" }} />
                       <span className="flex-1 text-foreground line-clamp-1">{s.source_category}</span>
                       <span className="text-muted tabular-nums font-medium">{s.category_ratio.toFixed(1)}%</span>
                     </div>

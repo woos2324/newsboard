@@ -1,5 +1,6 @@
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import Link from "next/link";
 
 type Props = {
   label: string;
@@ -8,12 +9,13 @@ type Props = {
   delta: number;
   deltaLabel?: string;
   icon: LucideIcon;
+  href?: string;
 };
 
-export function StatCard({ label, sublabel, value, delta, deltaLabel, icon: Icon }: Props) {
+export function StatCard({ label, sublabel, value, delta, deltaLabel, icon: Icon, href }: Props) {
   const positive = delta >= 0;
-  return (
-    <div className="card card-hover">
+  const inner = (
+    <>
       <div className="flex items-start justify-between">
         <div>
           <p className="text-[13px] font-medium text-muted">
@@ -44,6 +46,15 @@ export function StatCard({ label, sublabel, value, delta, deltaLabel, icon: Icon
         </span>
         <span className="text-muted">{deltaLabel ?? "전일 대비"}</span>
       </div>
-    </div>
+    </>
   );
+
+  if (href) {
+    return (
+      <Link href={href} className="card card-hover block cursor-pointer">
+        {inner}
+      </Link>
+    );
+  }
+  return <div className="card card-hover">{inner}</div>;
 }

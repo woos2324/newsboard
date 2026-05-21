@@ -77,6 +77,7 @@ export default async function DashboardPage() {
       delta: stats.today_articles_delta_pct,
       deltaLabel: "전일 대비",
       icon: Flame,
+      href: "/articles",
     },
     {
       label: "조회수",
@@ -85,6 +86,7 @@ export default async function DashboardPage() {
       delta: pvDeltaPct,
       deltaLabel: "전일 대비",
       icon: Eye,
+      href: "/traffic",
     },
     {
       label: "자사 총 구독자",
@@ -92,12 +94,14 @@ export default async function DashboardPage() {
       delta: sub.deltaPct,
       deltaLabel: "7일 대비",
       icon: Users,
+      href: "/analytics/subscribers",
     },
     {
       label: "댓글 반응 (전체)",
       value: stats.today_comments.toLocaleString(),
       delta: 0,
       icon: MessageSquare,
+      href: "/analytics/comments",
     },
   ];
 

@@ -105,7 +105,7 @@ export function TrafficContent({ title, description, date, initialData, dailyCvH
                 {fmtPv(totalHourlyToday)}<span className="text-sm font-medium text-muted ml-1">PV</span>
               </p>
               <div className="flex items-center gap-1 text-xs text-muted mt-1.5">
-                <span className={`font-semibold ${totalHourlyYesterday && totalHourlyToday >= totalHourlyYesterday ? "text-success" : "text-error"}`}>
+                <span className={`font-semibold ${totalHourlyYesterday && totalHourlyToday >= totalHourlyYesterday ? "text-red-600" : "text-blue-600"}`}>
                   {totalHourlyYesterday ? (totalHourlyToday >= totalHourlyYesterday ? "▲" : "▼") : ""}{" "}
                   {totalHourlyYesterday ? `${Math.abs(deltaPct(totalHourlyToday, totalHourlyYesterday)).toFixed(1)}%` : "—"}
                 </span>

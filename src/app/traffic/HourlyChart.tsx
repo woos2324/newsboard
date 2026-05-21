@@ -203,7 +203,7 @@ export function HourlyChart({ hourlyToday, hourlyYesterday, date }: Props) {
       {/* Compare summary */}
       <div className="mt-3.5 px-3 py-2.5 bg-gray-50 rounded-lg flex items-center gap-3 text-xs">
         <strong className="font-semibold">어제 동시간 대비</strong>
-        <span className={`font-bold ${totalDeltaPct >= 0 ? "text-green-600" : "text-red-600"}`}>
+        <span className={`font-bold ${totalDeltaPct >= 0 ? "text-red-600" : "text-blue-600"}`}>
           {totalDeltaPct >= 0 ? "▲" : "▼"} {Math.abs(totalDeltaPct).toFixed(1)}%
         </span>
       </div>
@@ -250,7 +250,7 @@ export function HourlyChart({ hourlyToday, hourlyYesterday, date }: Props) {
                   </td>
                   <td
                     className={`text-right py-2.5 border-b border-gray-50 tabular-nums text-xs font-semibold ${
-                      dPct > 0 ? "text-green-600" : dPct < 0 ? "text-red-600" : "text-gray-400"
+                      dPct > 0 ? "text-red-600" : dPct < 0 ? "text-blue-600" : "text-gray-400"
                     }`}
                   >
                     {yPv > 0 && pv > 0

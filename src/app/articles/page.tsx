@@ -42,6 +42,11 @@ export default async function ArticlesPage({ searchParams }: Props) {
   return (
     <PageShell title="자사 기사 현황" description="세계일보가 네이버에 발행한 기사 목록과 섹션별 현황">
 
+      {/* 날짜 네비게이터 */}
+      <div className="mb-5 -mt-2 flex justify-center">
+        <ArticleDateNav date={date} />
+      </div>
+
       {/* 통계 카드 */}
       <div className="mb-5 grid grid-cols-2 gap-3 xl:grid-cols-4">
         <div className="card">
@@ -134,9 +139,6 @@ export default async function ArticlesPage({ searchParams }: Props) {
       <div className="card">
         <p className="section-title mb-4">기사 목록</p>
         <ArticleListClient date={date} initialArticles={data.articles} total={data.total} />
-        <div className="flex justify-center border-t border-border pt-4 mt-2">
-          <ArticleDateNav date={date} />
-        </div>
       </div>
     </PageShell>
   );

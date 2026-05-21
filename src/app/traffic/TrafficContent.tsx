@@ -263,9 +263,8 @@ export function TrafficContent({ date, initialData, dailyCvHistory }: Props) {
           </div>
 
           {/* Footer */}
-          <div className="flex justify-between pt-4 border-t border-border text-xs text-muted mt-2">
+          <div className="pt-4 border-t border-border text-xs text-muted mt-2">
             <span>데이터 출처 · 네이버 파트너센터 (news-stat-admin.navercorp.com)</span>
-            <span>매시 30분 자동 갱신</span>
           </div>
         </>
       )}

@@ -181,6 +181,31 @@ async def translate_backfill(source_filter: Optional[str], limit: int) -> int:
     return translated
 
 
+def seed_cookies(source_code: str, cookies_json: str) -> None:
+    """브라우저에서 추출한 쿠키를 foreign_session DB에 저장.
+
+    사용 방법:
+      1. 로컬 브라우저(Chrome)에서 해당 매체에 로그인
+      2. DevTools → Application → Cookies → 전체 선택 → Copy as JSON
+      3. 아래 명령 실행:
+         python -m scripts.collect_foreign_editorials --seed-cookies ft --cookies-json '[{...}]'
+    """
+    from scripts.lib.foreign_collectors.playwright_base import save_cookies
+    get_source(source_code)  # 유효성 검사
+    try:
+        import json
+        cookies = json.loads(cookies_json)
+        if not isinstance(cookies, list):
+            raise ValueError("cookies_json 은 JSON 배열이어야 합니다.")
+    except Exception as e:
+        print(f"[seed-cookies] JSON 파싱 오류: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    supabase = get_client()
+    save_cookies(source_code, cookies, supabase)
+    print(f"[seed-cookies] {source_code} 쿠키 {len(cookies)}개 저장 완료 (TTL 14일)")
+
+
 async def main(
     source: Optional[str],
     do_all: bool,
@@ -189,7 +214,16 @@ async def main(
     translate: bool,
     backfill: bool,
     backfill_limit: int,
+    seed: Optional[str],
+    cookies_json: Optional[str],
 ):
+    if seed:
+        if not cookies_json:
+            print("--seed-cookies 사용 시 --cookies-json 필수", file=sys.stderr)
+            sys.exit(1)
+        seed_cookies(seed, cookies_json)
+        return
+
     if backfill:
         await translate_backfill(source, limit=backfill_limit)
         return
@@ -223,6 +257,10 @@ if __name__ == "__main__":
     parser.add_argument("--limit", type=int, default=10, help="매체당 최대 수집 건수")
     parser.add_argument("--dry-run", action="store_true", help="DB 저장하지 않고 출력만")
     parser.add_argument("--no-translate", dest="translate", action="store_false", help="번역 생략 (수집만)")
+    parser.add_argument("--seed-cookies", dest="seed", type=str, metavar="SOURCE",
+                        help="로컬 브라우저 쿠키를 DB에 저장 (--cookies-json 과 함께 사용)")
+    parser.add_argument("--cookies-json", type=str,
+                        help='브라우저에서 복사한 쿠키 JSON 배열 문자열 (예: \'[{"name":"..."}]\')')
     parser.add_argument("--translate-backfill", dest="backfill", action="store_true",
                         help="이미 적재된 body_ko=NULL 레코드만 번역 (수집 안 함)")
     parser.add_argument("--backfill-limit", type=int, default=50, help="백필 모드에서 한 번에 처리할 최대 건수")
@@ -231,4 +269,5 @@ if __name__ == "__main__":
     asyncio.run(main(
         args.source, args.all, args.limit, args.dry_run,
         args.translate, args.backfill, args.backfill_limit,
+        args.seed, args.cookies_json,
     ))

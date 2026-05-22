@@ -123,6 +123,7 @@ async def _get_article_httpx(url: str, cookie_header: str) -> Optional[dict]:
     try:
         async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
             resp = await client.get(url, headers=headers)
+            print(f"  [nyt] httpx status={resp.status_code} url={url[:60]}")
             if resp.status_code != 200:
                 return None
             html = resp.text
@@ -130,7 +131,9 @@ async def _get_article_httpx(url: str, cookie_header: str) -> Optional[dict]:
         print(f"  [nyt] httpx 오류 {url[:60]}: {e}", file=sys.stderr)
         return None
 
-    if any(kw in html.lower() for kw in _PAYWALL_KW):
+    pw_hit = any(kw in html.lower() for kw in _PAYWALL_KW)
+    print(f"  [nyt] paywall={pw_hit} html_len={len(html)}")
+    if pw_hit:
         return None
 
     soup = BeautifulSoup(html, "html.parser")
@@ -203,15 +206,6 @@ async def collect(limit: int = 10, supabase=None) -> list[ForeignEditorialItem]:
 
         for entry in index[:limit]:
             art = await _get_article(ctx, entry["url"])
-
-            if art is None and cookies:
-                print("  [nyt] 페이월 감지, 재로그인")
-                ok = await _login(ctx, email, password)
-                if ok:
-                    new_cookies = await ctx.cookies()
-                    if supabase:
-                        save_cookies("nyt", new_cookies, supabase)
-                    art = await _get_article(ctx, entry["url"])
 
             if art is None:
                 print(f"  [nyt] 스킵: {entry['url'][:60]}", file=sys.stderr)

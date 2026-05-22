@@ -11,10 +11,10 @@ export const dynamic = 'force-dynamic'
 export default async function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ date?: string }>
+  searchParams: Promise<{ date?: string; open?: string }>
 }) {
   const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' })
-  const { date: dateParam } = await searchParams
+  const { date: dateParam, open: openParam } = await searchParams
   const date = dateParam && dateParam < today ? dateParam : today
   const isToday = date >= today
 
@@ -28,6 +28,8 @@ export default async function Page({
     ? await getLatestForeignEditionDate().catch(() => null)
     : null
 
+  const initialOpenId = openParam ? Number(openParam) : null
+
   return (
     <div className="page-wrapper">
       <DateNav date={date} today={today} basePath="/foreign" />
@@ -40,7 +42,10 @@ export default async function Page({
           입니다.
         </div>
       )}
-      <ForeignEditorialTab editorials={editorials} />
+      <ForeignEditorialTab
+        editorials={editorials}
+        initialOpenId={Number.isFinite(initialOpenId) ? initialOpenId : null}
+      />
     </div>
   )
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   ForeignEditorial,
   FOREIGN_SOURCE_ORDER,
@@ -48,8 +48,10 @@ function EditorialRow({ item, onClick }: { item: ForeignEditorial; onClick: () =
 
 export default function ForeignEditorialTab({
   editorials,
+  initialOpenId,
 }: {
   editorials: ForeignEditorial[]
+  initialOpenId?: number | null
 }) {
   const [selected, setSelected] = useState<ForeignEditorial | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
@@ -65,6 +67,22 @@ export default function ForeignEditorialTab({
       setDetailLoading(false)
     }
   }
+
+  // ?open=ID URL 파라미터 진입 시 자동 오픈 (검색 결과 클릭에서 사용)
+  useEffect(() => {
+    if (initialOpenId == null) return
+    let cancelled = false
+    setDetailLoading(true)
+    ;(async () => {
+      try {
+        const full = await getForeignEditorialById(initialOpenId)
+        if (!cancelled && full) setSelected(full)
+      } finally {
+        if (!cancelled) setDetailLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [initialOpenId])
 
   // 매체별 그룹화 (FOREIGN_SOURCE_ORDER 순서 + 그 외는 가나다 끝쪽)
   const bySource = new Map<string, ForeignEditorial[]>()
@@ -140,7 +158,17 @@ export default function ForeignEditorialTab({
       {selected && (
         <ForeignEditorialModal
           item={selected}
-          onClose={() => setSelected(null)}
+          onClose={() => {
+            setSelected(null)
+            // ?open= 제거 — 새로고침 시 모달이 다시 뜨지 않도록
+            if (typeof window !== 'undefined') {
+              const url = new URL(window.location.href)
+              if (url.searchParams.has('open')) {
+                url.searchParams.delete('open')
+                window.history.replaceState({}, '', url.toString())
+              }
+            }
+          }}
           detailLoading={detailLoading}
         />
       )}

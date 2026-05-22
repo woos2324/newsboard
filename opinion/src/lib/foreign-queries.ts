@@ -80,6 +80,21 @@ export const getPastForeignEditorials = unstable_cache(
   { revalidate: 86400, tags: ['foreign-editorial'] },
 )
 
+// 검색: title_original OR title_ko (제목만, 본문 제외)
+export async function searchForeignEditorials(keyword: string, limit = 10): Promise<ForeignEditorial[]> {
+  const q = keyword.trim()
+  if (q.length < 2) return []
+  const pattern = `%${q}%`
+  const { data, error } = await supabase
+    .from('foreign_editorial')
+    .select(LIST_COLS)
+    .or(`title_original.ilike.${pattern},title_ko.ilike.${pattern}`)
+    .order('published_at', { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return (data ?? []) as unknown as ForeignEditorial[]
+}
+
 export async function getForeignEditorialById(id: number): Promise<ForeignEditorial | null> {
   const { data, error } = await supabase
     .from('foreign_editorial')

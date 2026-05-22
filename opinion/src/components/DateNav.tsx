@@ -154,16 +154,25 @@ function CalendarPopup({
   )
 }
 
-export default function DateNav({ date, today }: { date: string; today: string }) {
+export default function DateNav({
+  date,
+  today,
+  basePath = '/',
+}: {
+  date: string
+  today: string
+  basePath?: string
+}) {
   const router = useRouter()
   const [isCalendarOpen, setIsCalendarOpen] = useState(false)
   const isToday = date >= today
 
   function go(target: string) {
     if (target >= today) {
-      router.push('/')
+      router.push(basePath)
     } else {
-      router.push(`/?date=${target}`)
+      const sep = basePath.includes('?') ? '&' : '?'
+      router.push(`${basePath}${sep}date=${target}`)
     }
   }
 

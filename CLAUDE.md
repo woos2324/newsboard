@@ -257,6 +257,7 @@
 - **(당장) 사설 과거 데이터 백필** — 3월 남은 구간부터 역순으로 주 단위 실행
 - **(당장) 트래픽/기사 페이지 추가 성능 최적화** — Streaming SSR + Suspense / 클라이언트 캐시(SWR or React Query)
 - **(당장) Vercel 자동배포 webhook 안정화** — 대시보드 Git 연동 상태 + Ignored Build Step 확인
+- **(당장) 로그인 + 역할 기반 접근 제어** — 아래 상세 계획 참고
 - **(미래) /traffic 인터랙티브 추가** — 매칭 기사 양방향 점프, 디바이스별 시간대 차트
 - **(미래) 편집회의 자동 일간 보고서** — 기존 데이터 + PV 통합한 매일 아침 보고서
 - **(미래) 미보도 탐지 + 클러스터 품질 개선** — 설계 완료. 상세: `documents/decisions.md`
@@ -269,6 +270,70 @@
   - 2단계: Supabase → NCP PostgreSQL 이전 — `supabase-js` → `pg` 교체, `queries.ts` 전면 수정, RLS 제거 (3~5일, 핵심 난관)
   - 3단계: Vercel → NCP 웹서버 이전 — nginx + PM2, GitHub Actions CD 워크플로 추가 (1~2일)
   - 구성: 웹서버 1대 (80/443 외부 오픈) + 수집서버 1대 (크롤링, 한국 IP) + DB서버 1대 (내부망만 허용, ACG 설정)
+
+---
+
+## 로그인 + 역할 기반 접근 제어 구현 계획 (30차 착수 예정)
+
+### 역할-메뉴 매핑
+
+| 메뉴 | admin | 사업부 | 기자 |
+|---|---|---|---|
+| 대시보드 (/) | ✅ | ✅ | ✅ |
+| 이슈 분석 | ✅ | ❌ | ✅ |
+| 미보도 탐지 | ✅ | ❌ | ✅ |
+| 실시간 트렌드 | ✅ | ❌ | ✅ |
+| 경쟁사 비교 | ✅ | ❌ | ✅ |
+| 자사 기사 현황 | ✅ | ❌ | ✅ |
+| 트래픽 분석 | ✅ | ✅ | ❌ |
+| 구독자 분석 | ✅ | ✅ | ❌ |
+| 독자 반응 | ✅ | ❌ | ✅ |
+| AI 리포트 | ✅ | ❌ | ✅ |
+
+- 대시보드 KPI 카드: 접근 불가 페이지 카드는 클릭 비활성 (사업부→기사·독자반응, 기자→조회수·구독자)
+- 비로그인 + URL 직접 입력 → `/login` 리다이렉트 (Middleware 서버 레벨)
+- 역할 없는 URL 직접 입력 → `/` 리다이렉트
+
+### 가입 정책
+- 도메인: `@segye.com` 만 허용 (서버 검증)
+- 방식: 이메일 OTP 인증 → 비밀번호 설정
+- 승인: 자동 승인, 초기 역할 `reporter`
+- 역할 변경: admin이 `/admin/users`에서 수동 변경
+
+### 단계별 작업 (~3일)
+
+**1단계 — DB 마이그레이션** (0.5일)
+```sql
+CREATE TABLE profiles (
+  user_id    UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  email      VARCHAR NOT NULL,
+  name       VARCHAR NOT NULL,
+  role       VARCHAR NOT NULL CHECK (role IN ('admin','business','reporter'))
+               DEFAULT 'reporter',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+-- RLS: 본인 row SELECT, service role만 INSERT/UPDATE
+```
+
+**2단계 — Supabase Auth 설정** (0.5일)
+- Supabase 대시보드에서 Email OTP 활성화
+- `@supabase/ssr` 패키지 설치 (`npm i @supabase/ssr`)
+- 서버 클라이언트 / 미들웨어 클라이언트 분리 (`src/lib/supabase-server.ts`)
+- 가입 완료 시 `profiles` 자동 생성 (Server Action)
+
+**3단계 — 인증 페이지** (1일)
+- `src/app/login/page.tsx` — 이메일 + 비밀번호
+- `src/app/signup/page.tsx` — 이메일 입력 → OTP 발송 → OTP 확인 → 이름·비밀번호 설정
+
+**4단계 — Middleware + 접근 제어** (0.5일)
+- `src/middleware.ts` — 비로그인 차단, 역할별 경로 검증
+- 역할별 허용 경로 상수 (`src/lib/roles.ts`)
+
+**5단계 — UI 변경** (0.5일)
+- `Sidebar.tsx` — 역할에 따라 접근 불가 메뉴 숨김
+- `dashboard/*` — KPI 카드 권한별 클릭 비활성
+- `Topbar.tsx` — 로그인 사용자 이름·역할 표시 + 로그아웃 버튼
+- `src/app/admin/users/page.tsx` — 사용자 목록 + 역할 변경 (admin 전용)
 
 ---
 

@@ -102,6 +102,12 @@
   - `wtimes.py` — httpx RSS 기반 (GitHub Actions에서 차단, NCP 이전 후 재활성화)
   - NCP 이전 후 모든 매체 수집 가능해질 것으로 예상
 
+- **opinion 오늘의 사설 fallback 배너 추가**
+  - 해외 논조 페이지에는 있었지만 오늘의 사설(`/`) 에는 없었음 → 동일 패턴 적용
+  - `getLatestEditionDate()` 함수 추가 (`opinion/src/lib/queries.ts`)
+  - 오늘 데이터 없을 때 amber 배너 + 최근 수집일 링크 표시
+  - opinion 앱 수동 배포 완료 (https://opinion-eta.vercel.app)
+
 **판단 사항 (29차)**:
 1. **GitHub Actions IP 차단은 구조적 한계** — 코드 수정으로 해결 불가. NCP 이전이 선행 조건.
 2. **NYT 인덱스는 작동** — 쿠키로 15건 목록 수집됨. 기사 본문만 IP 차단. NCP 이전 후 즉시 활용 가능.
@@ -176,7 +182,8 @@
   python -m scripts.collect_editorials --date-from 20260301 --date-to 20260303
   ```
 - ⚠ **트래픽/기사 페이지 추가 성능 최적화** (27차에서 이어짐) — Streaming SSR + Suspense / SWR
-- ~~**Vercel 자동 배포 webhook 안정화**~~ ✅ 완료 (29차) — GitHub 미연결 상태였음. Settings → Git → Connect로 해결
+- ~~**Vercel 자동 배포 webhook 안정화**~~ ✅ 완료 (29차)
+- ~~**opinion 오늘의 사설 fallback 배너**~~ ✅ 완료 (29차)
 - ⚠ **/traffic 인터랙티브 추가** — 매칭 기사 양방향 점프, 디바이스별 시간대 차트
 - ⚠ **subscriber_snapshot / daily_publication_count 보존 기간 미결정**
 - ⚠ **미보도 탐지 3단계** (임베딩 기반) — article.body 수집 + NCP 이전 후

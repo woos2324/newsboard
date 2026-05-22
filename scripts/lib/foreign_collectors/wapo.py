@@ -24,12 +24,20 @@ _PAYWALL_KW = ["subscribe to continue", "sign in to read", "get unlimited access
 
 
 async def _login(ctx, email: str, password: str) -> bool:
+    """메인 사이트에서 로그인 모달을 통해 로그인 (account.washingtonpost.com 직접 접근 차단 우회)."""
     page = await new_stealth_page(ctx)
     try:
-        print(f"  [wapo] 로그인 시도 ({email})")
-        await page.goto(LOGIN_URL, wait_until="networkidle", timeout=40_000)
-        print(f"  [wapo] 로그인 페이지 로드: {page.title()} | {page.url[:60]}")
+        print(f"  [wapo] 로그인 시도 (메인 사이트 경유)")
+        await page.goto("https://www.washingtonpost.com/", wait_until="domcontentloaded", timeout=40_000)
+        await page.wait_for_timeout(2_000)
 
+        # 헤더의 Sign In 버튼 클릭
+        signin_sel = '[data-qa="sign-in-button"], a[href*="signin"], button:has-text("Sign In"), a:has-text("Sign In")'
+        await page.wait_for_selector(signin_sel, timeout=10_000)
+        await page.click(signin_sel)
+        await page.wait_for_timeout(2_000)
+
+        # 이메일 입력
         email_sel = 'input[name="username"], input[name="email"], input[type="email"]'
         await page.wait_for_selector(email_sel, timeout=15_000)
         await page.fill(email_sel, email)
@@ -45,7 +53,7 @@ async def _login(ctx, email: str, password: str) -> bool:
         await page.wait_for_load_state("networkidle", timeout=20_000)
 
         url = page.url
-        ok = "login" not in url.lower() and "account.washington" not in url.lower()
+        ok = "login" not in url.lower() and "signin" not in url.lower()
         print(f"  [wapo] 로그인 {'성공' if ok else '실패'} → {url[:80]}")
         return ok
     except Exception as e:

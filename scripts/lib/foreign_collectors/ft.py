@@ -34,14 +34,16 @@ async def _login(ctx, email: str, password: str) -> bool:
         await page.wait_for_selector(email_sel, timeout=15_000)
         await page.fill(email_sel, email)
 
+        # FT는 이메일+비밀번호가 같은 폼이거나 2단계일 수 있음
         pw_visible = await page.is_visible('input[type="password"]', timeout=2_000)
+        _btn_sel = 'button[type="submit"], input[type="submit"], button.o-buttons--primary, button:has-text("Sign"), button:has-text("Continue")'
         if not pw_visible:
-            await page.click('button[type="submit"]')
+            await page.click(_btn_sel)
             await page.wait_for_load_state("networkidle", timeout=15_000)
 
         await page.wait_for_selector('input[type="password"]', timeout=10_000)
         await page.fill('input[type="password"]', password)
-        await page.click('button[type="submit"]')
+        await page.click(_btn_sel)
         await page.wait_for_load_state("networkidle", timeout=20_000)
 
         url = page.url

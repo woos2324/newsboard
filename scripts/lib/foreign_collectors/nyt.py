@@ -28,27 +28,41 @@ async def _login(ctx, email: str, password: str) -> bool:
     try:
         print(f"  [nyt] 로그인 시도 ({email})")
         await page.goto(LOGIN_URL, wait_until="networkidle", timeout=40_000)
+        await page.wait_for_timeout(3_000)  # React SPA 렌더링 대기
         print(f"  [nyt] 로그인 페이지: {await page.title()} | {page.url[:60]}")
 
         email_sel = (
             '[data-testid="login-lede-email-input"], '
             'input[name="email"], input[type="email"]'
         )
-        await page.wait_for_selector(email_sel, timeout=15_000)
+        # 메인 프레임 및 하위 프레임 모두 탐색
+        found_frame = None
+        for frame in [page] + page.frames:
+            try:
+                await frame.wait_for_selector(email_sel, timeout=5_000)
+                found_frame = frame
+                break
+            except Exception:
+                continue
+        if found_frame is None:
+            raise Exception("email 입력 필드를 찾지 못함 (메인 + 모든 프레임 탐색)")
+        await found_frame.fill(email_sel, email)
+        page_or_frame = found_frame
         await page.fill(email_sel, email)
 
-        pw_visible = await page.is_visible('input[type="password"]', timeout=2_000)
+        pw_visible = await page_or_frame.is_visible('input[type="password"]', timeout=2_000)
         if not pw_visible:
             submit_sel = '[data-testid="login-submit-button"], button[type="submit"]'
-            await page.click(submit_sel)
+            await page_or_frame.click(submit_sel)
             await page.wait_for_load_state("networkidle", timeout=15_000)
+            await page.wait_for_timeout(2_000)
 
         pw_sel = '[data-testid="login-lede-password-input"], input[type="password"]'
-        await page.wait_for_selector(pw_sel, timeout=10_000)
-        await page.fill(pw_sel, password)
+        await page_or_frame.wait_for_selector(pw_sel, timeout=10_000)
+        await page_or_frame.fill(pw_sel, password)
 
         submit_sel = '[data-testid="login-submit-button"], button[type="submit"]'
-        await page.click(submit_sel)
+        await page_or_frame.click(submit_sel)
         await page.wait_for_load_state("networkidle", timeout=20_000)
 
         url = page.url

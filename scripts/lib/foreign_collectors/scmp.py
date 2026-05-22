@@ -18,7 +18,7 @@ from scripts.lib.foreign_collectors.playwright_base import (
 )
 
 INDEX_URL = "https://www.scmp.com/opinion/sc-mp-editorials"
-LOGIN_URL = "https://www.scmp.com/user/login"
+LOGIN_URL = "https://www.scmp.com/"  # 메인 페이지에서 로그인 버튼 클릭
 _ARTICLE_RE = re.compile(r"scmp\.com/(?:opinion|comment)/")
 _PAYWALL_KW = ["subscribe to scmp", "subscribe to read", "become a subscriber"]
 
@@ -27,7 +27,17 @@ async def _login(ctx, email: str, password: str) -> bool:
     page = await new_stealth_page(ctx)
     try:
         print(f"  [scmp] 로그인 시도 ({email})")
-        await page.goto(LOGIN_URL, wait_until="networkidle", timeout=40_000)
+        await page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=40_000)
+        await page.wait_for_timeout(2_000)
+
+        # 메인 페이지의 로그인 버튼 클릭
+        login_btn_sel = 'a[href*="login"], button:has-text("Log in"), a:has-text("Log in"), [data-qa*="login"]'
+        try:
+            await page.wait_for_selector(login_btn_sel, timeout=8_000)
+            await page.click(login_btn_sel)
+            await page.wait_for_load_state("networkidle", timeout=15_000)
+        except Exception:
+            pass  # 버튼 없으면 현재 URL로 계속
         print(f"  [scmp] 로그인 페이지: {await page.title()} | {page.url[:60]}")
 
         email_sel = 'input[name="email"], input[type="email"]'

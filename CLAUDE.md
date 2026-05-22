@@ -65,6 +65,50 @@
 **로컬 .env.local 추가 항목** (GitHub Secrets에 없는 것):
 - `HEADLESS=0` — Playwright 브라우저 표시 (로컬 디버깅용, 운영은 기본값 1)
 
+## 재개 지점 (2026-05-23, 29차 세션 종료)
+
+**이번 세션 (29차) 완료** — 해외 매체 수집 파이프라인 완성 + Vercel 자동배포 연결:
+
+- **Vercel 자동배포 GitHub 연동 완료**
+  - newsboard 프로젝트가 GitHub에 미연결 상태였음 → Settings → Git → GitHub 버튼 → newsboard 저장소 Connect
+  - 이제 `git push origin main` → Vercel 자동 빌드·배포
+
+- **해외 매체 수집 GitHub Actions 실제 테스트 결과** (29차 핵심 발견):
+
+  | 매체 | GitHub Actions | 원인 |
+  |---|---|---|
+  | **sankei** | ✅ 5건, 본문 880~909자 | 정상 수집 |
+  | **guardian** | ✅ 20건, 본문 1200~1599자 | 정상 수집 |
+  | mainichi | ❌ HTTP 403 | GitHub Actions IP 차단 |
+  | wapo | ❌ HTTP/2 Protocol Error | GitHub Actions IP 차단 |
+  | nyt | ❌ 인덱스 OK, 기사 httpx 403 | GitHub Actions IP 차단 |
+  | ft | ❌ CAPTCHA (submit 버튼 비활성) | GitHub Actions IP 차단 추정 |
+  | scmp | ❌ 로그인 흐름 미완성 | GitHub Actions IP 차단 추정 |
+  | wtimes | ❌ Cloudflare + RSS 모두 403 | GitHub Actions IP 차단 |
+
+  **근본 원인**: GitHub Actions는 Azure 데이터센터 IP → 주요 뉴스 사이트 CDN/WAF가 IP 레벨 차단.
+  **해결 경로**: NCP 수집서버(한국 IP)로 이전 후 재시도 (로드맵의 NCP 이전 1단계).
+
+- **쿠키 수동 시딩 CLI 구현** ([scripts/collect_foreign_editorials.py](scripts/collect_foreign_editorials.py))
+  - `--seed-cookies <source> --cookies-file <path>` — EditThisCookie (fork) 확장으로 추출한 JSON 파일 직접 입력
+  - EditThisCookie `sameSite`(`unspecified`/`no_restriction`) → Playwright(`None`/`Lax`/`Strict`) 정규화 (`_normalize_cookies`)
+  - `expirationDate` → `expires` 필드명 변환
+  - 쿠키 TTL: **30일** (기존 14일 → 확장)
+  - NYT 쿠키 DB 저장 완료 (28개, 만료 2026-06-21) — 단, GitHub Actions IP 차단으로 기사 본문 수집 불가
+
+- **수집 파이프라인 구현 완료 (코드 기준)**:
+  - `playwright_base.py` — 쿠키 DB 관리 + Chromium 컨텍스트 + stealth + 정규화
+  - `wapo.py`, `nyt.py`, `ft.py`, `scmp.py` — Playwright 로그인 + 쿠키 캐시 + 기사 수집
+  - `wtimes.py` — httpx RSS 기반 (GitHub Actions에서 차단, NCP 이전 후 재활성화)
+  - NCP 이전 후 모든 매체 수집 가능해질 것으로 예상
+
+**판단 사항 (29차)**:
+1. **GitHub Actions IP 차단은 구조적 한계** — 코드 수정으로 해결 불가. NCP 이전이 선행 조건.
+2. **NYT 인덱스는 작동** — 쿠키로 15건 목록 수집됨. 기사 본문만 IP 차단. NCP 이전 후 즉시 활용 가능.
+3. **쿠키 시딩은 로컬 PC에서** — 사내망/개인 인터넷에서 실행 시 쿠키 정상 저장·수집 가능.
+
+---
+
 ## 재개 지점 (2026-05-22, 28차 세션 종료)
 
 **이번 세션 (28차) 완료** — 해외 매체 사설 수집 파이프라인 + 한국어 번역 + opinion UI:
@@ -118,11 +162,12 @@
 ---
 
 **미완료 (다음 세션 이어받을 것)**:
-- ⚠ **M2: 구독 매체 Playwright 수집** — 가장 큰 작업 (반나절~하루)
-  - 대상: Washington Post / NYT / FT / SCMP (구독) + Washington Times (Cloudflare)
-  - Playwright 환경 구성 (GitHub Actions 도커 이미지 / playwright-deps)
-  - 매체별 로그인 자동화 → 쿠키 `foreign_session` 테이블 저장 → 만료 시 재로그인
-  - GitHub Secrets 추가 필요: `WAPO_ID`, `WAPO_PW`, `NYT_ID`, `NYT_PW`, `FT_ID`, `FT_PW` (SCMP 는 가입계정만)
+- ⚠ **해외 구독 매체 수집 — NCP 이전 후 재활성화**
+  - GitHub Actions IP(Azure 데이터센터) 차단으로 현재 불가 (29차에서 확인)
+  - 코드 완성: wapo/nyt/ft/scmp collector + `--seed-cookies --cookies-file` CLI + `_normalize_cookies`
+  - NCP 수집서버로 이전 후 `cron-foreign-editorials.yml` → NCP cron으로 전환하면 즉시 활성화
+  - GitHub Secrets 등록 완료: `WAPO_ID/PW`, `NYT_ID/PW`, `FT_ID/PW`, `SCMP_ID/PW`
+  - 현재 작동 중: **sankei** (5건/일), **guardian** (20건/일) — 2개만 GitHub Actions에서 수집
 - ⚠ **사설 과거 데이터 백필** (27차에서 이어짐) — 3월 남은 구간 역순:
   ```bash
   python -m scripts.collect_editorials --date-from 20260318 --date-to 20260324
@@ -131,7 +176,7 @@
   python -m scripts.collect_editorials --date-from 20260301 --date-to 20260303
   ```
 - ⚠ **트래픽/기사 페이지 추가 성능 최적화** (27차에서 이어짐) — Streaming SSR + Suspense / SWR
-- ⚠ **Vercel 자동 배포 webhook 안정화 확인** — 대시보드 Git 연동 + Ignored Build Step 점검
+- ~~**Vercel 자동 배포 webhook 안정화**~~ ✅ 완료 (29차) — GitHub 미연결 상태였음. Settings → Git → Connect로 해결
 - ⚠ **/traffic 인터랙티브 추가** — 매칭 기사 양방향 점프, 디바이스별 시간대 차트
 - ⚠ **subscriber_snapshot / daily_publication_count 보존 기간 미결정**
 - ⚠ **미보도 탐지 3단계** (임베딩 기반) — article.body 수집 + NCP 이전 후

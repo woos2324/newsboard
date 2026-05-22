@@ -18,7 +18,7 @@ Object.defineProperty(navigator, 'platform', {get: () => 'Win32'});
 window.chrome = {runtime: {}, loadTimes: function(){}, csi: function(){}, app: {}};
 """
 
-COOKIE_TTL_DAYS = 14
+COOKIE_TTL_DAYS = 30
 
 _UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "

@@ -34,10 +34,10 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 
-async def _dispatch(source_code: str, limit: int) -> list[ForeignEditorialItem]:
+async def _dispatch(source_code: str, limit: int, supabase=None) -> list[ForeignEditorialItem]:
     if source_code == "wtimes":
         from scripts.lib.foreign_collectors import wtimes
-        return await wtimes.collect(limit=limit)
+        return await wtimes.collect(limit=limit, supabase=supabase)
     if source_code == "mainichi":
         from scripts.lib.foreign_collectors import mainichi
         return await mainichi.collect(limit=limit)
@@ -47,7 +47,18 @@ async def _dispatch(source_code: str, limit: int) -> list[ForeignEditorialItem]:
     if source_code == "guardian":
         from scripts.lib.foreign_collectors import guardian
         return await guardian.collect(limit=limit)
-    # M2: wapo/nyt/ft/scmp/wtimes (Playwright)
+    if source_code == "wapo":
+        from scripts.lib.foreign_collectors import wapo
+        return await wapo.collect(limit=limit, supabase=supabase)
+    if source_code == "nyt":
+        from scripts.lib.foreign_collectors import nyt
+        return await nyt.collect(limit=limit, supabase=supabase)
+    if source_code == "ft":
+        from scripts.lib.foreign_collectors import ft
+        return await ft.collect(limit=limit, supabase=supabase)
+    if source_code == "scmp":
+        from scripts.lib.foreign_collectors import scmp
+        return await scmp.collect(limit=limit, supabase=supabase)
     raise NotImplementedError(f"Collector not implemented yet for: {source_code}")
 
 
@@ -71,7 +82,8 @@ async def collect_and_save(
     source = get_source(source_code)
     print(f"\n[{source_code}] {source['name_ko']} ({source['name_en']}) 수집 시작")
 
-    items = await _dispatch(source_code, limit)
+    supabase = get_client()
+    items = await _dispatch(source_code, limit, supabase=supabase)
     if not items:
         print(f"[{source_code}] 수집 결과 없음")
         return 0
@@ -80,8 +92,6 @@ async def collect_and_save(
         for it in items:
             print(f"  [dry] {it['title_original'][:60]} | body={len(it.get('body_original') or '')}자 | {it.get('published_at')}")
         return len(items)
-
-    supabase = get_client()
     saved = 0
     for it in items:
         # 기존 레코드는 다시 번역 호출하지 않도록 url 중복 확인

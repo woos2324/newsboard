@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       source:
-        description: '특정 매체 코드만 (mainichi/sankei/wapo/nyt/ft/scmp/wtimes). 비우면 --all'
+        description: '특정 매체 코드만 (wtimes/wapo/nyt/ft/mainichi/sankei/guardian). 비우면 --all'
         required: false
         default: ''
       dry_run:
@@ -31,12 +31,23 @@ jobs:
 
       - run: pip install -r requirements.txt
 
+      - name: Install Playwright Chromium
+        run: python -m playwright install chromium --with-deps
+
       - name: Run collect_foreign_editorials
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
+          WAPO_ID: ${{ secrets.WAPO_ID }}
+          WAPO_PW: ${{ secrets.WAPO_PW }}
+          NYT_ID: ${{ secrets.NYT_ID }}
+          NYT_PW: ${{ secrets.NYT_PW }}
+          FT_ID: ${{ secrets.FT_ID }}
+          FT_PW: ${{ secrets.FT_PW }}
+          SCMP_ID: ${{ secrets.SCMP_ID }}
+          SCMP_PW: ${{ secrets.SCMP_PW }}
         run: |
           if [ "${{ github.event.inputs.backfill }}" = "true" ]; then
             python -m scripts.collect_foreign_editorials --translate-backfill --backfill-limit 50

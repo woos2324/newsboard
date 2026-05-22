@@ -18,16 +18,21 @@ from scripts.lib.foreign_collectors.playwright_base import make_context
 
 INDEX_URL = "https://www.washingtontimes.com/opinion/editorials/"
 BASE = "https://www.washingtontimes.com"
-_EDITORIAL_RE = re.compile(r"^/opinion/\d{4}/[a-z]+/\d{1,2}/")
+# /opinion/YYYY/... 또는 /opinion/editorials/... 또는 절대 URL 모두 허용
+_EDITORIAL_RE = re.compile(r"(?:washingtontimes\.com)?/opinion/(?:\d{4}/[a-z]+/\d{1,2}/|editorials/\d{4}/)")
 
 
 def _parse_index(html: str) -> list[dict]:
     soup = BeautifulSoup(html, "html.parser")
     seen: set[str] = set()
     items = []
+
+    all_hrefs = [a.get("href", "") for a in soup.find_all("a", href=True)]
+    print(f"  [wtimes] 전체 링크 {len(all_hrefs)}개, 샘플: {all_hrefs[:3]}", file=sys.stderr)
+
     for a in soup.find_all("a", href=True):
         href = a["href"]
-        if not _EDITORIAL_RE.match(href):
+        if not _EDITORIAL_RE.search(href):
             continue
         title = a.get_text(strip=True)
         if not title or len(title) < 8:

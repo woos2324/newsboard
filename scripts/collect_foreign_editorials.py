@@ -44,6 +44,9 @@ async def _dispatch(source_code: str, limit: int) -> list[ForeignEditorialItem]:
     if source_code == "sankei":
         from scripts.lib.foreign_collectors import sankei
         return await sankei.collect(limit=limit)
+    if source_code == "guardian":
+        from scripts.lib.foreign_collectors import guardian
+        return await guardian.collect(limit=limit)
     # M2: wapo/nyt/ft/scmp/wtimes (Playwright)
     raise NotImplementedError(f"Collector not implemented yet for: {source_code}")
 

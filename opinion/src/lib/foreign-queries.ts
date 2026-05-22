@@ -33,13 +33,14 @@ export const FOREIGN_SOURCES: Record<string, ForeignSourceMeta> = {
   nyt:     { code: 'nyt',     name_ko: '뉴욕타임스',           name_en: 'The New York Times',      country: 'US', language: 'en' },
   ft:      { code: 'ft',      name_ko: '파이낸셜타임스',       name_en: 'Financial Times',         country: 'UK', language: 'en' },
   scmp:    { code: 'scmp',    name_ko: '사우스차이나모닝포스트', name_en: 'South China Morning Post', country: 'HK', language: 'en' },
+  guardian:{ code: 'guardian',name_ko: '가디언',                name_en: 'The Guardian',            country: 'UK', language: 'en' },
   wtimes:  { code: 'wtimes',  name_ko: '워싱턴타임스',         name_en: 'The Washington Times',    country: 'US', language: 'en' },
   mainichi:{ code: 'mainichi',name_ko: '마이니치신문',         name_en: '毎日新聞',                country: 'JP', language: 'ja' },
   sankei:  { code: 'sankei',  name_ko: '산케이신문',           name_en: '産経新聞',                country: 'JP', language: 'ja' },
 }
 
 // 사이드바 표시 순서 (구독 영문 → 무료 영문 → 일본어)
-export const FOREIGN_SOURCE_ORDER: string[] = ['wapo', 'nyt', 'ft', 'scmp', 'wtimes', 'mainichi', 'sankei']
+export const FOREIGN_SOURCE_ORDER: string[] = ['wapo', 'nyt', 'ft', 'scmp', 'guardian', 'wtimes', 'mainichi', 'sankei']
 
 export function getForeignSourceMeta(code: string): ForeignSourceMeta {
   return FOREIGN_SOURCES[code] ?? {

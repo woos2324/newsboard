@@ -52,7 +52,7 @@
 - `0021` — foreign_editorial 신규 (해외 매체 사설, 28차)
 - `0022` — foreign_session 쿠키 캐시 (해외 매체별, 28차)
 - 마이그레이션 상세: [supabase/migrations/](supabase/migrations/)
-- 매체 51개 (naver_media_id 보유 47개) + 해외 7개 매체 코드 (foreign_sources.py)
+- 매체 51개 (naver_media_id 보유 47개) + 해외 8개 매체 코드 (foreign_sources.py: wapo/nyt/ft/scmp/guardian/wtimes/mainichi/sankei)
 
 ## 환경변수
 

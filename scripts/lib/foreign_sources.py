@@ -76,6 +76,17 @@ SOURCES: dict[str, ForeignSource] = {
         "fetcher": "playwright",
         "needs_login": True,
     },
+    "guardian": {
+        "code": "guardian",
+        "name_ko": "가디언",
+        "name_en": "The Guardian",
+        "country": "UK",
+        "language": "en",
+        "index_url": "https://www.theguardian.com/tone/editorials/rss",
+        "paywall": "none",
+        "fetcher": "httpx",
+        "needs_login": False,
+    },
     "mainichi": {
         "code": "mainichi",
         "name_ko": "마이니치신문",

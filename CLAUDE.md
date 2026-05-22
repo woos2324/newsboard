@@ -296,9 +296,12 @@
 
 ### 가입 정책
 - 도메인: `@segye.com` 만 허용 (서버 검증)
-- 방식: 이메일 OTP 인증 → 비밀번호 설정
-- 승인: 자동 승인, 초기 역할 `reporter`
-- 역할 변경: admin이 `/admin/users`에서 수동 변경
+- 방식: 이메일 OTP 인증 → 역할 선택 → 비밀번호 설정
+- 승인:
+  - `reporter` → OTP 인증 완료 시 **자동 승인** (즉시 접근)
+  - `business` / `admin` → 승인 대기 상태 → **admin이 수동 승인 후 접근 가능**
+  - 승인 대기 중 로그인 시 "승인 대기 중입니다" 안내 화면 표시
+- 역할 변경 + 승인: admin이 `/admin/users`에서 처리
 
 ### 단계별 작업 (~3일)
 
@@ -310,8 +313,11 @@ CREATE TABLE profiles (
   name       VARCHAR NOT NULL,
   role       VARCHAR NOT NULL CHECK (role IN ('admin','business','reporter'))
                DEFAULT 'reporter',
+  approved   BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+-- reporter 가입 시 approved=true 자동 설정
+-- business/admin 가입 시 approved=false → admin 승인 필요
 -- RLS: 본인 row SELECT, service role만 INSERT/UPDATE
 ```
 

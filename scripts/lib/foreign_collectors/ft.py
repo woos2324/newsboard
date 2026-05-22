@@ -27,7 +27,8 @@ async def _login(ctx, email: str, password: str) -> bool:
     page = await new_stealth_page(ctx)
     try:
         print(f"  [ft] 로그인 시도 ({email})")
-        await page.goto(LOGIN_URL, wait_until="networkidle", timeout=40_000)
+        await page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=40_000)
+        await page.wait_for_timeout(3_000)
         print(f"  [ft] 로그인 페이지: {await page.title()} | {page.url[:60]}")
 
         email_sel = 'input[id="email"], input[name="email"], input[type="email"]'

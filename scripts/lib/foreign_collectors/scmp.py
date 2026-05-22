@@ -30,14 +30,19 @@ async def _login(ctx, email: str, password: str) -> bool:
         await page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=40_000)
         await page.wait_for_timeout(2_000)
 
-        # 메인 페이지의 로그인 버튼 클릭
-        login_btn_sel = 'a[href*="login"], button:has-text("Log in"), a:has-text("Log in"), [data-qa*="login"]'
+        # 메인 페이지의 로그인 버튼 클릭 (SCMP: "Sign in" 텍스트 사용)
+        login_btn_sel = (
+            'a:has-text("Sign in"), button:has-text("Sign in"), '
+            'a:has-text("Log in"), button:has-text("Log in"), '
+            'a[href*="login"], a[href*="signin"]'
+        )
         try:
-            await page.wait_for_selector(login_btn_sel, timeout=8_000)
+            await page.wait_for_selector(login_btn_sel, timeout=10_000)
             await page.click(login_btn_sel)
-            await page.wait_for_load_state("networkidle", timeout=15_000)
-        except Exception:
-            pass  # 버튼 없으면 현재 URL로 계속
+            await page.wait_for_load_state("domcontentloaded", timeout=15_000)
+            await page.wait_for_timeout(2_000)
+        except Exception as e:
+            print(f"  [scmp] 로그인 버튼 탐색 실패: {e}", file=sys.stderr)
         print(f"  [scmp] 로그인 페이지: {await page.title()} | {page.url[:60]}")
 
         email_sel = 'input[name="email"], input[type="email"]'

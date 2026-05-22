@@ -69,6 +69,32 @@ def save_cookies(source_code: str, cookies: list[dict], supabase) -> None:
         print(f"  [{source_code}] 쿠키 저장 오류: {e}", file=sys.stderr)
 
 
+_SAMESITE_MAP = {
+    "unspecified": "None",
+    "no_restriction": "None",
+    "lax": "Lax",
+    "strict": "Strict",
+    "none": "None",
+}
+
+
+def _normalize_cookies(cookies: list[dict]) -> list[dict]:
+    """EditThisCookie 형식 → Playwright 형식으로 sameSite 등 정규화."""
+    result = []
+    for c in cookies:
+        cookie = {k: v for k, v in c.items() if k not in ("id", "storeId", "hostOnly", "session")}
+        # sameSite 정규화
+        ss = str(cookie.get("sameSite", "None")).lower()
+        cookie["sameSite"] = _SAMESITE_MAP.get(ss, "None")
+        # expirationDate → expires (Playwright 필드명)
+        if "expirationDate" in cookie and "expires" not in cookie:
+            cookie["expires"] = int(cookie.pop("expirationDate"))
+        elif "expirationDate" in cookie:
+            cookie.pop("expirationDate")
+        result.append(cookie)
+    return result
+
+
 async def make_context(playwright, cookies: Optional[list[dict]] = None) -> BrowserContext:
     """Chromium headless 컨텍스트 생성. cookies 주어지면 inject."""
     headless = os.environ.get("HEADLESS", "1") != "0"
@@ -88,7 +114,7 @@ async def make_context(playwright, cookies: Optional[list[dict]] = None) -> Brow
         ignore_https_errors=True,
     )
     if cookies:
-        await ctx.add_cookies(cookies)
+        await ctx.add_cookies(_normalize_cookies(cookies))
     return ctx
 
 

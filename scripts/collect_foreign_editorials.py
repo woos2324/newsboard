@@ -181,7 +181,7 @@ async def translate_backfill(source_filter: Optional[str], limit: int) -> int:
     return translated
 
 
-def seed_cookies(source_code: str, cookies_json: str) -> None:
+def seed_cookies(source_code: str, cookies_json: Optional[str], cookies_file: Optional[str] = None) -> None:
     """브라우저에서 추출한 쿠키를 foreign_session DB에 저장.
 
     사용 방법:
@@ -194,6 +194,11 @@ def seed_cookies(source_code: str, cookies_json: str) -> None:
     get_source(source_code)  # 유효성 검사
     try:
         import json
+        if cookies_file:
+            with open(cookies_file, encoding="utf-8") as f:
+                cookies_json = f.read()
+        if not cookies_json:
+            raise ValueError("--cookies-json 또는 --cookies-file 중 하나 필요")
         cookies = json.loads(cookies_json)
         if not isinstance(cookies, list):
             raise ValueError("cookies_json 은 JSON 배열이어야 합니다.")
@@ -203,7 +208,8 @@ def seed_cookies(source_code: str, cookies_json: str) -> None:
 
     supabase = get_client()
     save_cookies(source_code, cookies, supabase)
-    print(f"[seed-cookies] {source_code} 쿠키 {len(cookies)}개 저장 완료 (TTL 14일)")
+    from scripts.lib.foreign_collectors.playwright_base import COOKIE_TTL_DAYS
+    print(f"[seed-cookies] {source_code} 쿠키 {len(cookies)}개 저장 완료 (TTL {COOKIE_TTL_DAYS}일)")
 
 
 async def main(
@@ -216,12 +222,13 @@ async def main(
     backfill_limit: int,
     seed: Optional[str],
     cookies_json: Optional[str],
+    cookies_file: Optional[str] = None,
 ):
     if seed:
-        if not cookies_json:
-            print("--seed-cookies 사용 시 --cookies-json 필수", file=sys.stderr)
+        if not cookies_json and not cookies_file:
+            print("--seed-cookies 사용 시 --cookies-json 또는 --cookies-file 필수", file=sys.stderr)
             sys.exit(1)
-        seed_cookies(seed, cookies_json)
+        seed_cookies(seed, cookies_json, cookies_file)
         return
 
     if backfill:
@@ -261,6 +268,8 @@ if __name__ == "__main__":
                         help="로컬 브라우저 쿠키를 DB에 저장 (--cookies-json 과 함께 사용)")
     parser.add_argument("--cookies-json", type=str,
                         help='브라우저에서 복사한 쿠키 JSON 배열 문자열 (예: \'[{"name":"..."}]\')')
+    parser.add_argument("--cookies-file", type=str,
+                        help="쿠키 JSON 파일 경로 (예: cookies_nyt.json)")
     parser.add_argument("--translate-backfill", dest="backfill", action="store_true",
                         help="이미 적재된 body_ko=NULL 레코드만 번역 (수집 안 함)")
     parser.add_argument("--backfill-limit", type=int, default=50, help="백필 모드에서 한 번에 처리할 최대 건수")
@@ -270,4 +279,5 @@ if __name__ == "__main__":
         args.source, args.all, args.limit, args.dry_run,
         args.translate, args.backfill, args.backfill_limit,
         args.seed, args.cookies_json,
+        getattr(args, "cookies_file", None),
     ))

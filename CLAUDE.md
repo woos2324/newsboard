@@ -18,7 +18,7 @@
 - **프론트**: Next.js 15 App Router + Tailwind + lucide-react. `next dev --turbopack` (Windows webpack 행 회피)
 - **데이터 경로**: 단순 조회 → Next.js Server Component → `src/lib/queries.ts` → Supabase JS / AI·파이프라인 → FastAPI 또는 GitHub Actions Python scripts
 
-## 자동화 파이프라인 (GitHub Actions, 10종)
+## 자동화 파이프라인 (GitHub Actions, 12종)
 
 | 워크플로 | 트리거 | 역할 |
 |---|---|---|
@@ -32,11 +32,12 @@
 | cron-editorials | KST 06:00, 14:00, 22:00 (하루 3회) | 네이버 사설 수집 + AI 성향 분석 → editorial |
 | cron-daily-briefing | UTC 15:00 (KST 00:00) | AI 일간 브리핑 → ai_summary |
 | cron-cleanup | UTC 15:00 (KST 00:00) | 7일 이전 스냅샷 삭제 |
-| **cron-naver-pv** | **매시 30분 (UTC)** | **네이버 파트너센터 PV 수집 → 4개 테이블** |
+| cron-naver-pv | 매일 KST 01:00 | 네이버 파트너센터 PV 수집 → 4개 테이블 |
+| **cron-foreign-editorials** | **UTC 22:00 (KST 07:00)** | **해외 매체 사설 수집 + gpt-4o-mini 한국어 번역 → foreign_editorial** |
 
 **cron chain**: `ranking → cluster → gap` (매시 자동 연쇄)
 
-## DB 스키마 (마이그레이션 19건)
+## DB 스키마 (마이그레이션 22건)
 
 - `0001_init` — 11개 코어 테이블
 - `0002` ~ `0006` — daily_publication_count, section_ranking, 성능 인덱스, section_ranking_unique, gap_verdict
@@ -47,8 +48,11 @@
 - `0017` — article_pv_snapshot.article_url 컬럼 추가 (21차)
 - `0018` — naver_session 쿠키 캐시 테이블 (21차)
 - `0019` — daily_report / daily_report_section / daily_report_article 3개 테이블 (사설 일일 동향 보고서, 22차)
+- `0020` — article_pv_snapshot.time_dimension + daily_cv_snapshot (26차)
+- `0021` — foreign_editorial 신규 (해외 매체 사설, 28차)
+- `0022` — foreign_session 쿠키 캐시 (해외 매체별, 28차)
 - 마이그레이션 상세: [supabase/migrations/](supabase/migrations/)
-- 매체 51개 (naver_media_id 보유 47개)
+- 매체 51개 (naver_media_id 보유 47개) + 해외 7개 매체 코드 (foreign_sources.py)
 
 ## 환경변수
 
@@ -61,9 +65,83 @@
 **로컬 .env.local 추가 항목** (GitHub Secrets에 없는 것):
 - `HEADLESS=0` — Playwright 브라우저 표시 (로컬 디버깅용, 운영은 기본값 1)
 
-## 재개 지점 (2026-05-21, 27차 세션 종료)
+## 재개 지점 (2026-05-22, 28차 세션 종료)
 
-**이번 세션 (27차) 완료** — UI 디테일 정리 + 대시보드 KPI 재구성 + 성능 최적화:
+**이번 세션 (28차) 완료** — 해외 매체 사설 수집 파이프라인 + 한국어 번역 + opinion UI:
+
+- **DB 마이그레이션 2건**
+  - `0021_foreign_editorial` — 해외 사설 신규 테이블 (source_code/country/language, title_original+title_ko, body_original+body_ko, ai_meta 등). RLS + anon read
+  - `0022_foreign_session` — 매체별 쿠키 캐시 (M2 Playwright 대비)
+
+- **수집 모듈 골격** ([scripts/lib/foreign_sources.py](scripts/lib/foreign_sources.py))
+  - 7개 매체 메타 상수 (코드/국가/언어/페이월/fetcher 종류)
+  - source_code → collector 함수 매핑 (`collect_foreign_editorials.py::_dispatch`)
+
+- **마이니치/산케이 collector 동작 확인** (httpx + BeautifulSoup)
+  - 마이니치: 인덱스 JSON-LD `CollectionPage.hasPart` → 본문 `.articledetail-body p` 단락 join (메타 제외, 835자 내외)
+  - 산케이: 인덱스 `/column/editorial/` (계획서의 `/article/category/editorial/` 는 404), h3 `＜主張＞` 카드 매칭 → 본문 `div.article-body` (소프트 페이월, 900자 내외)
+  - **Washington Times 는 httpx 차단(Cloudflare 403)** — M2에서 Playwright로 이동
+
+- **GPT 번역 모듈** ([scripts/lib/foreign_translator.py](scripts/lib/foreign_translator.py))
+  - `gpt-4o-mini` JSON mode 로 `{title_ko, body_ko}` 응답 강제
+  - 환경변수 `FOREIGN_TRANSLATE_MODEL` 로 override 가능
+  - 429 재시도 (30s × 3회), traceback 노출
+  - 비용: 건당 약 1원, 매일 30건 가정 시 **월 1000원 수준**
+
+- **수집 + 번역 통합 스크립트** ([scripts/collect_foreign_editorials.py](scripts/collect_foreign_editorials.py))
+  - 수집 시 자동 번역 (`--no-translate` 로 끄기 가능)
+  - 백필 모드 `--translate-backfill --backfill-limit N` (body_ko NULL 레코드만 번역)
+  - `edition_date` 는 현지 시각 기준 (UTC 변환 시 JST 새벽 사설이 전날로 빠지는 문제 회피)
+  - 기존 URL 이미 번역된 경우 재번역 안 함
+
+- **opinion 앱 "해외 논조" 탭** ([opinion/src/app/foreign/page.tsx](opinion/src/app/foreign/page.tsx))
+  - 매체별 그룹 (FOREIGN_SOURCE_ORDER: 구독 영문 → 무료 영문 → 일본)
+  - TodayTab 패턴 그대로 row 형태 (제목 + 시간 + "번역" 배지)
+  - 모달: 한국어 본문 + "원문" 탭 토글 (한일/한미 동시 비교 가능)
+  - DateNav 에 `basePath` prop 추가하여 재사용
+  - 사이드바: `Globe` 아이콘 + "해외 논조" 메뉴
+  - 운영: https://opinion-eta.vercel.app/foreign (수동 배포, opinion 자동연동 미설정 그대로)
+
+- **GitHub Actions cron 등록** ([.github/workflows/cron-foreign-editorials.yml](.github/workflows/cron-foreign-editorials.yml))
+  - **UTC 22:00 (KST 07:00)** 매일 — `--all` 모든 구현된 매체 + 자동 번역
+  - workflow_dispatch 옵션: source / dry_run / backfill
+  - 신규 GitHub Secret 추가 없음 (기존 `OPENAI_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, `AI_BASE_URL` 만 사용)
+
+**판단 사항 (28차)**:
+1. **`foreign_editorial` 신규 테이블 분리** — 기존 `editorial` 은 한국 매체 `media_company_id` FK 전제. 해외는 매체가 외부라 FK 안 맞음 → 완전 분리
+2. **요약 생성 제외** — 사용자 요청. body_ko 만 있으면 충분
+3. **번역 모델은 `gpt-4o-mini`** — 사설 번역 품질 검수 OK. 16배 비용 차이 정당화 불가
+4. **`edition_date` 는 현지 시각** — `AT TIME ZONE` 안 쓰고 published_at 의 tz-aware datetime 그대로 `.date()`
+5. **Washington Times 분류 변경** — 무료 매체였지만 Cloudflare 차단으로 M2(Playwright 그룹)로 이동
+6. **산케이 인덱스 URL 정정** — `/column/editorial/` (계획서 `/article/category/editorial/` 는 404)
+
+---
+
+**미완료 (다음 세션 이어받을 것)**:
+- ⚠ **M2: 구독 매체 Playwright 수집** — 가장 큰 작업 (반나절~하루)
+  - 대상: Washington Post / NYT / FT / SCMP (구독) + Washington Times (Cloudflare)
+  - Playwright 환경 구성 (GitHub Actions 도커 이미지 / playwright-deps)
+  - 매체별 로그인 자동화 → 쿠키 `foreign_session` 테이블 저장 → 만료 시 재로그인
+  - GitHub Secrets 추가 필요: `WAPO_ID`, `WAPO_PW`, `NYT_ID`, `NYT_PW`, `FT_ID`, `FT_PW` (SCMP 는 가입계정만)
+- ⚠ **사설 과거 데이터 백필** (27차에서 이어짐) — 3월 남은 구간 역순:
+  ```bash
+  python -m scripts.collect_editorials --date-from 20260318 --date-to 20260324
+  python -m scripts.collect_editorials --date-from 20260311 --date-to 20260317
+  python -m scripts.collect_editorials --date-from 20260304 --date-to 20260310
+  python -m scripts.collect_editorials --date-from 20260301 --date-to 20260303
+  ```
+- ⚠ **트래픽/기사 페이지 추가 성능 최적화** (27차에서 이어짐) — Streaming SSR + Suspense / SWR
+- ⚠ **Vercel 자동 배포 webhook 안정화 확인** — 대시보드 Git 연동 + Ignored Build Step 점검
+- ⚠ **/traffic 인터랙티브 추가** — 매칭 기사 양방향 점프, 디바이스별 시간대 차트
+- ⚠ **subscriber_snapshot / daily_publication_count 보존 기간 미결정**
+- ⚠ **미보도 탐지 3단계** (임베딩 기반) — article.body 수집 + NCP 이전 후
+- ⚠ **StanceTab 차트 레이블 겹침** — 스태거드 방식 적용
+- ⚠ **On-demand Revalidation** — 수집 완료 시 `/api/revalidate` 호출로 즉시 캐시 갱신
+- ⚠ **/report 과거 보고서 아카이브 페이지**
+
+---
+
+**지난 세션 (27차) 완료** — UI 디테일 정리 + 대시보드 KPI 재구성 + 성능 최적화:
 
 - **`/traffic` 페이지 UI 디테일**
   - 유입 경로 도넛 차트 확대 + 세로 배치 (144px → 240px, 가로→세로 배치, gap 28px, 폰트 키움)
@@ -101,55 +179,6 @@
   - 원인 추정: Vercel "Ignored Build Step" 또는 GitHub webhook 일시 지연
   - 다음 세션에서 Vercel 대시보드 → newsboard → Settings → Git 확인 필요
 
-**미완료 (다음 세션 이어받을 것)**:
-- ⚠ **사설 과거 데이터 백필** — 4월 + 3/25~3/31 완료, 남은 구간 역순 진행:
-  ```bash
-  python -m scripts.collect_editorials --date-from 20260318 --date-to 20260324
-  python -m scripts.collect_editorials --date-from 20260311 --date-to 20260317
-  python -m scripts.collect_editorials --date-from 20260304 --date-to 20260310
-  python -m scripts.collect_editorials --date-from 20260301 --date-to 20260303
-  # ... 2월, 1월 순서로 계속
-  ```
-- ⚠ **트래픽/기사 페이지 추가 성능 최적화** (현재 warm cache 540~840ms, 더 빠르게):
-  - **Streaming SSR + Suspense** — 헤더/KPI 먼저 보이고 차트·모달 데이터는 점진 로딩 (체감 속도 큰 향상 예상)
-  - **클라이언트 캐시 (SWR/React Query)** — 페이지 간 이동 시 즉시 표시 + 백그라운드 재검증
-- ⚠ **Vercel 자동 배포 webhook 안정화 확인** — 대시보드에서 Git 연동 상태 + Ignored Build Step 점검
-- ⚠ **/traffic 인터랙티브 추가 기능** — 매칭 기사 양방향 점프, 디바이스별 시간대 차트
-- ⚠ **subscriber_snapshot / daily_publication_count 보존 기간 미결정**
-- ⚠ **미보도 탐지 3단계** (임베딩 기반) — article.body 수집 + NCP 이전 후
-- ⚠ **StanceTab 차트 레이블 겹침** — 스태거드 방식 적용
-- ⚠ **On-demand Revalidation** — 수집 스크립트 완료 시 `/api/revalidate` 호출로 즉시 캐시 갱신
-- ⚠ **/report 과거 보고서 아카이브 페이지**
-- ⚠ **해외 주요 매체 사설 수집** — 논설실 요청. 성향 분석 없이 원문 + 한국어 번역만. 상세 설계 아래 참고.
-
-  **수집 대상 10개 매체**:
-  | 매체 | 언어 | 페이월 | 수집 방식 |
-  |---|---|---|---|
-  | Washington Times | 영어 | 없음 | httpx 직접 수집 |
-  | Washington Post | 영어 | 소프트 | Playwright + 구독 쿠키 |
-  | New York Times | 영어 | 하드 | Playwright + 구독 쿠키 |
-  | Financial Times | 영어 | 하드 | Playwright + 구독 쿠키 |
-  | South China Morning Post | 영어 | 소프트 | Playwright + 가입 쿠키 |
-  | 아사히신문 | 일본어 | 하드 | Playwright + 구독 쿠키 |
-  | 요미우리신문 | 일본어 | 하드 | Playwright + 구독 쿠키 |
-  | 니혼게이자이 | 일본어 | 하드 | Playwright + 구독 쿠키 |
-  | 마이니치신문 | 일본어 | 소프트 | Playwright + 쿠키 or 무료 |
-  | 산케이신문 | 일본어 | 소프트 | httpx or Playwright |
-
-  **구현 계획**:
-  - 새 스크립트 `scripts/collect_foreign_editorials.py`
-  - 쿠키 관리: `naver_session` 테이블 패턴 그대로 → `foreign_session` 테이블 (매체별 쿠키 + 만료일)
-  - 자동 재로그인: 쿠키 만료 감지 시 Playwright로 ID/PW 재로그인 → 쿠키 갱신
-  - GitHub Secrets: `NYT_ID`, `NYT_PW`, `WAPO_ID`, `WAPO_PW`, `FT_ID`, `FT_PW` 등 (쿠키 아닌 계정정보 저장)
-  - GPT 처리: 원문 전체 → 한국어 번역 + 3~4줄 요약 생성 (성향 분석 없음)
-  - DB: `editorial` 테이블 확장 (`source_country CHAR(2)`, `source_media VARCHAR`, `body_original TEXT`, `body_ko TEXT`, `media_id` nullable) or 새 테이블 `foreign_editorial` 분리 → **다음 세션 시작 시 결정 필요**
-  - cron: 매일 KST 07:00 수집 (아침 편집회의 전)
-  - UI: opinion 앱에 "해외 논조" 탭 추가
-
-  **다음 세션 시작 전 준비 사항**:
-  - 각 매체 구독 계정 보유 여부 확인 (어느 것 구독 중인지)
-  - 일본 신문: 일본어 원문 vs 영문판 중 어느 쪽 수집할지 결정
-
 ---
 
 **지난 세션 (26차) 완료**:
@@ -172,11 +201,11 @@
 
 ## 다음 작업 로드맵
 
+- **(당장) 해외 사설 — M2: 구독 매체 Playwright 수집** — WaPo/NYT/FT/SCMP + Washington Times (Cloudflare). Playwright 환경 + 매체별 로그인 + 쿠키 캐시 + GitHub Secrets 6개 추가
 - **(당장) 사설 과거 데이터 백필** — 3월 남은 구간부터 역순으로 주 단위 실행
 - **(당장) 트래픽/기사 페이지 추가 성능 최적화** — Streaming SSR + Suspense / 클라이언트 캐시(SWR or React Query)
 - **(당장) Vercel 자동배포 webhook 안정화** — 대시보드 Git 연동 상태 + Ignored Build Step 확인
 - **(미래) /traffic 인터랙티브 추가** — 매칭 기사 양방향 점프, 디바이스별 시간대 차트
-- **(미래) 해외 주요 매체 사설 수집** — 논설실 요청. WaPo/NYT/FT/SCMP/일본 5개지. 원문+한국어 번역. 구독 계정 확인 후 착수
 - **(미래) 편집회의 자동 일간 보고서** — 기존 데이터 + PV 통합한 매일 아침 보고서
 - **(미래) 미보도 탐지 + 클러스터 품질 개선** — 설계 완료. 상세: `documents/decisions.md`
 - **(미래) 성향 분석 정확도 개선** — `editorial_label` 테이블에 인간 레이블 충분히 쌓인 후 진행

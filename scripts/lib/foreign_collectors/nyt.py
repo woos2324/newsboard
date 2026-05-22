@@ -110,12 +110,22 @@ async def _get_index(ctx) -> list[dict]:
 async def _get_article(ctx, url: str) -> Optional[dict]:
     page = await new_stealth_page(ctx)
     try:
-        await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-        await page.wait_for_timeout(1_500)
+        await page.goto(url, wait_until="networkidle", timeout=40_000)
+
+        # 기사 URL로 유지됐는지 확인 (홈으로 리다이렉트 감지)
+        if not _ARTICLE_RE.search(page.url):
+            print(f"  [nyt] 리다이렉트 감지 → {page.url[:60]}", file=sys.stderr)
+            return None
 
         html = await page.content()
         if any(kw in html.lower() for kw in _PAYWALL_KW):
             return None
+
+        # h1 렌더링 대기
+        try:
+            await page.wait_for_selector("h1", timeout=8_000)
+        except Exception:
+            pass
 
         title = await page.title()
         h1 = page.locator("h1").first

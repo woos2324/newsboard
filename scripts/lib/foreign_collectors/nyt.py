@@ -14,7 +14,7 @@ from playwright.async_api import async_playwright
 
 from scripts.lib.foreign_collectors.base import ForeignEditorialItem
 from scripts.lib.foreign_collectors.playwright_base import (
-    extract_body, load_cookies, make_context, save_cookies,
+    extract_body, load_cookies, make_context, new_stealth_page, save_cookies,
 )
 
 INDEX_URL = "https://www.nytimes.com/section/opinion/editorials"
@@ -24,26 +24,27 @@ _PAYWALL_KW = ["create a free account", "log in or create", "get full access"]
 
 
 async def _login(ctx, email: str, password: str) -> bool:
-    page = await ctx.new_page()
+    page = await new_stealth_page(ctx)
     try:
         print(f"  [nyt] 로그인 시도 ({email})")
-        await page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=30_000)
-        await page.wait_for_timeout(2_000)
+        await page.goto(LOGIN_URL, wait_until="networkidle", timeout=40_000)
+        print(f"  [nyt] 로그인 페이지: {await page.title()} | {page.url[:60]}")
 
-        # Email (NYT는 testid 또는 일반 type="email")
         email_sel = (
             '[data-testid="login-lede-email-input"], '
             'input[name="email"], input[type="email"]'
         )
+        await page.wait_for_selector(email_sel, timeout=15_000)
         await page.fill(email_sel, email)
 
         pw_visible = await page.is_visible('input[type="password"]', timeout=2_000)
         if not pw_visible:
             submit_sel = '[data-testid="login-submit-button"], button[type="submit"]'
             await page.click(submit_sel)
-            await page.wait_for_timeout(2_000)
+            await page.wait_for_load_state("networkidle", timeout=15_000)
 
         pw_sel = '[data-testid="login-lede-password-input"], input[type="password"]'
+        await page.wait_for_selector(pw_sel, timeout=10_000)
         await page.fill(pw_sel, password)
 
         submit_sel = '[data-testid="login-submit-button"], button[type="submit"]'
@@ -62,7 +63,7 @@ async def _login(ctx, email: str, password: str) -> bool:
 
 
 async def _get_index(ctx) -> list[dict]:
-    page = await ctx.new_page()
+    page = await new_stealth_page(ctx)
     try:
         await page.goto(INDEX_URL, wait_until="domcontentloaded", timeout=30_000)
         await page.wait_for_timeout(2_000)
@@ -93,7 +94,7 @@ async def _get_index(ctx) -> list[dict]:
 
 
 async def _get_article(ctx, url: str) -> Optional[dict]:
-    page = await ctx.new_page()
+    page = await new_stealth_page(ctx)
     try:
         await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
         await page.wait_for_timeout(1_500)

@@ -14,7 +14,7 @@ from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright
 
 from scripts.lib.foreign_collectors.base import ForeignEditorialItem
-from scripts.lib.foreign_collectors.playwright_base import make_context
+from scripts.lib.foreign_collectors.playwright_base import make_context, new_stealth_page
 
 INDEX_URL = "https://www.washingtontimes.com/opinion/editorials/"
 BASE = "https://www.washingtontimes.com"
@@ -88,9 +88,10 @@ def _parse_article(html: str) -> tuple[Optional[str], Optional[str], Optional[st
 async def collect(limit: int = 10, supabase=None) -> list[ForeignEditorialItem]:
     async with async_playwright() as pw:
         ctx = await make_context(pw)
-        page = await ctx.new_page()
+        page = None
 
         try:
+            page = await new_stealth_page(ctx)
             print("[wtimes] 인덱스 로딩 (Cloudflare 우회 대기 중)")
             await page.goto(INDEX_URL, wait_until="networkidle", timeout=40_000)
             html = await page.content()
@@ -109,7 +110,7 @@ async def collect(limit: int = 10, supabase=None) -> list[ForeignEditorialItem]:
 
         results: list[ForeignEditorialItem] = []
         for entry in index[:limit]:
-            page = await ctx.new_page()
+            page = await new_stealth_page(ctx)
             try:
                 await page.goto(entry["url"], wait_until="domcontentloaded", timeout=30_000)
                 await page.wait_for_timeout(1_000)

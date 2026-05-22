@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from playwright.async_api import BrowserContext, Page
+from playwright_stealth import stealth_async
 
 COOKIE_TTL_DAYS = 14
 
@@ -63,16 +64,31 @@ def save_cookies(source_code: str, cookies: list[dict], supabase) -> None:
 async def make_context(playwright, cookies: Optional[list[dict]] = None) -> BrowserContext:
     """Chromium headless 컨텍스트 생성. cookies 주어지면 inject."""
     headless = os.environ.get("HEADLESS", "1") != "0"
-    browser = await playwright.chromium.launch(headless=headless)
+    browser = await playwright.chromium.launch(
+        headless=headless,
+        args=[
+            "--disable-blink-features=AutomationControlled",
+            "--no-sandbox",
+            "--disable-dev-shm-usage",
+        ],
+    )
     ctx = await browser.new_context(
         user_agent=_UA,
         viewport={"width": 1280, "height": 900},
         locale="en-US",
         timezone_id="America/New_York",
+        ignore_https_errors=True,
     )
     if cookies:
         await ctx.add_cookies(cookies)
     return ctx
+
+
+async def new_stealth_page(ctx: BrowserContext) -> Page:
+    """stealth 적용된 새 페이지 반환. 봇 감지 우회용."""
+    page = await ctx.new_page()
+    await stealth_async(page)
+    return page
 
 
 async def extract_body(page: Page, selectors: list[str]) -> Optional[str]:

@@ -275,20 +275,30 @@
 
 ## 로그인 + 역할 기반 접근 제어 구현 계획 (30차 착수 예정)
 
+### 역할 구조
+
+| 역할 | 메뉴 접근 | 회원 관리 |
+|---|---|---|
+| superadmin | 전체 | ✅ 전체 회원 열람·수정·역할변경·삭제 |
+| admin | 전체 | ❌ |
+| 사업부 | 트래픽·구독자만 | ❌ |
+| 기자 | 트래픽·구독자 제외 전체 | ❌ |
+
 ### 역할-메뉴 매핑
 
-| 메뉴 | admin | 사업부 | 기자 |
-|---|---|---|---|
-| 대시보드 (/) | ✅ | ✅ | ✅ |
-| 이슈 분석 | ✅ | ❌ | ✅ |
-| 미보도 탐지 | ✅ | ❌ | ✅ |
-| 실시간 트렌드 | ✅ | ❌ | ✅ |
-| 경쟁사 비교 | ✅ | ❌ | ✅ |
-| 자사 기사 현황 | ✅ | ❌ | ✅ |
-| 트래픽 분석 | ✅ | ✅ | ❌ |
-| 구독자 분석 | ✅ | ✅ | ❌ |
-| 독자 반응 | ✅ | ❌ | ✅ |
-| AI 리포트 | ✅ | ❌ | ✅ |
+| 메뉴 | superadmin | admin | 사업부 | 기자 |
+|---|---|---|---|---|
+| 대시보드 (/) | ✅ | ✅ | ✅ | ✅ |
+| 이슈 분석 | ✅ | ✅ | ❌ | ✅ |
+| 미보도 탐지 | ✅ | ✅ | ❌ | ✅ |
+| 실시간 트렌드 | ✅ | ✅ | ❌ | ✅ |
+| 경쟁사 비교 | ✅ | ✅ | ❌ | ✅ |
+| 자사 기사 현황 | ✅ | ✅ | ❌ | ✅ |
+| 트래픽 분석 | ✅ | ✅ | ✅ | ❌ |
+| 구독자 분석 | ✅ | ✅ | ✅ | ❌ |
+| 독자 반응 | ✅ | ✅ | ❌ | ✅ |
+| AI 리포트 | ✅ | ✅ | ❌ | ✅ |
+| 회원 관리 (/admin/users) | ✅ | ❌ | ❌ | ❌ |
 
 - 대시보드 KPI 카드: 접근 불가 페이지 카드는 클릭 비활성 (사업부→기사·독자반응, 기자→조회수·구독자)
 - 비로그인 + URL 직접 입력 → `/login` 리다이렉트 (Middleware 서버 레벨)
@@ -297,11 +307,13 @@
 ### 가입 정책
 - 도메인: `@segye.com` 만 허용 (서버 검증)
 - 방식: 이메일 OTP 인증 → 역할 선택 → 비밀번호 설정
+- 가입 시 선택 가능 역할: `reporter`, `business` (admin·superadmin은 선택 불가)
 - 승인:
   - `reporter` → OTP 인증 완료 시 **자동 승인** (즉시 접근)
-  - `business` / `admin` → 승인 대기 상태 → **admin이 수동 승인 후 접근 가능**
+  - `business` → 승인 대기 상태 → **superadmin이 수동 승인 후 접근 가능**
   - 승인 대기 중 로그인 시 "승인 대기 중입니다" 안내 화면 표시
-- 역할 변경 + 승인: admin이 `/admin/users`에서 처리
+- `admin` 역할: superadmin이 `/admin/users`에서 직접 부여
+- `superadmin` 계정: Supabase 대시보드에서 `profiles` row 직접 생성 (최초 1회)
 
 ### 단계별 작업 (~3일)
 
@@ -311,13 +323,15 @@ CREATE TABLE profiles (
   user_id    UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   email      VARCHAR NOT NULL,
   name       VARCHAR NOT NULL,
-  role       VARCHAR NOT NULL CHECK (role IN ('admin','business','reporter'))
+  role       VARCHAR NOT NULL
+               CHECK (role IN ('superadmin','admin','business','reporter'))
                DEFAULT 'reporter',
   approved   BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 -- reporter 가입 시 approved=true 자동 설정
--- business/admin 가입 시 approved=false → admin 승인 필요
+-- business 가입 시 approved=false → superadmin 승인 필요
+-- admin/superadmin은 가입 폼에서 선택 불가, superadmin이 직접 부여
 -- RLS: 본인 row SELECT, service role만 INSERT/UPDATE
 ```
 

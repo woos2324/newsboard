@@ -8,7 +8,15 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from playwright.async_api import BrowserContext, Page
-from playwright_stealth import stealth_async
+
+# navigator.webdriver 등 headless 감지 신호를 제거하는 JS 패치
+_STEALTH_SCRIPT = """
+Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
+Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
+Object.defineProperty(navigator, 'platform', {get: () => 'Win32'});
+window.chrome = {runtime: {}, loadTimes: function(){}, csi: function(){}, app: {}};
+"""
 
 COOKIE_TTL_DAYS = 14
 
@@ -85,9 +93,9 @@ async def make_context(playwright, cookies: Optional[list[dict]] = None) -> Brow
 
 
 async def new_stealth_page(ctx: BrowserContext) -> Page:
-    """stealth 적용된 새 페이지 반환. 봇 감지 우회용."""
+    """webdriver 감지 신호를 패치한 새 페이지 반환."""
     page = await ctx.new_page()
-    await stealth_async(page)
+    await page.add_init_script(_STEALTH_SCRIPT)
     return page
 
 

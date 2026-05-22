@@ -10,6 +10,8 @@ import re
 import sys
 from typing import Optional
 
+import httpx
+from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright
 
 from scripts.lib.foreign_collectors.base import ForeignEditorialItem
@@ -107,52 +109,72 @@ async def _get_index(ctx) -> list[dict]:
         await page.close()
 
 
-async def _get_article(ctx, url: str) -> Optional[dict]:
-    page = await new_stealth_page(ctx)
+async def _get_article_httpx(url: str, cookie_header: str) -> Optional[dict]:
+    """NYT는 Next.js SSR — httpx로 직접 가져오면 초기 HTML에 본문 포함."""
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "Cookie": cookie_header,
+        "Accept": "text/html,application/xhtml+xml,*/*;q=0.9",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
     try:
-        await page.goto(url, wait_until="networkidle", timeout=40_000)
+        async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
+            resp = await client.get(url, headers=headers)
+            if resp.status_code != 200:
+                return None
+            html = resp.text
+    except Exception as e:
+        print(f"  [nyt] httpx 오류 {url[:60]}: {e}", file=sys.stderr)
+        return None
 
-        # 기사 URL로 유지됐는지 확인 (홈으로 리다이렉트 감지)
-        if not _ARTICLE_RE.search(page.url):
-            print(f"  [nyt] 리다이렉트 감지 → {page.url[:60]}", file=sys.stderr)
-            return None
+    if any(kw in html.lower() for kw in _PAYWALL_KW):
+        return None
 
-        html = await page.content()
-        if any(kw in html.lower() for kw in _PAYWALL_KW):
-            return None
+    soup = BeautifulSoup(html, "html.parser")
 
-        # h1 렌더링 대기
-        try:
-            await page.wait_for_selector("h1", timeout=8_000)
-        except Exception:
-            pass
+    # 제목
+    title = None
+    og = soup.find("meta", attrs={"property": "og:title"})
+    if og:
+        title = og.get("content", "").strip()
+    if not title:
+        h1 = soup.find("h1")
+        if h1:
+            title = h1.get_text(strip=True)
 
-        title = await page.title()
-        h1 = page.locator("h1").first
-        if await h1.count():
-            t = (await h1.inner_text()).strip()
-            if t:
-                title = t
+    # 발행 시각
+    pub = None
+    for prop in ["article:published_time", "og:article:published_time"]:
+        m = soup.find("meta", attrs={"property": prop})
+        if m and m.get("content"):
+            pub = m["content"].strip()
+            break
 
-        pub = None
-        for prop in ["article:published_time", "og:article:published_time"]:
-            m = page.locator(f'meta[property="{prop}"]')
-            if await m.count():
-                pub = await m.get_attribute("content")
+    # 본문
+    body = None
+    for sel in ['section[name="articleBody"]', "article"]:
+        el = soup.select_one(sel)
+        if el:
+            paras = [p.get_text(strip=True) for p in el.find_all("p") if len(p.get_text(strip=True)) > 20]
+            if len(paras) >= 3:
+                body = "\n".join(paras)[:8000]
                 break
 
-        body = await extract_body(page, [
-            'section[name="articleBody"] p',
-            '[class*="StoryBodyCompanionColumn"] p',
-            "article p",
-        ])
+    return {"title": title, "body": body, "published_at": pub}
 
-        return {"title": title, "body": body, "published_at": pub}
+
+async def _get_article(ctx, url: str) -> Optional[dict]:
+    # 컨텍스트의 쿠키를 Cookie 헤더로 변환해 httpx로 직접 fetch
+    try:
+        all_cookies = await ctx.cookies()
+        cookie_header = "; ".join(f"{c['name']}={c['value']}" for c in all_cookies)
+        return await _get_article_httpx(url, cookie_header)
     except Exception as e:
         print(f"  [nyt] 기사 오류 {url[:60]}: {e}", file=sys.stderr)
         return None
-    finally:
-        await page.close()
 
 
 async def collect(limit: int = 10, supabase=None) -> list[ForeignEditorialItem]:

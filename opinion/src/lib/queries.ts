@@ -228,3 +228,15 @@ export async function getSegyeEditorials(days = 90): Promise<Editorial[]> {
   if (error) throw error
   return (data ?? []) as unknown as Editorial[]
 }
+
+export async function getLatestEditionDate(): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('editorial')
+    .select('edition_date')
+    .not('edition_date', 'is', null)
+    .order('edition_date', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error) throw error
+  return data?.edition_date ?? null
+}

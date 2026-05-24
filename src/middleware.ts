@@ -4,11 +4,12 @@ import { getSupabase } from "@/lib/supabase";
 import { canAccessPath, INACTIVITY_LIMIT_MS, isPublicPath, type Role } from "@/lib/roles";
 
 const LAST_ACTIVITY_COOKIE = "newsboard_last_activity";
+// 활동 시각 쿠키는 5분마다만 갱신 (매 요청마다 쓰면 RSC 응답 깨짐)
+const ACTIVITY_UPDATE_INTERVAL_MS = 5 * 60 * 1000;
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // 정적 자원·API·Next 내부는 matcher 에서 제외하지만 안전망
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon") ||
@@ -17,10 +18,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // 1) 세션 쿠키 갱신
+  // RSC prefetch / soft navigation 요청은 응답 본문을 가공하면 multipart 가 깨짐
+  const isRSC =
+    request.headers.has("rsc") || request.headers.has("next-router-state-tree");
+
   const { response, user } = await updateSupabaseSession(request);
 
-  // 2) 비로그인 사용자 처리
   if (!user) {
     if (isPublicPath(pathname)) return response;
     const url = request.nextUrl.clone();
@@ -29,7 +32,6 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // 3) 로그인 사용자가 /login, /signup 접근 → 메인으로
   if (isPublicPath(pathname)) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
@@ -37,24 +39,21 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // 4) 비활동 4시간 자동 로그아웃
   const lastActivityStr = request.cookies.get(LAST_ACTIVITY_COOKIE)?.value;
+  const lastActivity = lastActivityStr ? parseInt(lastActivityStr, 10) : NaN;
   const now = Date.now();
-  if (lastActivityStr) {
-    const lastActivity = parseInt(lastActivityStr, 10);
-    if (!Number.isNaN(lastActivity) && now - lastActivity > INACTIVITY_LIMIT_MS) {
-      const admin = getSupabase();
-      await admin.auth.admin.signOut(user.id).catch(() => {});
-      const url = request.nextUrl.clone();
-      url.pathname = "/login";
-      url.search = "";
-      const redirect = NextResponse.redirect(url);
-      redirect.cookies.delete(LAST_ACTIVITY_COOKIE);
-      return redirect;
-    }
+
+  if (!Number.isNaN(lastActivity) && now - lastActivity > INACTIVITY_LIMIT_MS) {
+    const admin = getSupabase();
+    await admin.auth.admin.signOut(user.id).catch(() => {});
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    url.search = "";
+    const redirect = NextResponse.redirect(url);
+    redirect.cookies.delete(LAST_ACTIVITY_COOKIE);
+    return redirect;
   }
 
-  // 5) profile 조회 → 승인·역할 검증 (service role 사용)
   const admin = getSupabase();
   const { data: profile } = await admin
     .from("profiles")
@@ -63,7 +62,6 @@ export async function middleware(request: NextRequest) {
     .maybeSingle();
 
   if (!profile) {
-    // auth.users 만 있고 profiles 없음 (가입 도중 중단) → 로그아웃
     await admin.auth.admin.signOut(user.id).catch(() => {});
     const url = request.nextUrl.clone();
     url.pathname = "/login";
@@ -85,20 +83,23 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // 6) 활동 시각 갱신 (세션 쿠키 — 브라우저 종료 시 삭제)
-  response.cookies.set(LAST_ACTIVITY_COOKIE, now.toString(), {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    secure: process.env.NODE_ENV === "production",
-  });
+  // 활동 시각 갱신 — RSC 요청 제외 + 5분에 한 번만 (응답 본문 보호)
+  const shouldUpdateActivity =
+    !isRSC && (Number.isNaN(lastActivity) || now - lastActivity > ACTIVITY_UPDATE_INTERVAL_MS);
+  if (shouldUpdateActivity) {
+    response.cookies.set(LAST_ACTIVITY_COOKIE, now.toString(), {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      secure: process.env.NODE_ENV === "production",
+    });
+  }
 
   return response;
 }
 
 export const config = {
   matcher: [
-    // _next/, api/, 정적 파일 제외하고 모든 경로
     "/((?!_next/static|_next/image|favicon.ico|api/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map)$).*)",
   ],
 };

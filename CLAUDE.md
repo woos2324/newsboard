@@ -147,7 +147,7 @@
 - ⚠ `/signup` 페이지 Step 1 — "사번 이메일" 라벨 → "이메일" 로 변경
 - ⚠ `/signup` Step 3 — 비밀번호/비밀번호 확인 불일치 시 비밀번호 확인 input 아래에 빨간색 알림 표시 (현재는 폼 상단 통합 에러 메시지로만 표시 — `handleStep3` 의 `setError("비밀번호가 일치하지 않습니다.")`)
 - ⚠ Supabase Email Template 제목 — "Confirm Your Signup" → "newsboard 인증 번호입니다" (대시보드 Authentication → Emails → Templates → "Confirm signup" → Subject)
-- ⚠ **가입 완료 직후 client-side exception** — Step 3 에서 가입 완료 버튼 누르면 "Application error: a client-side exception has occurred" 발생. 브라우저 콘솔 에러 메시지 확인 필요. 추정 원인: (a) 이미 가입된 이메일 재시도 시 23505 무시 + 본인 데이터 그대로 + router.push 와 middleware redirect 충돌, (b) prefetch + AppShell null 반환 부작용, (c) hydration mismatch
+- ⚠ **가입 완료 직후 client-side exception** — Step 3 에서 가입 완료 버튼 누르면 "Application error: a client-side exception has occurred" 발생. 실제 콘솔: `POST https://newsboard-two.vercel.app/login net::ERR_TOO_MANY_REDIRECTS`, `Uncaught TypeError: Failed to fetch`. 추정 원인: (a) `completeSignup` 성공 후 `router.push("/login")` 과정에서 middleware/public path/세션 쿠키 상태가 충돌하며 `/login` POST 또는 RSC fetch redirect loop 발생, (b) 이미 가입된 이메일 재시도 시 `profiles` 23505 무시 + 기존 세션 유지, (c) prefetch + AppShell null 반환 부작용, (d) hydration mismatch
 
 **(미해결) 운영 이슈**:
 - ⚠ **메인 메일서버에 segye.com 자체 SPF 정렬** — 외부 DNS 는 OK, 사내 메일서버는 `send.segye.com` SPF 못 봄 → 차단 모드. 사내 DNS 에도 send.segye.com 레코드 동기화 필요.

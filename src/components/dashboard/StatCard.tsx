@@ -56,5 +56,5 @@ export function StatCard({ label, sublabel, value, delta, deltaLabel, icon: Icon
       </Link>
     );
   }
-  return <div className="card card-hover">{inner}</div>;
+  return <div className="card">{inner}</div>;
 }

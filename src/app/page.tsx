@@ -24,6 +24,8 @@ import {
   getTrendingKeywords,
   getDailyCvHistory,
 } from "@/lib/queries";
+import { getCurrentProfile } from "@/lib/auth";
+import { canAccessPath, type Role } from "@/lib/roles";
 
 export const revalidate = 300
 
@@ -45,6 +47,9 @@ function formatDateTimeKr(iso: string): string {
 }
 
 export default async function DashboardPage() {
+  const profile = await getCurrentProfile();
+  const role = (profile?.role ?? "reporter") as Role;
+
   const [stats, issues, rankingNews, alerts, sub, topComments, aiSummary, trending, pvHistory] =
     await Promise.all([
       getOverviewStats(),
@@ -57,6 +62,9 @@ export default async function DashboardPage() {
       getTrendingKeywords(),
       getDailyCvHistory(2),
     ]);
+
+  const linkIfAllowed = (path: string) =>
+    canAccessPath(role, path) ? path : undefined;
 
   const trendingByCluster = new Map(
     trending
@@ -77,7 +85,7 @@ export default async function DashboardPage() {
       delta: stats.today_articles_delta_pct,
       deltaLabel: "전일 대비",
       icon: Flame,
-      href: "/articles",
+      href: linkIfAllowed("/articles"),
     },
     {
       label: "조회수",
@@ -86,7 +94,7 @@ export default async function DashboardPage() {
       delta: pvDeltaPct,
       deltaLabel: "전일 대비",
       icon: Eye,
-      href: "/traffic",
+      href: linkIfAllowed("/traffic"),
     },
     {
       label: "자사 총 구독자",
@@ -94,14 +102,14 @@ export default async function DashboardPage() {
       delta: sub.deltaPct,
       deltaLabel: "7일 대비",
       icon: Users,
-      href: "/analytics/subscribers",
+      href: linkIfAllowed("/analytics/subscribers"),
     },
     {
       label: "댓글 반응 (전체)",
       value: stats.today_comments.toLocaleString(),
       delta: 0,
       icon: MessageSquare,
-      href: "/analytics/comments",
+      href: linkIfAllowed("/analytics/comments"),
     },
   ];
 

@@ -14,8 +14,11 @@ import {
   Sparkles,
   Newspaper,
   BarChart3,
+  ShieldCheck,
   X,
 } from "lucide-react";
+import { canAccessPath, type Role } from "@/lib/roles";
+import type { CurrentProfile } from "@/lib/auth";
 
 const nav = [
   { href: "/", label: "대시보드", icon: LayoutDashboard },
@@ -28,15 +31,19 @@ const nav = [
   { href: "/analytics/subscribers", label: "구독자 분석", icon: Users },
   { href: "/analytics/comments", label: "독자 반응", icon: MessageSquare },
   { href: "/report", label: "AI 리포트", icon: FileText },
+  { href: "/admin/users", label: "회원 관리", icon: ShieldCheck },
 ];
 
 type SidebarProps = {
+  profile: CurrentProfile;
   isOpen?: boolean;
   onClose?: () => void;
 };
 
-export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
+export function Sidebar({ profile, isOpen = false, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const role = profile.role as Role;
+  const visible = nav.filter((item) => canAccessPath(role, item.href));
 
   return (
     <aside
@@ -61,7 +68,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
 
       <nav className="flex-1 overflow-y-auto px-3 py-4">
         <ul className="space-y-1">
-          {nav.map((item) => {
+          {visible.map((item) => {
             const Icon = item.icon;
             const active =
               item.href === "/"
@@ -85,18 +92,6 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
           })}
         </ul>
       </nav>
-
-      <div className="border-t border-border p-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-500/10 text-xs font-semibold text-primary-500">
-            KJ
-          </div>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium">김 편집자</p>
-            <p className="truncate text-[11px] text-muted">디지털 뉴스룸</p>
-          </div>
-        </div>
-      </div>
     </aside>
   );
 }

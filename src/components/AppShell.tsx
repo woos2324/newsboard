@@ -1,25 +1,10 @@
-"use client";
+import { redirect } from "next/navigation";
+import { getCurrentProfile } from "@/lib/auth";
+import { AppShellClient } from "@/components/AppShellClient";
 
-import { useState } from "react";
-import { Sidebar } from "@/components/Sidebar";
-import { Topbar } from "@/components/Topbar";
+export async function AppShell({ children }: { children: React.ReactNode }) {
+  const profile = await getCurrentProfile();
+  if (!profile) redirect("/login");
 
-export function AppShell({ children }: { children: React.ReactNode }) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <div className="flex min-h-screen">
-      <Sidebar isOpen={open} onClose={() => setOpen(false)} />
-      {open && (
-        <div
-          className="fixed inset-0 z-30 bg-black/50 lg:hidden"
-          onClick={() => setOpen(false)}
-        />
-      )}
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar onMenuOpen={() => setOpen(true)} />
-        {children}
-      </div>
-    </div>
-  );
+  return <AppShellClient profile={profile}>{children}</AppShellClient>;
 }

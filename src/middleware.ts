@@ -75,10 +75,10 @@ export async function middleware(request: NextRequest) {
 
   if (!profile) {
     // profile 없는 로그인 사용자 = OTP 인증 후 가입 미완료 상태
-    // /signup 에서는 step3 완료를 허용, 그 외 경로는 /signup 으로 유도
+    // 세션 유지 + /signup 으로 유도 (로그아웃 하지 않음)
+    // 미완성 세션 만료는 Supabase JWT 자체 만료(기본 1시간)로 자연 처리
     if (isOnSignupPage && !isOnPendingPage) return response;
-    await admin.auth.admin.signOut(user.id).catch(() => {});
-    return redirectTo("/login");
+    return redirectTo("/signup");
   }
 
   // profile 있는 사용자가 /signup 에 오면 / 로

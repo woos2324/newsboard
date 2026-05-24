@@ -73,6 +73,40 @@
 - Email Template "Confirm signup" → `{{ .Token }}` 으로 OTP 6자리 발송 (10분 만료)
 - 비밀번호 정책: 8자 이상, 대소문자 + 숫자 + 특수문자
 
+## 재개 지점 (2026-05-25, 31차 세션 종료)
+
+**이번 세션 (31차) 완료** — 인증 버그 수정 + 보안 패치:
+
+- **`0024_fix_profiles_rls` 마이그레이션** — `profiles` 테이블 보안 취약점 수정
+  - `"service role full access"` 정책이 `TO` 절 없이 생성 → `{public}` (anon 포함) 전체에 적용
+  - 익명 사용자가 모든 회원 정보 조회·수정·삭제 가능했던 취약점 → DB 즉시 제거
+  - service_role 은 RLS 자동 bypass 이므로 해당 정책 자체가 불필요했음
+
+- **회원가입 redirect 루프 수정** ([src/middleware.ts](src/middleware.ts))
+  - OTP 인증 완료(세션 O) 후 Step 3 Server Action POST → 미들웨어가 "로그인된 사용자 공개경로 접근 → `/`"로 redirect → `/`에서 profile 없음 → `/login` redirect 루프
+  - 수정: profile 체크를 public path redirect 앞으로 이동. profile 없는 로그인 사용자 + `/signup` = 통과 허용
+  - 추가: profile 없는 사용자가 다른 경로 접근 시 세션 유지 + `/signup` redirect (이전: signOut + `/login`)
+
+- **승인 대기 페이지 "로그인 화면으로" 버튼 수정** ([src/app/signup/pending/page.tsx](src/app/signup/pending/page.tsx))
+  - `<Link href="/login">` → `<form action={signOutAction}>` 로 변경
+  - 로그아웃 없이 `/login` 이동 시 미승인 세션 유지 → 미들웨어가 `/signup/pending` 으로 다시 redirect (무반응처럼 보이던 버그)
+
+- **`completeSignup` 병렬화** ([src/app/signup/actions.ts](src/app/signup/actions.ts))
+  - `updateUser(비밀번호)` + `profiles.insert` 순차 → `Promise.all` 병렬 처리
+  - Supabase 왕복 1회 단축 (~200~400ms 개선)
+
+**발견 이슈 — 자사 기사 현황 캐시 오염 (일시 자연복구)**:
+- `/articles` 페이지에서 `총 N건` 표시는 정상이나 목록이 빈 현상 발생 (10분 후 자연복구)
+- 추정 원인: 배포 전환 중 `unstable_cache` (TTL 600s) 에 빈 결과가 저장
+- 재발 시 확인 순서: ① Vercel 최근 배포 시각과 현상 발생 시각 일치 여부 → ② 10분 대기 후 자연복구 여부 → ③ 지속 시 Vercel 대시보드 Redeploy 로 캐시 강제 무효화
+- 근본 해결은 On-demand Revalidation 구현 시 함께 처리 (미완료 항목)
+
+**판단 사항 (31차)**:
+1. **profile 없는 로그인 사용자 세션 유지** — 로그아웃 강제 대신 `/signup` 유도. 미완성 세션은 Supabase JWT 만료(1시간)로 자연 처리.
+2. **보안 패치 우선 적용** — `profiles` anon 노출은 즉시 위험. 배포 전에 DB 직접 패치.
+
+---
+
 ## 재개 지점 (2026-05-24, 30차 세션 종료)
 
 **이번 세션 (30차) 완료** — 로그인 + 역할 기반 접근 제어 시스템 구축:
@@ -147,7 +181,7 @@
 - ⚠ `/signup` 페이지 Step 1 — "사번 이메일" 라벨 → "이메일" 로 변경
 - ⚠ `/signup` Step 3 — 비밀번호/비밀번호 확인 불일치 시 비밀번호 확인 input 아래에 빨간색 알림 표시 (현재는 폼 상단 통합 에러 메시지로만 표시 — `handleStep3` 의 `setError("비밀번호가 일치하지 않습니다.")`)
 - ⚠ Supabase Email Template 제목 — "Confirm Your Signup" → "newsboard 인증 번호입니다" (대시보드 Authentication → Emails → Templates → "Confirm signup" → Subject)
-- ⚠ **가입 완료 직후 client-side exception** — Step 3 에서 가입 완료 버튼 누르면 "Application error: a client-side exception has occurred" 발생. 실제 콘솔: `POST https://newsboard-two.vercel.app/login net::ERR_TOO_MANY_REDIRECTS`, `Uncaught TypeError: Failed to fetch`. 추정 원인: (a) `completeSignup` 성공 후 `router.push("/login")` 과정에서 middleware/public path/세션 쿠키 상태가 충돌하며 `/login` POST 또는 RSC fetch redirect loop 발생, (b) 이미 가입된 이메일 재시도 시 `profiles` 23505 무시 + 기존 세션 유지, (c) prefetch + AppShell null 반환 부작용, (d) hydration mismatch
+- ~~**가입 완료 직후 client-side exception**~~ ✅ 완료 (31차) — middleware redirect 루프 수정으로 해결
 
 **(미해결) 운영 이슈**:
 - ⚠ **메인 메일서버에 segye.com 자체 SPF 정렬** — 외부 DNS 는 OK, 사내 메일서버는 `send.segye.com` SPF 못 봄 → 차단 모드. 사내 DNS 에도 send.segye.com 레코드 동기화 필요.

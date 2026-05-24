@@ -786,6 +786,36 @@ export type Database = {
         }
         Relationships: []
       }
+      profiles: {
+        Row: {
+          approved: boolean
+          created_at: string
+          email: string
+          name: string
+          role: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          approved?: boolean
+          created_at?: string
+          email: string
+          name: string
+          role?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          approved?: boolean
+          created_at?: string
+          email?: string
+          name?: string
+          role?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       ranking_news_item: {
         Row: {
           article_id: number

@@ -37,7 +37,7 @@
 
 **cron chain**: `ranking → cluster → gap` (매시 자동 연쇄)
 
-## DB 스키마 (마이그레이션 22건)
+## DB 스키마 (마이그레이션 23건)
 
 - `0001_init` — 11개 코어 테이블
 - `0002` ~ `0006` — daily_publication_count, section_ranking, 성능 인덱스, section_ranking_unique, gap_verdict
@@ -51,6 +51,7 @@
 - `0020` — article_pv_snapshot.time_dimension + daily_cv_snapshot (26차)
 - `0021` — foreign_editorial 신규 (해외 매체 사설, 28차)
 - `0022` — foreign_session 쿠키 캐시 (해외 매체별, 28차)
+- `0023` — profiles (auth.users 1:1, role/approved 기반 접근 제어, 30차)
 - 마이그레이션 상세: [supabase/migrations/](supabase/migrations/)
 - 매체 51개 (naver_media_id 보유 47개) + 해외 8개 매체 코드 (foreign_sources.py: wapo/nyt/ft/scmp/guardian/wtimes/mainichi/sankei)
 
@@ -64,6 +65,84 @@
 
 **로컬 .env.local 추가 항목** (GitHub Secrets에 없는 것):
 - `HEADLESS=0` — Playwright 브라우저 표시 (로컬 디버깅용, 운영은 기본값 1)
+
+**Supabase Auth (Email OTP) — 30차 신규 설정**:
+- SMTP: Resend (`smtp.resend.com:587`, username `resend`, password = Resend API key)
+- 발신 도메인: `send.segye.com` 서브도메인 (Akamai DNS 에 DKIM/MX/SPF 등록, Verified)
+- Sender email: `noreply@segye.com`
+- Email Template "Confirm signup" → `{{ .Token }}` 으로 OTP 6자리 발송 (10분 만료)
+- 비밀번호 정책: 8자 이상, 대소문자 + 숫자 + 특수문자
+
+## 재개 지점 (2026-05-24, 30차 세션 종료)
+
+**이번 세션 (30차) 완료** — 로그인 + 역할 기반 접근 제어 시스템 구축:
+
+- **DB 마이그레이션 1건**
+  - `0023_profiles` — auth.users 1:1, role (superadmin/admin/business/reporter) + approved + 자동 updated_at trigger
+  - RLS: 본인 row SELECT + service role 전체 접근
+
+- **Supabase Auth 인프라**
+  - `@supabase/ssr` 패키지 도입
+  - 클라이언트 4종 분리: `supabase-server.ts` (Server Component/Action), `supabase-browser.ts` (Client), `supabase-middleware.ts` (Middleware), 기존 `supabase.ts` (service role)
+  - 세션 쿠키 모드 — `maxAge`/`expires` 제거 → 브라우저 종료 시 자동 로그아웃
+  - Resend SMTP + segye.com DNS 인증 (DKIM/MX/SPF on send.segye.com 서브도메인, DMARC X)
+
+- **인증 페이지 + Server Actions** ([src/app/login](src/app/login), [src/app/signup](src/app/signup))
+  - `/signup` — 이메일(@segye.com) → OTP → 이름·역할·비밀번호 3단계 폼
+  - `/signup/pending` — 사업부 승인 대기 안내
+  - `/login` — 이메일+비밀번호 + 미승인/미가입 사용자 차단
+
+- **Middleware 접근 제어** ([src/middleware.ts](src/middleware.ts))
+  - 비로그인 → /login 리다이렉트
+  - approved=false → /signup/pending
+  - 역할별 경로 검증 (`canAccessPath`)
+  - **비활동 4시간 + 브라우저 종료 시** 자동 로그아웃 (`last_activity` 세션 쿠키, 5분 throttle)
+  - RSC 요청 감지 → 쿠키 갱신 skip (Next.js multipart 응답 본문 보호)
+  - profile 정보를 request header (`x-user-*`) 로 page render 에 전파
+
+- **권한별 UI**
+  - Sidebar — 역할 안 맞는 메뉴 자동 숨김, 하단 프로필 영역 삭제
+  - Topbar 우상단 — 프로필 드롭다운 (이름·역할·이메일 + 로그아웃)
+  - 대시보드 KPI 카드 — 권한 없으면 href + hover 비활성
+  - `/admin/users` (superadmin 전용) — 가입자 목록 + 승인 / 역할 변경 / 삭제 (`auth.admin.deleteUser` → profiles CASCADE)
+
+- **성능 최적화**
+  - `getDashboardData()` — 대시보드 8개 쿼리 한 번에 5분 캐시 (`unstable_cache`)
+  - `getCurrentProfile()` — middleware 가 전파한 header 에서 읽기 → 페이지 렌더링 시 DB 조회 0
+  - `getCurrentProfileFromDb()` — Server Action 의 권한 검증용 (DB 직접 조회, 보안 우선)
+
+- **역할-메뉴 매핑** ([src/lib/roles.ts](src/lib/roles.ts))
+
+| 메뉴 | superadmin | admin | business | reporter |
+|---|:-:|:-:|:-:|:-:|
+| 대시보드 | ✅ | ✅ | ✅ | ✅ |
+| 이슈/미보도/트렌드/비교/기사/리포트/독자반응 | ✅ | ✅ | ❌ | ✅ |
+| 트래픽 / 구독자 | ✅ | ✅ | ✅ | ❌ |
+| /admin/users | ✅ | ❌ | ❌ | ❌ |
+
+**판단 사항 (30차)**:
+1. **`foreign_editorial` 신규 테이블 분리** — 해외 매체는 `media_company_id` FK 안 맞아서 별도 테이블 (28차 결정 그대로). profiles 도 같은 이유로 `auth.users` 와 1:1 분리 — Supabase Auth 표준.
+2. **`profiles.updated_at` + trigger 추가** — 계획서엔 없었으나 admin 회원관리에서 "최근 수정일" 추적용으로 추가.
+3. **도메인 검증은 Server Action 레벨만** — DB CHECK 안 둠. superadmin 수동 추가 시 우회 번거로움.
+4. **세션 쿠키 모드** — `maxAge`/`expires` 제거 → 브라우저 종료 시 자동 삭제. 비활동 4시간과 동시 적용.
+5. **last_activity 5분 throttle + RSC 요청 skip** — 매 요청마다 쿠키 set → Next.js RSC streaming 응답의 multipart 구조 깨짐 (`--<boundary>` 본문 노출). 갱신 빈도 줄여서 해결.
+6. **AppShell Server Component 전환** — 모든 페이지에서 profile prop 반복 전달 불필요. AppShellClient 분리해서 sidebar 토글 state 유지.
+7. **middleware → header 전파 → getCurrentProfile DB 조회 제거** — 페이지 렌더링 속도 향상. 보안 검증은 getCurrentProfileFromDb 로 분리.
+8. **getDashboardData 5분 통합 캐시** — 8개 쿼리 한 번에. cron-ranking 매시 + cron-publications 10분 주기에 맞춰 5분.
+9. **profile 미존재 사용자 강제 로그아웃** — 가입 도중 이탈 (Step 3 미완료) 방어. 같은 이메일 재가입 시 새 비번으로 정상 가입 가능.
+10. **본인 삭제 방지 코드 제거** — 사용자 요청. confirm 다이얼로그는 유지.
+11. **Resend 도메인 인증은 send 서브도메인 분리** — 메인 segye.com 자체 메일서버 SPF/MX 와 충돌 회피. Resend Custom Return-Path `send` 사용.
+12. **Email Template OTP 코드 방식** — Supabase 기본 매직 링크 → `{{ .Token }}` 6자리 코드로 변경. 우리 가입 폼이 OTP 입력 받는 구조라 매직 링크는 흐름 불일치.
+13. **Akamai + NCP Global DNS 양쪽 동기화** — Akamai 장애 시 NCP 비상 운영 대비. 양쪽 모두 동일 DNS 레코드 등록.
+
+---
+
+**미완료 (다음 세션 이어받을 것)**:
+- ⚠ **메인 메일서버에 segye.com 자체 SPF 정렬** — 외부 DNS 는 OK, 사내 메일서버는 `send.segye.com` SPF 못 봄 → 차단 모드. 사내 DNS 에도 send.segye.com 레코드 동기화 필요.
+- ⚠ **superadmin 1명 락아웃 방어** — 마지막 superadmin 이 본인 역할을 reporter 로 바꾸면 회원관리 페이지 영구 못 들어감. DB 직접 복구 필요. 운영상 superadmin 최소 2명 유지 권장.
+- (기존 미완료 항목 그대로)
+
+---
 
 ## 재개 지점 (2026-05-23, 29차 세션 종료)
 
@@ -253,11 +332,10 @@
 
 ## 다음 작업 로드맵
 
-- **(당장) 해외 사설 — M2: 구독 매체 Playwright 수집** — WaPo/NYT/FT/SCMP + Washington Times (Cloudflare). Playwright 환경 + 매체별 로그인 + 쿠키 캐시 + GitHub Secrets 6개 추가
+- **(당장) 해외 구독 매체 수집 — NCP 이전 후 재활성화** — GitHub Actions IP 차단으로 WaPo/NYT/FT/SCMP/wtimes 코드는 완성됐으나 운영 불가. NCP 수집서버 이전이 선행 조건.
 - **(당장) 사설 과거 데이터 백필** — 3월 남은 구간부터 역순으로 주 단위 실행
 - **(당장) 트래픽/기사 페이지 추가 성능 최적화** — Streaming SSR + Suspense / 클라이언트 캐시(SWR or React Query)
-- **(당장) Vercel 자동배포 webhook 안정화** — 대시보드 Git 연동 상태 + Ignored Build Step 확인
-- **(당장) 로그인 + 역할 기반 접근 제어** — 아래 상세 계획 참고
+- ~~**(당장) 로그인 + 역할 기반 접근 제어**~~ ✅ 30차 완료
 - **(미래) /traffic 인터랙티브 추가** — 매칭 기사 양방향 점프, 디바이스별 시간대 차트
 - **(미래) 편집회의 자동 일간 보고서** — 기존 데이터 + PV 통합한 매일 아침 보고서
 - **(미래) 미보도 탐지 + 클러스터 품질 개선** — 설계 완료. 상세: `documents/decisions.md`
@@ -273,7 +351,9 @@
 
 ---
 
-## 로그인 + 역할 기반 접근 제어 구현 계획 (30차 착수 예정)
+## 로그인 + 역할 기반 접근 제어 — 30차 완료 (참고)
+
+> 실제 구현 + 판단 사항은 위 "재개 지점 (30차 세션)" 섹션 참조. 이 섹션은 초기 계획 보존용.
 
 ### 역할 구조
 

@@ -24,8 +24,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="w-full max-w-md card">
-        <h1 className="text-2xl font-bold mb-2">Newsboard 로그인</h1>
-        <p className="text-sm text-muted mb-6">세계일보 사번 이메일로 로그인하세요.</p>
+        <h1 className="mb-6 text-2xl font-bold">Newsboard 로그인</h1>
 
         {error && (
           <div className="mb-4 rounded border border-error/40 bg-error/5 px-3 py-2 text-sm text-error">

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { signOutAction } from "@/app/login/actions";
 
 export default function SignupPendingPage() {
   return (
@@ -11,12 +11,14 @@ export default function SignupPendingPage() {
         <p className="mt-2 text-sm text-muted">
           승인은 보통 영업일 기준 1일 이내 처리됩니다.
         </p>
-        <Link
-          href="/login"
-          className="mt-6 inline-block rounded border border-border px-4 py-2 text-sm font-medium"
-        >
-          로그인 화면으로
-        </Link>
+        <form action={signOutAction} className="mt-6">
+          <button
+            type="submit"
+            className="rounded border border-border px-4 py-2 text-sm font-medium"
+          >
+            로그인 화면으로
+          </button>
+        </form>
       </div>
     </div>
   );

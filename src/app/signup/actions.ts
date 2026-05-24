@@ -65,18 +65,20 @@ export async function completeSignup(formData: FormData): Promise<ActionResult> 
     return { ok: false, error: "세션이 만료되었습니다. 처음부터 다시 시도해주세요." };
   }
 
-  const { error: pwError } = await supabase.auth.updateUser({ password });
-  if (pwError) return { ok: false, error: pwError.message };
-
-  // profiles INSERT (service role 사용 — RLS 우회)
+  // updateUser(비밀번호)와 profiles INSERT는 독립적 → 병렬 실행
   const admin = getSupabase();
-  const { error: profileError } = await admin.from("profiles").insert({
-    user_id: user.id,
-    email: user.email!,
-    name,
-    role,
-    approved: isAutoApproved(role),
-  });
+  const [{ error: pwError }, { error: profileError }] = await Promise.all([
+    supabase.auth.updateUser({ password }),
+    admin.from("profiles").insert({
+      user_id: user.id,
+      email: user.email!,
+      name,
+      role,
+      approved: isAutoApproved(role),
+    }),
+  ]);
+
+  if (pwError) return { ok: false, error: pwError.message };
 
   if (profileError) {
     // 이미 INSERT 된 경우 (재진입) 무시

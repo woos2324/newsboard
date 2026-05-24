@@ -14,14 +14,7 @@ import { SubscriberChart } from "@/components/dashboard/SubscriberChart";
 import { AISummaryCard } from "@/components/dashboard/AISummaryCard";
 import { TrendingKeywords } from "@/components/dashboard/TrendingKeywords";
 import {
-  getOverviewStats,
-  getIssues,
-  getRankingNews,
-  getMissedAlerts,
-  getOurSubscriberSeries,
-  getOurTopComments,
-  getLatestDailySummary,
-  getTrendingKeywords,
+  getDashboardData,
   getDailyCvHistory,
 } from "@/lib/queries";
 import { getCurrentProfile } from "@/lib/auth";
@@ -50,18 +43,11 @@ export default async function DashboardPage() {
   const profile = await getCurrentProfile();
   const role = (profile?.role ?? "reporter") as Role;
 
-  const [stats, issues, rankingNews, alerts, sub, topComments, aiSummary, trending, pvHistory] =
-    await Promise.all([
-      getOverviewStats(),
-      getIssues(4),
-      getRankingNews(),
-      getMissedAlerts("open", 5),
-      getOurSubscriberSeries(7),
-      getOurTopComments(4),
-      getLatestDailySummary(),
-      getTrendingKeywords(),
-      getDailyCvHistory(2),
-    ]);
+  const [dashboard, pvHistory] = await Promise.all([
+    getDashboardData(),
+    getDailyCvHistory(2),
+  ]);
+  const { stats, issues, rankingNews, alerts, sub, topComments, aiSummary, trending } = dashboard;
 
   const linkIfAllowed = (path: string) =>
     canAccessPath(role, path) ? path : undefined;

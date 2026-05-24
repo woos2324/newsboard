@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getCurrentProfile } from "@/lib/auth";
+import { getCurrentProfileFromDb } from "@/lib/auth";
 import { getSupabase } from "@/lib/supabase";
 import type { Role } from "@/lib/roles";
 
@@ -10,7 +10,7 @@ const VALID_ROLES: Role[] = ["superadmin", "admin", "business", "reporter"];
 type Result = { ok: true } | { ok: false; error: string };
 
 async function assertSuperadmin(): Promise<Result> {
-  const me = await getCurrentProfile();
+  const me = await getCurrentProfileFromDb();
   if (!me || me.role !== "superadmin") {
     return { ok: false, error: "권한이 없습니다." };
   }

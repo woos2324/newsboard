@@ -4,7 +4,6 @@ import { getSupabase } from "@/lib/supabase";
 import { canAccessPath, INACTIVITY_LIMIT_MS, isPublicPath, type Role } from "@/lib/roles";
 
 const LAST_ACTIVITY_COOKIE = "newsboard_last_activity";
-// 활동 시각 쿠키는 5분마다만 갱신 (매 요청마다 쓰면 RSC 응답 깨짐)
 const ACTIVITY_UPDATE_INTERVAL_MS = 5 * 60 * 1000;
 
 export async function middleware(request: NextRequest) {
@@ -18,7 +17,6 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // RSC prefetch / soft navigation 요청은 응답 본문을 가공하면 multipart 가 깨짐
   const isRSC =
     request.headers.has("rsc") || request.headers.has("next-router-state-tree");
 
@@ -57,7 +55,7 @@ export async function middleware(request: NextRequest) {
   const admin = getSupabase();
   const { data: profile } = await admin
     .from("profiles")
-    .select("role, approved")
+    .select("name, role, approved")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -83,11 +81,23 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // 활동 시각 갱신 — RSC 요청 제외 + 5분에 한 번만 (응답 본문 보호)
+  // profile 정보를 request header 로 전파 → AppShell/page 에서 재조회 없이 사용
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-user-id", user.id);
+  requestHeaders.set("x-user-email", user.email ?? "");
+  requestHeaders.set("x-user-name", encodeURIComponent(profile.name));
+  requestHeaders.set("x-user-role", profile.role);
+
+  const finalResponse = NextResponse.next({ request: { headers: requestHeaders } });
+  // Supabase 가 갱신한 auth 쿠키 보존
+  response.cookies.getAll().forEach((c) => {
+    finalResponse.cookies.set(c.name, c.value, c);
+  });
+
   const shouldUpdateActivity =
     !isRSC && (Number.isNaN(lastActivity) || now - lastActivity > ACTIVITY_UPDATE_INTERVAL_MS);
   if (shouldUpdateActivity) {
-    response.cookies.set(LAST_ACTIVITY_COOKIE, now.toString(), {
+    finalResponse.cookies.set(LAST_ACTIVITY_COOKIE, now.toString(), {
       httpOnly: true,
       sameSite: "lax",
       path: "/",
@@ -95,7 +105,7 @@ export async function middleware(request: NextRequest) {
     });
   }
 
-  return response;
+  return finalResponse;
 }
 
 export const config = {

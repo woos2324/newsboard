@@ -1868,3 +1868,24 @@ export const getTrafficPageData = unstable_cache(
   ["traffic-page-data"],
   { revalidate: 86400, tags: ["traffic"] }
 );
+
+// 대시보드 메인 페이지의 8개 쿼리를 한 번에 캐시 (5분)
+// cron-ranking 매시, cron-publications 10분 등 가장 짧은 주기에 맞춰 5분.
+export const getDashboardData = unstable_cache(
+  async () => {
+    const [stats, issues, rankingNews, alerts, sub, topComments, aiSummary, trending] =
+      await Promise.all([
+        getOverviewStats(),
+        getIssues(4),
+        getRankingNews(),
+        getMissedAlerts("open", 5),
+        getOurSubscriberSeries(7),
+        getOurTopComments(4),
+        getLatestDailySummary(),
+        getTrendingKeywords(),
+      ]);
+    return { stats, issues, rankingNews, alerts, sub, topComments, aiSummary, trending };
+  },
+  ["dashboard-data"],
+  { revalidate: 300, tags: ["dashboard"] }
+);

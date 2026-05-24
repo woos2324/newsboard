@@ -43,10 +43,12 @@ export async function middleware(request: NextRequest) {
     return redirectTo("/login");
   }
 
-  // 2) 로그인 사용자: /login, /signup 등 진입 시 → / 로
-  //    단 /signup/pending 은 미승인 사용자가 봐야 하므로 예외
+  // 2) 로그인 사용자가 /login 에 오면 → / 로
+  //    /signup 은 profile 없는 신규 가입자가 step3 를 완료해야 하므로 여기서 redirect 하지 않음
+  //    /signup/pending 은 미승인 사용자가 봐야 하므로 예외
   const isOnPendingPage = pathname === "/signup/pending";
-  if (isPublicPath(pathname) && !isOnPendingPage) {
+  const isOnSignupPage = pathname === "/signup" || pathname.startsWith("/signup/");
+  if (pathname === "/login") {
     return redirectTo("/");
   }
 
@@ -72,8 +74,16 @@ export async function middleware(request: NextRequest) {
     .maybeSingle();
 
   if (!profile) {
+    // profile 없는 로그인 사용자 = OTP 인증 후 가입 미완료 상태
+    // /signup 에서는 step3 완료를 허용, 그 외 경로는 /signup 으로 유도
+    if (isOnSignupPage && !isOnPendingPage) return response;
     await admin.auth.admin.signOut(user.id).catch(() => {});
     return redirectTo("/login");
+  }
+
+  // profile 있는 사용자가 /signup 에 오면 / 로
+  if (isOnSignupPage && !isOnPendingPage) {
+    return redirectTo("/");
   }
 
   if (!profile.approved) {

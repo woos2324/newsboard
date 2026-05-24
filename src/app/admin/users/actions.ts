@@ -57,11 +57,6 @@ export async function deleteUser(userId: string): Promise<Result> {
   const auth = await assertSuperadmin();
   if (!auth.ok) return auth;
 
-  const me = await getCurrentProfile();
-  if (me?.user_id === userId) {
-    return { ok: false, error: "본인 계정은 삭제할 수 없습니다." };
-  }
-
   const admin = getSupabase();
   // profiles 는 auth.users 의 ON DELETE CASCADE 로 자동 삭제됨
   const { error } = await admin.auth.admin.deleteUser(userId);

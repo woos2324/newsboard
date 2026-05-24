@@ -134,13 +134,24 @@
 11. **Resend 도메인 인증은 send 서브도메인 분리** — 메인 segye.com 자체 메일서버 SPF/MX 와 충돌 회피. Resend Custom Return-Path `send` 사용.
 12. **Email Template OTP 코드 방식** — Supabase 기본 매직 링크 → `{{ .Token }}` 6자리 코드로 변경. 우리 가입 폼이 OTP 입력 받는 구조라 매직 링크는 흐름 불일치.
 13. **Akamai + NCP Global DNS 양쪽 동기화** — Akamai 장애 시 NCP 비상 운영 대비. 양쪽 모두 동일 DNS 레코드 등록.
+14. **/signup/pending isPublicPath 예외 처리** — `PUBLIC_PATHS = ["/login", "/signup"]` 이라 `/signup/pending` 도 매칭됨. 그런데 미승인 로그인 사용자는 pending 페이지를 봐야 하므로, 로그인 사용자가 `isPublicPath` 매칭 시 `/`로 보내는 분기에서 pending 만 예외. 아니면 `/signup/pending` ↔ `/` 무한 루프.
+15. **middleware redirect 응답에 Supabase 쿠키 동행** — `copyCookies(target, source)` helper. supabase 가 token refresh 시 set 한 새 cookie 를 redirect 응답에 옮기지 않으면 다음 요청에 만료 토큰 → 비로그인 인식 → 또 redirect 루프 위험.
+16. **AppShell `redirect("/login")` 안전망 제거** — `/login` 페이지의 Link prefetch 가 AppShell 사용 페이지를 미리 가져오면서 header 없는 컨텍스트에서 `redirect("/login")` 호출 → 그 redirect digest 가 메인 `/login` 응답에 합쳐져 `/login` 자기 자신 무한 redirect (ERR_TOO_MANY_REDIRECTS). 인증 차단은 middleware 단일 책임으로 통합.
 
 ---
 
 **미완료 (다음 세션 이어받을 것)**:
+
+**(당장) signup/Email UI 다듬기**:
+- ⚠ `/signup` 페이지 — "단계 N/3" 안내 문구와 첫 입력 박스 사이 간격 좁힘
+- ⚠ `/signup` 페이지 Step 1 — "사번 이메일" 라벨 → "이메일" 로 변경
+- ⚠ `/signup` Step 3 — 비밀번호/비밀번호 확인 불일치 시 비밀번호 확인 input 아래에 빨간색 알림 표시 (현재는 폼 상단 통합 에러 메시지로만 표시 — `handleStep3` 의 `setError("비밀번호가 일치하지 않습니다.")`)
+- ⚠ Supabase Email Template 제목 — "Confirm Your Signup" → "newsboard 인증 번호입니다" (대시보드 Authentication → Emails → Templates → "Confirm signup" → Subject)
+
+**(미해결) 운영 이슈**:
 - ⚠ **메인 메일서버에 segye.com 자체 SPF 정렬** — 외부 DNS 는 OK, 사내 메일서버는 `send.segye.com` SPF 못 봄 → 차단 모드. 사내 DNS 에도 send.segye.com 레코드 동기화 필요.
 - ⚠ **superadmin 1명 락아웃 방어** — 마지막 superadmin 이 본인 역할을 reporter 로 바꾸면 회원관리 페이지 영구 못 들어감. DB 직접 복구 필요. 운영상 superadmin 최소 2명 유지 권장.
-- (기존 미완료 항목 그대로)
+- (기존 미완료 항목 그대로 — 해외 사설 NCP 이전 / 사설 백필 / 트래픽 페이지 추가 성능 최적화 등)
 
 ---
 

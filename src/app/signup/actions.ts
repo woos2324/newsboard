@@ -9,6 +9,7 @@ import {
   SIGNUP_ALLOWED_ROLES,
   type SignupRole,
 } from "@/lib/roles";
+import { getMissingPasswordRequirements } from "@/lib/password";
 
 type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -52,8 +53,12 @@ export async function completeSignup(formData: FormData): Promise<ActionResult> 
   if (!SIGNUP_ALLOWED_ROLES.includes(role)) {
     return { ok: false, error: "역할을 선택해주세요." };
   }
-  if (!password || password.length < 8) {
-    return { ok: false, error: "비밀번호는 8자 이상이어야 합니다." };
+  const missingPasswordRequirements = getMissingPasswordRequirements(password);
+  if (missingPasswordRequirements.length > 0) {
+    return {
+      ok: false,
+      error: `비밀번호 조건을 확인해주세요. 누락: ${missingPasswordRequirements.join(", ")}`,
+    };
   }
 
   const supabase = await getSupabaseServer();

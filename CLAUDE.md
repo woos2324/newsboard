@@ -77,6 +77,76 @@
 - Email Template "Confirm signup" → `{{ .Token }}` 으로 OTP 6자리 발송 (10분 만료)
 - 비밀번호 정책: 8자 이상, 대소문자 + 숫자 + 특수문자
 
+## 재개 지점 (2026-05-26, 32차 세션 종료)
+
+**이번 세션 (32차) 완료** — 인증 UI/UX 개선 + 보안 강화:
+
+- **사업부 → 트래픽 메인 redirect** ([src/app/(auth)/login/actions.ts](src/app/(auth)/login/actions.ts), [src/middleware.ts](src/middleware.ts))
+  - 로그인 성공 시 business 역할 → `/traffic` redirect (기존: `/`)
+  - 미들웨어: business 역할이 `/`에 오면 `/traffic` redirect
+  - Sidebar: business 역할 대시보드 메뉴 숨김
+
+- **브라우저 푸시 알림** (신규 가입 신청 시 superadmin 알림)
+  - `src/lib/push.ts` — web-push 서버 유틸, superadmin 구독자 전체 발송
+  - `public/sw.js` — Service Worker (백그라운드 수신 + 클릭 시 /admin/users)
+  - `src/app/api/push/subscribe/route.ts` — 구독 등록/해제 API
+  - Topbar 벨 아이콘 — superadmin 전용, 구독 상태 점 표시 (녹색/빨강/회색)
+  - business + admin 가입 시 모두 푸시 발송
+  - VAPID 환경변수: `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`
+  - DB: `push_subscription` 테이블 (Supabase MCP로 직접 생성)
+
+- **회원가입 역할 옵션 추가** ([src/app/(auth)/signup/page.tsx](src/app/(auth)/signup/page.tsx))
+  - 기자·사업부만 → 관리자·기자·사업부 순서로 변경
+  - 기본 선택값: 관리자
+
+- **중복 가입 차단** ([src/app/(auth)/signup/actions.ts](src/app/(auth)/signup/actions.ts))
+  - OTP 발송 전 profiles 테이블 이메일 존재 여부 확인
+  - 미승인 상태면 `/signup/pending` redirect, 승인 완료면 "이미 가입된 이메일" 에러
+
+- **비밀번호 찾기 기능** ([src/app/(auth)/reset-password/](src/app/(auth)/reset-password/))
+  - 3단계 UI: 이메일 → OTP 인증 → 새 비밀번호 설정
+  - 미가입 이메일: "가입되지 않은 이메일" 에러 + 회원가입 링크
+  - 미승인 이메일: `/signup/pending` redirect
+  - OTP 속도 제한 에러 한국어화 ("요청이 너무 잦습니다. N초 후 다시 시도해주세요.")
+  - 변경 완료 후 전체 기기 세션 전역 무효화 (global signOut) → `/login` redirect
+  - 로그인 상태에서 접근 시 `/`로 redirect (미들웨어)
+
+- **로그인 페이지** — "비밀번호 찾기" 링크 추가 (가입하기 옆)
+
+- **공개 페이지 대시보드 레이아웃 노출 수정** ([src/app/loading.tsx](src/app/loading.tsx))
+  - 로그아웃 후 `/signup`, `/reset-password` 이동 시 AppShell 스켈레톤이 배경에 보이는 버그
+  - 원인: 루트 `loading.tsx`가 Suspense fallback으로 모든 경로에 적용
+  - 해결: `(auth)` 라우트 그룹으로 분리 → `(auth)/loading.tsx` null 반환, 루트 `loading.tsx` 복원
+
+- **파일 구조 변경** — 인증 관련 페이지 `(auth)` 라우트 그룹으로 이동
+  - `src/app/login/` → `src/app/(auth)/login/`
+  - `src/app/signup/` → `src/app/(auth)/signup/`
+  - `src/app/reset-password/` → `src/app/(auth)/reset-password/`
+
+- **pending 페이지 문구 수정** — "사업부 계정은 관리자 승인 후 접근 가능합니다." → "승인 후 접근 가능합니다."
+
+**판단 사항 (32차)**:
+1. **business redirect 미들웨어 + 로그인 액션 양쪽 적용** — 로그인 직후(액션)와 `/` 직접 접근(미들웨어) 두 경로 모두 처리.
+2. **푸시 알림은 superadmin 전용 UI** — 팀원(superadmin)이 각자 브라우저에서 허용해야 수신. 구독 상태는 브라우저/기기별 독립.
+3. **비밀번호 찾기 OTP = signInWithOtp + shouldCreateUser:false** — 미가입자가 OTP로 신규 계정 생성하는 것을 방지.
+4. **(auth) 라우트 그룹 분리** — URL은 변경 없음, loading.tsx 스코프만 분리.
+
+---
+
+**미완료 (다음 세션 이어받을 것)**:
+
+**(당장) signup/Email UI 다듬기**:
+- ⚠ `/signup` 페이지 — "단계 N/3" 안내 문구와 첫 입력 박스 사이 간격 좁힘
+- ⚠ `/signup` 페이지 Step 1 — "사번 이메일" 라벨 → "이메일" 로 변경
+- ⚠ `/signup` Step 3 — 비밀번호/비밀번호 확인 불일치 시 비밀번호 확인 input 아래에 빨간색 알림 표시
+- ⚠ Supabase Email Template 제목 — "Confirm Your Signup" → "newsboard 인증 번호입니다"
+
+**(미해결) 운영 이슈**:
+- ⚠ **메인 메일서버에 segye.com 자체 SPF 정렬** — 사내 DNS에도 send.segye.com 레코드 동기화 필요
+- ⚠ **superadmin 1명 락아웃 방어** — 운영상 superadmin 최소 2명 유지 권장
+
+---
+
 ## 재개 지점 (2026-05-25, 31차 세션 종료)
 
 **이번 세션 (31차) 완료** — 인증 버그 수정 + 보안 패치:
@@ -186,6 +256,9 @@
 - ⚠ `/signup` Step 3 — 비밀번호/비밀번호 확인 불일치 시 비밀번호 확인 input 아래에 빨간색 알림 표시 (현재는 폼 상단 통합 에러 메시지로만 표시 — `handleStep3` 의 `setError("비밀번호가 일치하지 않습니다.")`)
 - ⚠ Supabase Email Template 제목 — "Confirm Your Signup" → "newsboard 인증 번호입니다" (대시보드 Authentication → Emails → Templates → "Confirm signup" → Subject)
 - ~~**가입 완료 직후 client-side exception**~~ ✅ 완료 (31차) — middleware redirect 루프 수정으로 해결
+- ~~**비밀번호 찾기 기능**~~ ✅ 완료 (32차)
+- ~~**회원가입 관리자 역할 추가**~~ ✅ 완료 (32차)
+- ~~**중복 가입 차단**~~ ✅ 완료 (32차)
 
 **(미해결) 운영 이슈**:
 - ⚠ **메인 메일서버에 segye.com 자체 SPF 정렬** — 외부 DNS 는 OK, 사내 메일서버는 `send.segye.com` SPF 못 봄 → 차단 모드. 사내 DNS 에도 send.segye.com 레코드 동기화 필요.

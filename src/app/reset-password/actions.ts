@@ -33,7 +33,13 @@ export async function requestResetOtp(formData: FormData): Promise<ActionResult>
     options: { shouldCreateUser: false },
   });
 
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    if (error.message.includes("you can only request this after")) {
+      const seconds = error.message.match(/(\d+) seconds/)?.[1];
+      return { ok: false, error: `요청이 너무 잦습니다. ${seconds ? `${seconds}초` : "잠시"} 후 다시 시도해주세요.` };
+    }
+    return { ok: false, error: error.message };
+  }
   return { ok: true };
 }
 

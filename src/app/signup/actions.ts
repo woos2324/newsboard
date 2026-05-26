@@ -22,6 +22,17 @@ export async function requestSignupOtp(formData: FormData): Promise<ActionResult
     return { ok: false, error: `@${ALLOWED_EMAIL_DOMAIN} 이메일만 가입 가능합니다.` };
   }
 
+  const admin = getSupabase();
+  const { data: existing } = await admin
+    .from("profiles")
+    .select("user_id")
+    .eq("email", email)
+    .maybeSingle();
+
+  if (existing) {
+    return { ok: false, error: "이미 가입된 이메일입니다. 로그인 페이지를 이용해주세요." };
+  }
+
   const supabase = await getSupabaseServer();
   const { error } = await supabase.auth.signInWithOtp({
     email,

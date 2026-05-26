@@ -73,6 +73,10 @@ export default function LoginPage() {
           <Link href="/signup" className="font-medium text-primary-500">
             가입하기
           </Link>
+          {" · "}
+          <Link href="/reset-password" className="font-medium text-primary-500">
+            비밀번호 찾기
+          </Link>
         </p>
       </div>
     </div>

@@ -18,7 +18,7 @@ export function isAllowedEmail(email: string): boolean {
 export const INACTIVITY_LIMIT_MS = 4 * 60 * 60 * 1000;
 
 // 비로그인 사용자도 접근 가능한 경로 (prefix 매칭)
-const PUBLIC_PATHS = ["/login", "/signup"];
+const PUBLIC_PATHS = ["/login", "/signup", "/reset-password"];
 
 // 트래픽·구독자 메뉴 (사업부 전용, 기자 차단)
 const BUSINESS_ONLY_PATHS = ["/traffic", "/analytics/subscribers"];

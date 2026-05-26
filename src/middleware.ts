@@ -48,7 +48,8 @@ export async function middleware(request: NextRequest) {
   //    /signup/pending 은 미승인 사용자가 봐야 하므로 예외
   const isOnPendingPage = pathname === "/signup/pending";
   const isOnSignupPage = pathname === "/signup" || pathname.startsWith("/signup/");
-  if (pathname === "/login") {
+  // 로그인 사용자가 공개 전용 페이지에 오면 → / 로
+  if (pathname === "/login" || pathname === "/reset-password") {
     return redirectTo("/");
   }
 

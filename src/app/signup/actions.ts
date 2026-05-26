@@ -93,8 +93,8 @@ export async function completeSignup(formData: FormData): Promise<ActionResult> 
     }
   }
 
-  // business 가입 시 superadmin에게 push 알림 발송 (승인 필요)
-  if (role === "business") {
+  // business/admin 가입 시 superadmin에게 push 알림 발송 (승인 필요)
+  if (role === "business" || role === "admin") {
     notifySuperadmins({
       title: "새 가입 신청",
       body: `${name}님이 사업부 권한으로 가입을 신청했습니다. 승인이 필요합니다.`,

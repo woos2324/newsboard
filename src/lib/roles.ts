@@ -1,6 +1,6 @@
 export type Role = "superadmin" | "admin" | "business" | "reporter";
 
-export const SIGNUP_ALLOWED_ROLES = ["reporter", "business"] as const;
+export const SIGNUP_ALLOWED_ROLES = ["admin", "reporter", "business"] as const;
 export type SignupRole = (typeof SIGNUP_ALLOWED_ROLES)[number];
 
 export const ALLOWED_EMAIL_DOMAIN = "segye.com";

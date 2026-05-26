@@ -19,7 +19,7 @@ export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [token, setToken] = useState("");
   const [name, setName] = useState("");
-  const [role, setRole] = useState<SignupRole>("reporter");
+  const [role, setRole] = useState<SignupRole>("admin");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -238,6 +238,22 @@ export default function SignupPage() {
             <fieldset>
               <legend className="text-sm font-medium">역할</legend>
               <div className="mt-2 space-y-2">
+                <label className="flex cursor-pointer items-start gap-2 rounded border border-border p-3">
+                  <input
+                    type="radio"
+                    name="role"
+                    value="admin"
+                    checked={role === "admin"}
+                    onChange={() => setRole("admin")}
+                    className="mt-1"
+                  />
+                  <div className="text-sm">
+                    <div className="font-medium">관리자</div>
+                    <div className="text-xs text-muted">
+                      전체 메뉴 접근 (가입 후 관리자 승인 필요)
+                    </div>
+                  </div>
+                </label>
                 <label className="flex cursor-pointer items-start gap-2 rounded border border-border p-3">
                   <input
                     type="radio"

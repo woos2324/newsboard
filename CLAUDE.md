@@ -2,6 +2,10 @@
 
 뉴스 조직 내부용 AI 미디어 모니터링 및 인사이트 대시보드 프로젝트.
 
+## 협업 규칙 (필수)
+
+- **사용자가 "이해했어?" 라고 물으면**: 이해했는지 여부만 대답한다. 코드 수정·파일 변경·배포 등 어떤 작업도 즉시 실행하지 않는다. 사용자가 확인 후 명시적으로 진행 지시를 내릴 때까지 대기한다.
+
 상세 기획/설계 문서: [documents/](documents/) (PRD / IA / Use Case / ERD / Design)
 판단 사항 아카이브: [documents/decisions.md](documents/decisions.md)
 완료 작업 히스토리: [documents/history.md](documents/history.md)

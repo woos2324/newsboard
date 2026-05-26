@@ -43,7 +43,10 @@ type SidebarProps = {
 export function Sidebar({ profile, isOpen = false, onClose }: SidebarProps) {
   const pathname = usePathname();
   const role = profile.role as Role;
-  const visible = nav.filter((item) => canAccessPath(role, item.href));
+  const visible = nav.filter((item) => {
+    if (item.href === "/" && role === "business") return false;
+    return canAccessPath(role, item.href);
+  });
 
   return (
     <aside

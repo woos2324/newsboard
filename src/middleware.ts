@@ -95,6 +95,9 @@ export async function middleware(request: NextRequest) {
   } else if (!canAccessPath(profile.role as Role, pathname)) {
     // 역할이 허용하지 않는 경로
     return redirectTo("/");
+  } else if (profile.role === "business" && pathname === "/") {
+    // 사업부: 대시보드(/) 대신 트래픽 분석을 메인으로
+    return redirectTo("/traffic");
   }
 
   // 5) header 로 profile 전파 + 활동 시각 갱신

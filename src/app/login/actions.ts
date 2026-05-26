@@ -39,7 +39,7 @@ export async function loginWithPassword(formData: FormData): Promise<ActionResul
     redirect("/signup/pending");
   }
 
-  redirect("/");
+  redirect(profile.role === "business" ? "/traffic" : "/");
 }
 
 export async function signOutAction() {

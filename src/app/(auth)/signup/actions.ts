@@ -1,5 +1,6 @@
 "use server";
 
+import { redirect } from "next/navigation";
 import { getSupabaseServer } from "@/lib/supabase-server";
 import { getSupabase } from "@/lib/supabase";
 import {
@@ -25,11 +26,12 @@ export async function requestSignupOtp(formData: FormData): Promise<ActionResult
   const admin = getSupabase();
   const { data: existing } = await admin
     .from("profiles")
-    .select("user_id")
+    .select("user_id, approved")
     .eq("email", email)
     .maybeSingle();
 
   if (existing) {
+    if (!existing.approved) redirect("/signup/pending");
     return { ok: false, error: "이미 가입된 이메일입니다. 로그인 페이지를 이용해주세요." };
   }
 

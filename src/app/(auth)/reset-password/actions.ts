@@ -19,13 +19,14 @@ export async function requestResetOtp(formData: FormData): Promise<ActionResult>
   const admin = getSupabase();
   const { data: existing } = await admin
     .from("profiles")
-    .select("user_id")
+    .select("user_id, approved")
     .eq("email", email)
     .maybeSingle();
 
   if (!existing) {
     return { ok: false, error: "가입되지 않은 이메일입니다." };
   }
+  if (!existing.approved) redirect("/signup/pending");
 
   const supabase = await getSupabaseServer();
   const { error } = await supabase.auth.signInWithOtp({

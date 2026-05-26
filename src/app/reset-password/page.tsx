@@ -78,6 +78,13 @@ export default function ResetPasswordPage() {
         {error && (
           <div className="mb-4 rounded border border-error/40 bg-error/5 px-3 py-2 text-sm text-error">
             {error}
+            {error === "가입되지 않은 이메일입니다." && (
+              <div className="mt-1">
+                <Link href="/signup" className="font-medium underline">
+                  회원가입 하러 가기
+                </Link>
+              </div>
+            )}
           </div>
         )}
 

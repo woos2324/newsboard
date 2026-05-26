@@ -816,6 +816,33 @@ export type Database = {
         }
         Relationships: []
       }
+      push_subscription: {
+        Row: {
+          auth: string
+          created_at: string | null
+          endpoint: string
+          id: number
+          p256dh: string
+          user_id: string
+        }
+        Insert: {
+          auth: string
+          created_at?: string | null
+          endpoint: string
+          id?: number
+          p256dh: string
+          user_id: string
+        }
+        Update: {
+          auth?: string
+          created_at?: string | null
+          endpoint?: string
+          id?: number
+          p256dh?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       ranking_news_item: {
         Row: {
           article_id: number

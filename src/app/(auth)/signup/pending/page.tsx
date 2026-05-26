@@ -1,4 +1,4 @@
-import { signOutAction } from "@/app/login/actions";
+import { signOutAction } from "@/app/(auth)/login/actions";
 
 export default function SignupPendingPage() {
   return (

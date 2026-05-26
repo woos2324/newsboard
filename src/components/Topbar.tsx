@@ -2,7 +2,7 @@
 
 import { Bell, Calendar, ChevronDown, LogOut, Menu } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { signOutAction } from "@/app/login/actions";
+import { signOutAction } from "@/app/(auth)/login/actions";
 import type { CurrentProfile } from "@/lib/auth";
 import type { Role } from "@/lib/roles";
 

@@ -31,12 +31,27 @@ export async function notifySuperadmins(payload: {
 
   if (!subs?.length) return;
 
-  await Promise.allSettled(
+  const results = await Promise.allSettled(
     subs.map((sub) =>
       webpush.sendNotification(
         { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-        JSON.stringify(payload)
+        JSON.stringify(payload),
+        { urgency: "high" }
       )
     )
   );
+
+  // 만료된 구독(410/404) 자동 삭제
+  const staleEndpoints = subs
+    .filter((_, i) => {
+      const r = results[i];
+      if (r.status !== "rejected") return false;
+      const status = (r.reason as { statusCode?: number })?.statusCode;
+      return status === 410 || status === 404;
+    })
+    .map((s) => s.endpoint);
+
+  if (staleEndpoints.length > 0) {
+    await admin.from("push_subscription").delete().in("endpoint", staleEndpoints);
+  }
 }

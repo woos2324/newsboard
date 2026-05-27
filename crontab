@@ -1,0 +1,43 @@
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# ranking — 매시 7분 UTC
+7 * * * * root cd /app && python -m scripts.collect_ranking >> /var/log/cron.log 2>&1
+
+# publications — 10분마다
+2,12,22,32,42,52 * * * * root cd /app && python -m scripts.collect_publications >> /var/log/cron.log 2>&1
+
+# trends — 10분마다
+*/10 * * * * root cd /app && python -m scripts.collect_trends >> /var/log/cron.log 2>&1
+
+# comments — 매시 15분 UTC
+15 * * * * root cd /app && python -m scripts.collect_comments >> /var/log/cron.log 2>&1
+
+# cluster — UTC 0:30/6:30/12:30/18:30
+30 0,6,12,18 * * * root cd /app && python -m scripts.cluster_articles --hours 7 --threshold 0.85 --min-size 2 >> /var/log/cron.log 2>&1
+
+# gap — UTC 1:00/7:00/13:00/19:00
+0 1,7,13,19 * * * root cd /app && python -m scripts.detect_gap --days 1 --min-competitors 2 >> /var/log/cron.log 2>&1
+
+# section-ranking — UTC 2:00/8:00/14:00/20:00
+0 2,8,14,20 * * * root cd /app && python -m scripts.collect_section_ranking >> /var/log/cron.log 2>&1
+
+# editorials — KST 06:00/14:00/22:00 = UTC 21:00/05:00/13:00
+0 21 * * * root cd /app && python -m scripts.collect_editorials >> /var/log/cron.log 2>&1
+0 5 * * * root cd /app && python -m scripts.collect_editorials >> /var/log/cron.log 2>&1
+0 13 * * * root cd /app && python -m scripts.collect_editorials >> /var/log/cron.log 2>&1
+
+# daily-briefing — UTC 15:00 (KST 00:00)
+0 15 * * * root cd /app && python -m scripts.generate_daily_briefing >> /var/log/cron.log 2>&1
+
+# cleanup — UTC 15:05
+5 15 * * * root cd /app && python -m scripts.cleanup_old_data >> /var/log/cron.log 2>&1
+
+# naver-pv — UTC 16:00 (KST 01:00)
+0 16 * * * root cd /app && python -m scripts.collect_naver_pv >> /var/log/cron.log 2>&1
+
+# subscribers — UTC 23:00 (KST 08:00)
+0 23 * * * root cd /app && python -m scripts.collect_subscribers >> /var/log/cron.log 2>&1
+
+# foreign-editorials — UTC 22:00 (KST 07:00)
+0 22 * * * root cd /app && python -m scripts.collect_foreign_editorials --all >> /var/log/cron.log 2>&1

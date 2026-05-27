@@ -1,0 +1,6 @@
+* text=auto
+
+entrypoint.sh text eol=lf
+crontab text eol=lf
+Dockerfile text eol=lf
+*.sh text eol=lf

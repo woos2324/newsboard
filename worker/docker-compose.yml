@@ -1,0 +1,5 @@
+services:
+  worker:
+    image: ghcr.io/woos2324/newsboard-worker:latest
+    env_file: .env
+    restart: unless-stopped

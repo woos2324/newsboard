@@ -63,11 +63,17 @@ async def _dispatch(source_code: str, limit: int, supabase=None) -> list[Foreign
 
 
 def _to_edition_date(published_at: Optional[str]) -> Optional[str]:
-    """ISO8601 → YYYY-MM-DD (현지 시각 기준)."""
+    """ISO8601 → YYYY-MM-DD (현지 시각 기준).
+    Python 3.10 fromisoformat은 +HHMM(콜론 없는 오프셋)을 미지원 — 정규화 처리.
+    """
     if not published_at:
         return None
     try:
-        dt = datetime.fromisoformat(published_at.replace("Z", "+00:00"))
+        # +0900 → +09:00 변환 (Python 3.10 호환)
+        import re as _re
+        s = published_at.replace("Z", "+00:00")
+        s = _re.sub(r"([+-])(\d{2})(\d{2})$", r"\1\2:\3", s)
+        dt = datetime.fromisoformat(s)
         return dt.strftime("%Y-%m-%d")
     except Exception:
         return None

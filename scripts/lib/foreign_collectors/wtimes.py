@@ -72,7 +72,7 @@ def _parse_rss(xml_text: str) -> list[dict]:
 def _parse_article(html: str) -> Optional[str]:
     """본문 페이지에서 기사 body 추출."""
     soup = BeautifulSoup(html, "html.parser")
-    for sel in ["div.article-content", "div.story-body", "div.bodytext", "div.entry-content", "article"]:
+    for sel in ["div.bigtext", "div.article-text", "div.article-content", "div.story-body", "div.bodytext", "div.entry-content", "article"]:
         el = soup.select_one(sel)
         if not el:
             continue

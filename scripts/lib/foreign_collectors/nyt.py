@@ -10,7 +10,6 @@ import re
 import sys
 from typing import Optional
 
-import httpx
 from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright
 
@@ -109,75 +108,55 @@ async def _get_index(ctx) -> list[dict]:
         await page.close()
 
 
-async def _get_article_httpx(url: str, cookie_header: str) -> Optional[dict]:
-    """NYT는 Next.js SSR — httpx로 직접 가져오면 초기 HTML에 본문 포함."""
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-        ),
-        "Cookie": cookie_header,
-        "Accept": "text/html,application/xhtml+xml,*/*;q=0.9",
-        "Accept-Language": "en-US,en;q=0.9",
-    }
+async def _get_article(ctx, url: str) -> Optional[dict]:
+    """Playwright 페이지로 기사 본문 수집 (httpx는 NCP IP에서도 403 차단됨)."""
+    page = await new_stealth_page(ctx)
     try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
-            resp = await client.get(url, headers=headers)
-            print(f"  [nyt] httpx status={resp.status_code} url={url[:60]}")
-            if resp.status_code != 200:
-                return None
-            html = resp.text
-    except Exception as e:
-        print(f"  [nyt] httpx 오류 {url[:60]}: {e}", file=sys.stderr)
-        return None
+        await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+        await page.wait_for_timeout(2_000)
 
-    pw_hit = any(kw in html.lower() for kw in _PAYWALL_KW)
-    print(f"  [nyt] paywall={pw_hit} html_len={len(html)}")
-    if pw_hit:
-        return None
+        html = await page.content()
+        pw_hit = any(kw in html.lower() for kw in _PAYWALL_KW)
+        print(f"  [nyt] playwright status url={url[:60]} paywall={pw_hit}")
+        if pw_hit:
+            return None
 
-    soup = BeautifulSoup(html, "html.parser")
+        soup = BeautifulSoup(html, "html.parser")
 
-    # 제목
-    title = None
-    og = soup.find("meta", attrs={"property": "og:title"})
-    if og:
-        title = og.get("content", "").strip()
-    if not title:
-        h1 = soup.find("h1")
-        if h1:
-            title = h1.get_text(strip=True)
+        # 제목
+        title = None
+        og = soup.find("meta", attrs={"property": "og:title"})
+        if og:
+            title = og.get("content", "").strip()
+        if not title:
+            h1 = soup.find("h1")
+            if h1:
+                title = h1.get_text(strip=True)
 
-    # 발행 시각
-    pub = None
-    for prop in ["article:published_time", "og:article:published_time"]:
-        m = soup.find("meta", attrs={"property": prop})
-        if m and m.get("content"):
-            pub = m["content"].strip()
-            break
-
-    # 본문
-    body = None
-    for sel in ['section[name="articleBody"]', "article"]:
-        el = soup.select_one(sel)
-        if el:
-            paras = [p.get_text(strip=True) for p in el.find_all("p") if len(p.get_text(strip=True)) > 20]
-            if len(paras) >= 3:
-                body = "\n".join(paras)[:8000]
+        # 발행 시각
+        pub = None
+        for prop in ["article:published_time", "og:article:published_time"]:
+            m = soup.find("meta", attrs={"property": prop})
+            if m and m.get("content"):
+                pub = m["content"].strip()
                 break
 
-    return {"title": title, "body": body, "published_at": pub}
+        # 본문
+        body = None
+        for sel in ['section[name="articleBody"]', "article"]:
+            el = soup.select_one(sel)
+            if el:
+                paras = [p.get_text(strip=True) for p in el.find_all("p") if len(p.get_text(strip=True)) > 20]
+                if len(paras) >= 3:
+                    body = "\n".join(paras)[:8000]
+                    break
 
-
-async def _get_article(ctx, url: str) -> Optional[dict]:
-    # 컨텍스트의 쿠키를 Cookie 헤더로 변환해 httpx로 직접 fetch
-    try:
-        all_cookies = await ctx.cookies()
-        cookie_header = "; ".join(f"{c['name']}={c['value']}" for c in all_cookies)
-        return await _get_article_httpx(url, cookie_header)
+        return {"title": title, "body": body, "published_at": pub}
     except Exception as e:
         print(f"  [nyt] 기사 오류 {url[:60]}: {e}", file=sys.stderr)
         return None
+    finally:
+        await page.close()
 
 
 async def collect(limit: int = 10, supabase=None) -> list[ForeignEditorialItem]:

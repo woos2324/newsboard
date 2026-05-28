@@ -23,6 +23,24 @@ _ARTICLE_RE = re.compile(r"ft\.com/content/[0-9a-f-]{30,}")
 _PAYWALL_KW = ["subscribe to read", "try the financial times", "become an ft subscriber"]
 
 
+async def _dismiss_consent(page) -> None:
+    """FT GDPR 동의 팝업(SourcePoint) — JS로 컨테이너 제거."""
+    try:
+        removed = await page.evaluate("""
+            () => {
+                const sel = '[id^="sp_message_container"], #sp_message_container_1482151';
+                const el = document.querySelector(sel);
+                if (el) { el.remove(); return true; }
+                return false;
+            }
+        """)
+        if removed:
+            await page.wait_for_timeout(500)
+            print("  [ft] 동의 팝업 제거 완료 (JS)")
+    except Exception:
+        pass
+
+
 async def _login(ctx, email: str, password: str) -> bool:
     page = await new_stealth_page(ctx)
     try:
@@ -30,6 +48,9 @@ async def _login(ctx, email: str, password: str) -> bool:
         await page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=40_000)
         await page.wait_for_timeout(3_000)
         print(f"  [ft] 로그인 페이지: {await page.title()} | {page.url[:60]}")
+
+        # GDPR 동의 팝업이 있으면 먼저 닫기
+        await _dismiss_consent(page)
 
         email_sel = 'input[id="email"], input[name="email"], input[type="email"]'
         await page.wait_for_selector(email_sel, timeout=15_000)
@@ -40,12 +61,14 @@ async def _login(ctx, email: str, password: str) -> bool:
         _btn_sel = 'button[type="submit"], input[type="submit"], button.o-buttons--primary, button:has-text("Sign"), button:has-text("Continue")'
         if not pw_visible:
             await page.click(_btn_sel)
-            await page.wait_for_load_state("networkidle", timeout=15_000)
+            await page.wait_for_load_state("load", timeout=15_000)
+            await _dismiss_consent(page)
 
         await page.wait_for_selector('input[type="password"]', timeout=10_000)
         await page.fill('input[type="password"]', password)
+        await _dismiss_consent(page)  # submit 전 팝업 재확인
         await page.click(_btn_sel)
-        await page.wait_for_load_state("networkidle", timeout=20_000)
+        await page.wait_for_load_state("load", timeout=20_000)
 
         url = page.url
         ok = "accounts.ft.com" not in url

@@ -1,189 +1,151 @@
-"""워싱턴포스트 사설 수집기 (Playwright, 구독 계정).
+"""워싱턴포스트 사설 수집기 (httpx, RSS + __NEXT_DATA__).
 
-환경변수: WAPO_ID (이메일), WAPO_PW (비밀번호)
-쿠키 캐시: foreign_session 테이블 (TTL 14일)
+Playwright는 www.washingtonpost.com HTTP/2 차단으로 불가 — httpx로 대체.
+인덱스: feeds.washingtonpost.com/rss/opinions (Cloudflare 우회)
+본문:   washingtonpost.com 기사 페이지 __NEXT_DATA__ JSON (구독 쿠키 필요)
+쿠키 캐시: foreign_session 테이블 (TTL 30일, --seed-cookies wapo 로 갱신)
 """
 from __future__ import annotations
 
-import os
+import asyncio
+import json
 import re
 import sys
+import xml.etree.ElementTree as ET
 from typing import Optional
 
-from playwright.async_api import async_playwright
+import httpx
+from email.utils import parsedate_to_datetime
 
 from scripts.lib.foreign_collectors.base import ForeignEditorialItem
-from scripts.lib.foreign_collectors.playwright_base import (
-    extract_body, load_cookies, make_context, new_stealth_page, save_cookies,
-)
+from scripts.lib.foreign_collectors.playwright_base import load_cookies
 
-INDEX_URL = "https://www.washingtonpost.com/opinions/editorials/"
-LOGIN_URL = "https://account.washingtonpost.com/login"
-_ARTICLE_RE = re.compile(r"washingtonpost\.com/opinions/\d{4}/\d{2}/\d{2}/")
+RSS_URL = "https://feeds.washingtonpost.com/rss/opinions"
 _PAYWALL_KW = ["subscribe to continue", "sign in to read", "get unlimited access"]
 
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,*/*;q=0.9",
+    "Accept-Language": "en-US,en;q=0.9",
+}
 
-async def _login(ctx, email: str, password: str) -> bool:
-    """메인 사이트에서 로그인 모달을 통해 로그인 (account.washingtonpost.com 직접 접근 차단 우회)."""
-    page = await new_stealth_page(ctx)
+
+def _parse_rss(xml_text: str) -> list[dict]:
+    items = []
+    seen: set[str] = set()
     try:
-        print(f"  [wapo] 로그인 시도 (메인 사이트 경유)")
-        await page.goto("https://www.washingtonpost.com/", wait_until="domcontentloaded", timeout=40_000)
-        await page.wait_for_timeout(2_000)
-
-        # 헤더의 Sign In 버튼 클릭
-        signin_sel = '[data-qa="sign-in-button"], a[href*="signin"], button:has-text("Sign In"), a:has-text("Sign In")'
-        await page.wait_for_selector(signin_sel, timeout=10_000)
-        await page.click(signin_sel)
-        await page.wait_for_timeout(2_000)
-
-        # 이메일 입력
-        email_sel = 'input[name="username"], input[name="email"], input[type="email"]'
-        await page.wait_for_selector(email_sel, timeout=15_000)
-        await page.fill(email_sel, email)
-
-        pw_visible = await page.is_visible('input[type="password"]', timeout=2_000)
-        if not pw_visible:
-            await page.click('button[type="submit"]')
-            await page.wait_for_load_state("networkidle", timeout=15_000)
-
-        await page.wait_for_selector('input[type="password"]', timeout=10_000)
-        await page.fill('input[type="password"]', password)
-        await page.click('button[type="submit"]')
-        await page.wait_for_load_state("networkidle", timeout=20_000)
-
-        url = page.url
-        ok = "login" not in url.lower() and "signin" not in url.lower()
-        print(f"  [wapo] 로그인 {'성공' if ok else '실패'} → {url[:80]}")
-        return ok
-    except Exception as e:
-        print(f"  [wapo] 로그인 오류: {e}", file=sys.stderr)
-        return False
-    finally:
-        await page.close()
-
-
-async def _get_index(ctx) -> list[dict]:
-    page = await new_stealth_page(ctx)
-    try:
-        await page.goto(INDEX_URL, wait_until="domcontentloaded", timeout=30_000)
-        await page.wait_for_timeout(2_000)
-        links = await page.eval_on_selector_all(
-            "a[href]",
-            "els => els.map(e => ({href: e.href, text: e.innerText.trim()}))",
-        )
-        seen: set[str] = set()
-        items = []
-        for lnk in links:
-            href = lnk.get("href", "")
-            text = lnk.get("text", "").strip()
-            if not _ARTICLE_RE.search(href):
-                continue
-            if not text or len(text) < 8:
-                continue
-            if href in seen:
-                continue
-            seen.add(href)
-            items.append({"url": href, "title_original": text})
-        print(f"  [wapo] 인덱스 {len(items)}건")
+        root = ET.fromstring(xml_text)
+    except ET.ParseError as e:
+        print(f"  [wapo] RSS 파싱 오류: {e}", file=sys.stderr)
         return items
-    except Exception as e:
-        print(f"  [wapo] 인덱스 오류: {e}", file=sys.stderr)
-        return []
-    finally:
-        await page.close()
+    for item in root.iter("item"):
+        url = (item.findtext("link") or "").strip()
+        title = (item.findtext("title") or "").strip()
+        pub_raw = (item.findtext("pubDate") or "").strip()
+        if not url or not title or url in seen:
+            continue
+        seen.add(url)
+        published_at = None
+        if pub_raw:
+            try:
+                published_at = parsedate_to_datetime(pub_raw).isoformat()
+            except Exception:
+                pass
+        items.append({"url": url, "title_original": title, "published_at": published_at})
+    return items
 
 
-async def _get_article(ctx, url: str) -> Optional[dict]:
-    page = await new_stealth_page(ctx)
+def _extract_body(html: str) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    """__NEXT_DATA__ JSON에서 (title, published_at, body) 추출."""
+    m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', html, re.S)
+    if not m:
+        return None, None, None
     try:
-        await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-        await page.wait_for_timeout(1_500)
+        data = json.loads(m.group(1))
+    except Exception:
+        return None, None, None
 
-        html = await page.content()
-        if any(kw in html.lower() for kw in _PAYWALL_KW):
-            return None  # paywall
+    gc = data.get("props", {}).get("pageProps", {}).get("globalContent", {})
+    title = (gc.get("headlines", {}).get("basic") or gc.get("display_headline") or "").strip()
+    pub = gc.get("publish_date") or gc.get("last_updated_date") or ""
 
-        title = await page.title()
-        h1 = page.locator("h1").first
-        if await h1.count():
-            t = (await h1.inner_text()).strip()
-            if t:
-                title = t
+    paragraphs = []
+    for el in gc.get("content_elements", []):
+        if el.get("type") in ("text", "paragraph"):
+            raw = el.get("content", "")
+            clean = re.sub(r"<[^>]+>", "", raw).strip()
+            if len(clean) > 20:
+                paragraphs.append(clean)
 
-        pub = None
-        for prop in ["article:published_time", "og:article:published_time"]:
-            m = page.locator(f'meta[property="{prop}"]')
-            if await m.count():
-                pub = await m.get_attribute("content")
-                break
-
-        body = await extract_body(page, [
-            '[data-component="paragraph"]',
-            ".article-body p",
-            "article p",
-        ])
-
-        return {"title": title, "body": body, "published_at": pub}
-    except Exception as e:
-        print(f"  [wapo] 기사 오류 {url[:60]}: {e}", file=sys.stderr)
-        return None
-    finally:
-        await page.close()
+    body = "\n".join(paragraphs)[:8000] if paragraphs else None
+    return title or None, pub or None, body
 
 
 async def collect(limit: int = 10, supabase=None) -> list[ForeignEditorialItem]:
-    email = os.environ.get("WAPO_ID", "")
-    password = os.environ.get("WAPO_PW", "")
-    if not email or not password:
-        print("[wapo] WAPO_ID / WAPO_PW 환경변수 없음, 건너뜀", file=sys.stderr)
+    cookies = load_cookies("wapo", supabase) if supabase else None
+    if not cookies:
+        print("[wapo] 쿠키 없음 — --seed-cookies wapo 로 먼저 쿠키를 심어야 합니다.", file=sys.stderr)
+
+    cookie_header = "; ".join(f"{c['name']}={c['value']}" for c in (cookies or []))
+
+    # RSS 수집 (feeds.washingtonpost.com)
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as rss_client:
+            rss_resp = await rss_client.get(RSS_URL, headers=HEADERS)
+            if rss_resp.status_code != 200:
+                print(f"[wapo] RSS HTTP {rss_resp.status_code}", file=sys.stderr)
+                return []
+    except Exception as e:
+        print(f"[wapo] RSS 오류: {e}", file=sys.stderr)
         return []
 
-    cookies = load_cookies("wapo", supabase) if supabase else None
+    index = _parse_rss(rss_resp.text)
+    print(f"  [wapo] RSS {len(index)}건 발견")
+    if not index:
+        return []
 
-    async with async_playwright() as pw:
-        ctx = await make_context(pw, cookies)
+    h = dict(HEADERS)
+    if cookie_header:
+        h["Cookie"] = cookie_header
 
-        if not cookies:
-            ok = await _login(ctx, email, password)
-            if not ok:
-                await ctx.browser.close()
-                return []
-            new_cookies = await ctx.cookies()
-            if supabase:
-                save_cookies("wapo", new_cookies, supabase)
+    # 기사 수집 — httpx 동기 Client를 스레드에서 실행 (async ReadTimeout 우회)
+    def _fetch_article(url: str) -> Optional[str]:
+        try:
+            with httpx.Client(follow_redirects=True, timeout=30) as c:
+                r = c.get(url, headers=h)
+                return r.text if r.status_code == 200 else None
+        except Exception as e:
+            print(f"  [wapo] fetch 오류 {url[:60]}: {e}", file=sys.stderr)
+            return None
 
-        index = await _get_index(ctx)
-        results: list[ForeignEditorialItem] = []
-
-        for entry in index[:limit]:
-            art = await _get_article(ctx, entry["url"])
-
-            if art is None and cookies:
-                # 캐시 쿠키로 페이월 → 재로그인 1회
-                print("  [wapo] 페이월 감지, 재로그인")
-                ok = await _login(ctx, email, password)
-                if ok:
-                    new_cookies = await ctx.cookies()
-                    if supabase:
-                        save_cookies("wapo", new_cookies, supabase)
-                    art = await _get_article(ctx, entry["url"])
-
-            if art is None:
-                print(f"  [wapo] 스킵: {entry['url'][:60]}", file=sys.stderr)
+    results: list[ForeignEditorialItem] = []
+    loop = asyncio.get_event_loop()
+    for i, entry in enumerate(index[:limit]):
+        if i > 0:
+            await asyncio.sleep(5)
+        try:
+            html = await loop.run_in_executor(None, _fetch_article, entry["url"])
+            if html is None:
+                continue
+            if any(kw in html.lower() for kw in _PAYWALL_KW):
+                print(f"  [wapo] 페이월: {entry['url'][:60]}", file=sys.stderr)
                 continue
 
+            title, pub, body = _extract_body(html)
             item: ForeignEditorialItem = {
                 "source_code": "wapo",
                 "url": entry["url"],
-                "title_original": art["title"] or entry["title_original"],
-                "body_original": art["body"],
+                "title_original": title or entry["title_original"],
+                "body_original": body,
                 "author": None,
-                "published_at": art["published_at"],
+                "published_at": pub or entry.get("published_at"),
             }
             results.append(item)
-            print(f"  [wapo] {item['title_original'][:60]} | body={len(item['body_original'] or '')}자")
-
-        await ctx.browser.close()
+            print(f"  [wapo] {item['title_original'][:60]} | body={len(body) if body else 0}자")
+        except Exception as e:
+            print(f"  [wapo] 오류 {entry['url'][:60]}: {e}", file=sys.stderr)
 
     return results

@@ -1505,16 +1505,12 @@ export async function getTrendingKeywords(): Promise<TrendingKeyword[]> {
 
   if (!latest) return [];
 
-  const batchStart = new Date(
-    new Date(latest.fetched_at).getTime() - 5 * 60 * 1000
-  ).toISOString();
-
   const { data, error } = await sb
     .from("trending_keyword")
     .select(
       "trending_id, keyword, approx_traffic, traffic_rank, matched_cluster_id, related_news, ai_summary, title_suggestions, fetched_at"
     )
-    .gte("fetched_at", batchStart)
+    .eq("fetched_at", latest.fetched_at)
     .order("traffic_rank", { ascending: true });
 
   if (error) throw error;

@@ -22,7 +22,13 @@
 - **프론트**: Next.js 15 App Router + Tailwind + lucide-react. `next dev --turbopack` (Windows webpack 행 회피)
 - **데이터 경로**: 단순 조회 → Next.js Server Component → `src/lib/queries.ts` → Supabase JS / AI·파이프라인 → FastAPI 또는 GitHub Actions Python scripts
 
-## 자동화 파이프라인 (GitHub Actions, 12종)
+## 자동화 파이프라인 (NCP worker cron, 12종) — 33차 이전 완료
+
+> **33차(2026-05-28) 수집 인프라 NCP 이전 완료.** 아래 12종 cron 은 이제 **NCP VM Docker worker(`worker-worker-1`)의 `/etc/cron.d/newsboard`(crontab)** 에서 실행된다. GitHub Actions 워크플로 13종은 **전부 비활성화(`disabled_manually`)** 됨 — 삭제 아님(롤백 대비). `Build Worker Docker Image` 만 active.
+> - 코드 push → GitHub Actions 가 Docker 이미지 빌드 + GHCR push (`ghcr.io/woos2324/newsboard-worker:latest`)
+> - NCP 반영은 **수동**: `infra-mcp` 의 `deploy_worker` (= `docker compose pull && up -d`) 또는 직접 SSH
+> - 배포 자동화 MCP: [D:\mcp\infra-mcp](D:\mcp\infra-mcp) (CLAUDE.md 별도). config: host `10.36.194.36`, user `segyecom`, compose_path `/home/segyecom/worker`
+> - 트리거 표의 "성공 직후 연쇄"는 GitHub Actions 전제였고, NCP crontab 은 **고정 시각(UTC)** 으로 동작 (아래 [crontab](crontab) 참조)
 
 | 워크플로 | 트리거 | 역할 |
 |---|---|---|
@@ -56,6 +62,8 @@
 - `0021` — foreign_editorial 신규 (해외 매체 사설, 28차)
 - `0022` — foreign_session 쿠키 캐시 (해외 매체별, 28차)
 - `0023` — profiles (auth.users 1:1, role/approved 기반 접근 제어, 30차)
+- `0024` — profiles RLS 보안 패치 (31차)
+- `0025` — trending_keyword 6개 컬럼 추가 (search_volume, growth_rate, started_at, started_ago_text, status, related_queries) (34차)
 - 마이그레이션 상세: [supabase/migrations/](supabase/migrations/)
 - 매체 51개 (naver_media_id 보유 47개) + 해외 8개 매체 코드 (foreign_sources.py: wapo/nyt/ft/scmp/guardian/wtimes/mainichi/sankei)
 
@@ -76,6 +84,129 @@
 - Sender email: `noreply@segye.com`
 - Email Template "Confirm signup" → `{{ .Token }}` 으로 OTP 6자리 발송 (10분 만료)
 - 비밀번호 정책: 8자 이상, 대소문자 + 숫자 + 특수문자
+
+## 재개 지점 (2026-05-29, 34차 세션 종료)
+
+**이번 세션 (34차) 완료** — 실시간 트렌드 v2 전면 개편:
+
+### 1. 실시간 트렌드 수집기 전환 (RSS → DOM 파싱)
+
+- **수집원**: `trending/rss?geo=KR` (10건, 대략 수치) → `trending?geo=KR&hl=ko&hours=24&status=active` (25건, Playwright DOM)
+- **수집 주기**: crontab `*/10` → `*/3` (3분)
+- **신규 수집 데이터**: 정밀 검색량(`search_volume` 정수), 증가율(`growth_rate` %), 시작시각(`started_at`), 관련검색어(`related_queries text[]`), 관련뉴스(행 클릭 → `a.xZCHj`, 3건 고정 확인)
+- **파싱**: td 인덱스 기반(셀렉터 변동 대비). 한국어 단위 정규화(`5천+`→5000, `1만+`→10000). 시작시각 역산(`N시간 전` → timestamptz)
+- **기존 재사용**: 클러스터 매칭, AI 캐시(1시간), AI 요약/제목추천 — 관련검색어도 AI 입력에 추가
+- **hours 파라미터 검증**: `hours=1` = `hours=24`와 동일(구글이 최솟값 24h 처리). `hours=4`는 4시간 이내만 → 시간대별 건수 들쑥날쑥. `hours=24`로 25건 안정 수집 확정.
+- **DB 마이그레이션**: `0025_trending_v2` — trending_keyword에 6개 컬럼 추가 (NULL 허용, 기존 호환)
+- 설계 명세서: [documents/trending-v2-spec.md](documents/trending-v2-spec.md)
+
+### 2. 실시간 트렌드 UI 전면 재구성 (C안 신호등 대시보드)
+
+- **메인**: 컴팩트 테이블 (순위·키워드·검색량·증가율·신선도🟢🟡🔴·보도) + 정렬(구글순위/신선도/증가율/검색량) + 미보도 필터
+- **신선도 기준**: 🟢 1시간 이내 / 🟡 1~6시간 / 🔴 6시간 초과 (hours=24 기준)
+- **미보도 인디케이터**: `border-l` → 독립 셀(w-6)에 둥근 pill 막대로 분리
+- **우측 확장 패널** (행 클릭 시 `w-1/3` 슬라이드): 핵심 지표 4개 · 우리관측 추이 SVG 라인그래프 · AI요약 · 추천제목(복사버튼) · 관련검색어 칩 · 관련보도 · 자사기사 · 외부링크(구글탐색/검색/네이버)
+- **InfoTip(ⓘ) 공용 컴포넌트** ([src/components/InfoTip.tsx](src/components/InfoTip.tsx)): `position:fixed` + onMouseEnter 좌표 계산 → `overflow-auto` 컨테이너 클리핑 완전 해결, `text-left` 정렬 통일
+- **신규 파일**: `src/components/trending/TrendingClient.tsx`, `src/app/api/trending/history/route.ts`
+- **경쟁 컬럼 제외 결정**: 구글 관련뉴스 3건 고정(변별력 없음) + 경쟁사 article은 랭킹 진입분만 수집(과소 집계) → 신뢰 불가
+
+### 3. 기타
+
+- **`scripts/collect_editorials_data_backfill.py`** 신규 추가 — AI 분석 없이 원천 데이터만 수집하는 사설 백필 전용 스크립트
+- **`/api/revalidate?tag=`** 엔드포인트 추가 — `unstable_cache` Data Cache 수동 무효화용 (`traffic`/`trending`/`dashboard` 태그 지원). 트래픽 캐시 오염 시 호출: `https://newsboard-two.vercel.app/api/revalidate?tag=traffic`
+- **NCP SSH 수동 실행**: infra-mcp는 allowlist된 docker compose 명령만 허용 → 임의 명령은 paramiko 직접 스크립트로 실행 (password: config.yaml)
+
+**판단 사항 (34차)**:
+1. **hours=24 확정** — `hours=4`는 시간대별 건수 불안정. `hours=24`로 25건 고정.
+2. **경쟁 컬럼 제외** — 구글 3건 캡 + 경쟁사 랭킹 누락으로 신뢰 불가. 자사 보도 여부(전체 발행 기준)만 핵심 신호.
+3. **InfoTip position:fixed** — `overflow-auto` 부모의 클리핑은 z-index로 해결 불가. fixed + JS 좌표가 유일한 CSS-only 해법.
+4. **unstable_cache Data Cache** — Vercel redeploy로는 초기화 안 됨. `revalidateTag()` 호출 필요. `/api/revalidate` 엔드포인트로 수동 무효화.
+5. **트래픽 총 조회수 0 원인** — 수집 전 빈 결과가 24h 캐시에 저장. `/api/revalidate?tag=traffic` 호출로 해결.
+
+---
+
+**미완료 / 다음 세션 이어받을 것 (34차 기준)**:
+- ⚠ `/api/revalidate` → `collect_naver_pv.py` 수집 완료 후 자동 호출로 캐시 즉시 갱신 (On-demand Revalidation 부분 구현)
+- ⚠ 트렌드 추이 그래프: 데이터 며칠 누적 후 의미 있어짐 (현재 초기 단계)
+- ⚠ 사설 과거 데이터 백필 (3월 남은 구간)
+- ⚠ `/signup` Email UI 다듬기 (33차 이월)
+- ⚠ wapo cron 실동작 확인 (33차 이월)
+
+---
+
+## 재개 지점 (2026-05-28, 33차 세션 종료)
+
+**이번 세션 (33차) 완료** — 수집 인프라 NCP 이전 + 해외 매체 수집기 개선:
+
+### 1. 수집 로직 NCP 이전 (NCP 전면 이전 로드맵 1단계 완료)
+
+- **NCP VM Docker worker 가동 중** — `worker-worker-1` 컨테이너, crontab 12종 전부 정상 동작 확인
+  - 구성: [Dockerfile](Dockerfile) (Playwright 베이스 + cron), [crontab](crontab), [entrypoint.sh](entrypoint.sh), [worker/docker-compose.yml](worker/docker-compose.yml)
+  - NCP VM: Rocky Linux 8, 내부 IP `10.36.194.36`, segyecom 계정 (docker 그룹), compose_path `/home/segyecom/worker`
+  - 이미지: `ghcr.io/woos2324/newsboard-worker:latest` (GHCR)
+- **GitHub Actions 13종 전부 비활성화** (`gh workflow disable`) — `Build Worker Docker Image` 만 active 유지
+  - 삭제 아님 — `gh workflow enable <id>` 로 즉시 롤백 가능
+  - 수집 중복 방지: NCP cron 과 GitHub Actions 동시 실행 막으려 비활성화
+- **배포 자동화 — infra-mcp** ([D:\mcp\infra-mcp](D:\mcp\infra-mcp), CLAUDE.md 별도)
+  - SSH(paramiko) 기반 MCP 서버. allowlist 된 docker compose 명령만 실행
+  - 툴: `deploy_web`/`deploy_worker`(`pull && up -d`), `tail_logs`(1~300줄), `check_status`(`ps`)
+  - `.mcp.json` 등록 (Claude Code + Codex 양쪽)
+  - ⚠ MCP `deploy_worker` 가 간헐적 `SSH error` 반환 — 이번 세션은 직접 SSH(paramiko)로 배포 성공. 원인 미파악
+- **배포 흐름**: `git push` → GitHub Actions 이미지 빌드(~1분) → `deploy_worker` 또는 직접 SSH 로 NCP pull+재시작
+
+### 2. 해외 매체 수집기 전면 개선 (커밋 `95c844d`)
+
+NCP 한국 IP 로 GitHub Actions(Azure IP) 차단이 일부 해제됨을 확인하고 매체별 재점검:
+
+| 매체 | 결과 | 조치 |
+|---|:-:|---|
+| **mainichi** | ✅ 정상 (10건) | NCP 에서 httpx 정상 수집 확인. `edition_date` 타임존 파싱 수정 후 5/24~5/28 백필 |
+| **sankei** | ✅ 정상 | 기존 동작 유지 |
+| **guardian** | ✅ 정상 (20건) | 기존 동작 유지 |
+| **wtimes** | ✅ 수정 완료 | 본문 셀렉터 `div.bigtext` 추가 ([wtimes.py](scripts/lib/foreign_collectors/wtimes.py)). 하루 1건 발행 매체 |
+| **scmp** | ✅ 수정 완료 | INDEX_URL → `/author/scmp-editorial`, **로그인 불필요** 확인 후 로그인 로직 제거. `Editorial \|` 접두어 제거 |
+| **wapo** | ⚠ 코드 완료 | Playwright(www 도메인 HTTP/2 차단) → **RSS(`feeds.washingtonpost.com`) + httpx + `__NEXT_DATA__` JSON** 으로 전환. 쿠키 시딩 시 페이월 해제(300자→2500자+). **단 집중 테스트로 NCP IP 일시 차단됨 — 일 1회 cron 실동작 확인 필요** |
+| **nyt** | ❌ 차단 | DataDome 이 기사 페이지 IP 차단 (403, Cloudflare challenge). 쿠키 무관. RSS 요약(70~235자)만 가능 |
+| **ft** | ❌ 차단 | 로그인에 **hCaptcha** — 데이터센터 IP 차단. httpx/Playwright + 쿠키 모두 403. 쿠키로 우회 불가 |
+
+- **`edition_date` 타임존 파싱 수정** ([collect_foreign_editorials.py](scripts/collect_foreign_editorials.py)) — Python 3.10 `fromisoformat` 이 `+0900`(콜론 없는 오프셋) 미지원 → `+09:00` 정규화. mainichi `edition_date` NULL 들어가던 버그 해결
+- **쿠키 시딩 완료** — wapo 45개 / ft 27개 DB 저장 (만료 2026-06-27). EditThisCookie (fork) 확장으로 추출 → `--seed-cookies <src> --cookies-file <path>`
+  - 단, ft 는 IP 차단이라 쿠키 있어도 수집 불가. wapo 만 쿠키 효과 있음(페이월 해제)
+- **nyt.py** — httpx 제거하고 Playwright 전용으로 전환했으나 DataDome 차단으로 결국 본문 0자
+
+### 3. 트렌드 키워드 중복 표시 버그 수정 (커밋 `c55d4ca`)
+
+- 대시보드 "구글 급상승 검색어"가 20건(중복)으로 표시되던 버그
+- 원인: [getTrendingKeywords](src/lib/queries.ts) 가 최신 `fetched_at` **±5분 범위**를 조회 → 10분 미만 간격으로 2회 수집 시 두 배치(20건)가 합쳐짐
+- 수정: `.gte(batchStart)` → `.eq(latest.fetched_at)` 정확 일치. 수집 빈도 무관하게 10건만 표시
+
+**판단 사항 (33차)**:
+1. **GitHub Actions 비활성화(삭제 X)** — NCP 안정화 전까지 롤백 경로 유지. `Build` 워크플로만 살려 이미지 빌드는 계속.
+2. **NCP IP 로도 nyt/ft 는 차단** — DataDome/hCaptcha 는 IP 레벨이라 쿠키로 우회 불가. 구조적 한계로 보류. wapo 는 RSS+`__NEXT_DATA__` 우회 성공.
+3. **scmp 로그인 제거** — `/author/scmp-editorial` 페이지가 본문까지 무료 공개. 구독 계정 불필요로 코드 단순화.
+4. **wapo httpx 동기 Client를 executor 로 실행** — async httpx 가 NCP↔WaPo 간 `ReadTimeout` 빈발 → `httpx.Client`(동기)를 `run_in_executor` 로 우회. 요청 간 5초 sleep.
+5. **트렌드 쿼리 정확 일치** — 3분 간격 수집 계획 대비. ±5분 범위는 고빈도 수집과 충돌.
+
+---
+
+**미완료 / 다음 세션 이어받을 것 (33차 기준)**:
+
+**(진행 중 검토) 실시간 트렌드 — RSS → Playwright DOM 전환** (미구현, 설계만):
+- 현재 `collect_trends.py` 는 `https://trends.google.com/trending/rss?geo=KR` (인기 급상승 10건, 대략 수치)
+- 목표: `https://trends.google.com/trending?geo=KR` (실시간 인기 25건+, 정밀 수치 `50K+`, 시작 시각, 관련 검색어)
+- NCP Playwright 로 DOM 파싱 검증 완료 (table tbody tr: 헤더1+25건, cells[1]=키워드 / [2]=트래픽 / [3]=시작시각 / [4]=관련검색어)
+- batchexecute 내부 API(`/_/TrendsUi/data/batchexecute` rpcids=Tnt4U)는 body 포맷 난해 → DOM 파싱이 현실적
+- 계획: DB 컬럼 `started_at`/`related_queries` 추가 + crontab `*/10` → `*/3` + UI(시작시각 뱃지, 25건 표시 구조, 트래픽 수치 개선)
+- AI 비용: 기존 1시간 캐시(`_load_recent_ai_content`) 그대로 → 3분 간격이어도 실변경 2~3건만 AI 호출
+
+**(확인 필요) wapo cron 실동작** — 집중 테스트로 IP 일시 차단됨. 일 1회 cron(UTC 22:00)에서 정상 수집되는지 다음날 로그 확인
+
+**(미해결, 32차에서 이어짐)**:
+- ⚠ `/signup` Email UI 다듬기 (단계 문구 간격, "사번 이메일"→"이메일", 비번 불일치 인라인 표시, Email Template 제목 한국어화)
+- ⚠ 메인 메일서버 segye.com SPF 정렬 / superadmin 2명 유지
+- ⚠ 사설 과거 데이터 백필 (3월 구간) / nyt·ft 차단 / On-demand Revalidation 등
+
+---
 
 ## 재개 지점 (2026-05-26, 32차 세션 종료)
 
@@ -376,12 +507,12 @@
   - NCP 수집서버로 이전 후 `cron-foreign-editorials.yml` → NCP cron으로 전환하면 즉시 활성화
   - GitHub Secrets 등록 완료: `WAPO_ID/PW`, `NYT_ID/PW`, `FT_ID/PW`, `SCMP_ID/PW`
   - 현재 작동 중: **sankei** (5건/일), **guardian** (20건/일) — 2개만 GitHub Actions에서 수집
-- ⚠ **사설 과거 데이터 백필** (27차에서 이어짐) — 3월 남은 구간 역순:
+- ⚠ **사설 과거 데이터 백필** (27차에서 이어짐) — 과거분은 데이터만 채운다. **AI 요약/주제/쟁점/성향분석/판단근거 생성 금지**. 전용 스크립트 `scripts.collect_editorials_data_backfill` 사용:
   ```bash
-  python -m scripts.collect_editorials --date-from 20260318 --date-to 20260324
-  python -m scripts.collect_editorials --date-from 20260311 --date-to 20260317
-  python -m scripts.collect_editorials --date-from 20260304 --date-to 20260310
-  python -m scripts.collect_editorials --date-from 20260301 --date-to 20260303
+  python -B -m scripts.collect_editorials_data_backfill --date-from 20260318 --date-to 20260324
+  python -B -m scripts.collect_editorials_data_backfill --date-from 20260311 --date-to 20260317
+  python -B -m scripts.collect_editorials_data_backfill --date-from 20260304 --date-to 20260310
+  python -B -m scripts.collect_editorials_data_backfill --date-from 20260301 --date-to 20260303
   ```
 - ⚠ **트래픽/기사 페이지 추가 성능 최적화** (27차에서 이어짐) — Streaming SSR + Suspense / SWR
 - ~~**Vercel 자동 배포 webhook 안정화**~~ ✅ 완료 (29차)
@@ -455,8 +586,9 @@
 
 ## 다음 작업 로드맵
 
-- **(당장) 해외 구독 매체 수집 — NCP 이전 후 재활성화** — GitHub Actions IP 차단으로 WaPo/NYT/FT/SCMP/wtimes 코드는 완성됐으나 운영 불가. NCP 수집서버 이전이 선행 조건.
-- **(당장) 사설 과거 데이터 백필** — 3월 남은 구간부터 역순으로 주 단위 실행
+- ~~**(당장) 해외 구독 매체 수집 — NCP 이전 후 재활성화**~~ 🔶 33차 부분 완료 — NCP 이전 후 재점검: wtimes/scmp/wapo ✅, mainichi/sankei/guardian ✅. **nyt(DataDome)·ft(hCaptcha)는 IP 레벨 차단으로 우회 불가**. wapo cron 실동작 확인 필요
+- ~~**(당장) 실시간 트렌드 RSS → Playwright DOM 전환**~~ ✅ **34차 완료** — DOM 파싱(hours=24, 25건), 3분 주기, 신호등 대시보드 UI + 우측 패널, InfoTip ⓘ 툴팁
+- **(당장) 사설 과거 데이터 백필** — 과거분은 `scripts.collect_editorials_data_backfill`로 데이터만 수집. AI 요약/성향분석 없이 3월 남은 구간부터 역순으로 주 단위 실행
 - **(당장) 트래픽/기사 페이지 추가 성능 최적화** — Streaming SSR + Suspense / 클라이언트 캐시(SWR or React Query)
 - ~~**(당장) 로그인 + 역할 기반 접근 제어**~~ ✅ 30차 완료
 - **(미래) /traffic 인터랙티브 추가** — 매칭 기사 양방향 점프, 디바이스별 시간대 차트
@@ -466,11 +598,12 @@
 - **(미래) 검색 기능** — Topbar 검색창 UI 주석 처리됨. 이슈 클러스터 제목/키워드 검색
 - **(미래) 이메일 브리핑 자동 발송** — 매일 KST 9시 GitHub Actions cron
 - **(미래) 기자 이름 기반 통계** — NCP 한국 IP 서버 구성 후 기자명 수집 재도입
-- **(미래) NCP 전면 이전** — 사내 데이터 내재화 목적. 3단계 순서로 진행:
-  - 1단계: GitHub Actions cron → NCP 수집서버 cron 이전 (1~2일)
-  - 2단계: Supabase → NCP PostgreSQL 이전 — `supabase-js` → `pg` 교체, `queries.ts` 전면 수정, RLS 제거 (3~5일, 핵심 난관)
+- **(진행 중) NCP 전면 이전** — 사내 데이터 내재화 목적. 3단계 순서로 진행:
+  - ~~1단계: GitHub Actions cron → NCP 수집서버 cron 이전~~ ✅ **33차 완료** — worker Docker 컨테이너 + crontab 12종 NCP 가동, GitHub Actions 비활성화, infra-mcp 배포 자동화
+  - 2단계: Supabase → NCP PostgreSQL 이전 — `supabase-js` → `pg` 교체, `queries.ts` 전면 수정, RLS 제거 (3~5일, 핵심 난관) **← 다음 단계**
   - 3단계: Vercel → NCP 웹서버 이전 — nginx + PM2, GitHub Actions CD 워크플로 추가 (1~2일)
   - 구성: 웹서버 1대 (80/443 외부 오픈) + 수집서버 1대 (크롤링, 한국 IP) + DB서버 1대 (내부망만 허용, ACG 설정)
+  - 현재 수집서버 = NCP VM `10.36.194.36` (Rocky Linux 8, Docker worker). 배포 = infra-mcp ([D:\mcp\infra-mcp](D:\mcp\infra-mcp))
 
 ---
 

@@ -16,6 +16,7 @@ import { TrendingKeywords } from "@/components/dashboard/TrendingKeywords";
 import {
   getDashboardData,
   getDailyCvHistory,
+  getTrendingKeywords,
 } from "@/lib/queries";
 import { getCurrentProfile } from "@/lib/auth";
 import { canAccessPath, type Role } from "@/lib/roles";
@@ -43,11 +44,12 @@ export default async function DashboardPage() {
   const profile = await getCurrentProfile();
   const role = (profile?.role ?? "reporter") as Role;
 
-  const [dashboard, pvHistory] = await Promise.all([
+  const [dashboard, pvHistory, trending] = await Promise.all([
     getDashboardData(),
     getDailyCvHistory(2),
+    getTrendingKeywords(),
   ]);
-  const { stats, issues, rankingNews, alerts, sub, topComments, aiSummary, trending } = dashboard;
+  const { stats, issues, rankingNews, alerts, sub, topComments, aiSummary } = dashboard;
 
   const linkIfAllowed = (path: string) =>
     canAccessPath(role, path) ? path : undefined;

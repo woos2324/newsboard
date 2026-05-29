@@ -1493,7 +1493,7 @@ export type TrendingKeyword = {
   fetched_at: string;
 };
 
-export async function getTrendingKeywords(): Promise<TrendingKeyword[]> {
+async function _getTrendingKeywords(): Promise<TrendingKeyword[]> {
   const sb = getSupabase();
 
   const { data: latest } = await sb
@@ -1517,58 +1517,58 @@ export async function getTrendingKeywords(): Promise<TrendingKeyword[]> {
   return (data ?? []) as TrendingKeyword[];
 }
 
+// 트렌드는 10분마다 수집되므로 2분 캐시로 분리 (대시보드 5분 캐시와 별도)
+export const getTrendingKeywords = unstable_cache(
+  _getTrendingKeywords,
+  ["trending-keywords"],
+  { revalidate: 120, tags: ["trending"] }
+);
+
 export type TrendingWithCoverage = TrendingKeyword & {
   covered: boolean;
   our_article_title: string | null;
   our_article_url: string | null;
 };
 
-export async function getTrendingWithCoverage(): Promise<TrendingWithCoverage[]> {
+async function _getTrendingWithCoverage(): Promise<TrendingWithCoverage[]> {
   const sb = getSupabase();
 
-  const trending = await getTrendingKeywords();
+  // trending + ourMedia 병렬 조회 (상호 의존성 없음)
+  const [trending, { data: ourMedia }] = await Promise.all([
+    getTrendingKeywords(),
+    sb.from("media_company").select("media_company_id").eq("is_our_company", true).single(),
+  ]);
+
   if (trending.length === 0) return [];
-
-  const { data: ourMedia } = await sb
-    .from("media_company")
-    .select("media_company_id")
-    .eq("is_our_company", true)
-    .single();
-
   if (!ourMedia) return trending.map((t) => ({ ...t, covered: false, our_article_title: null, our_article_url: null }));
 
   const ourId = ourMedia.media_company_id;
+  const since = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
 
-  // 클러스터 기반 매칭: matched_cluster_id가 있는 키워드의 클러스터 목록
   const clusterIds = trending
     .map((t) => t.matched_cluster_id)
     .filter((id): id is number => id !== null);
 
+  // 클러스터 기사 + 48h 자사 기사 병렬 조회
+  const [clusterArticlesRes, ourArticlesRes] = await Promise.all([
+    clusterIds.length > 0
+      ? sb
+          .from("issue_cluster_article")
+          .select("issue_cluster_id, article(title, url, media_company_id)")
+          .in("issue_cluster_id", clusterIds)
+      : Promise.resolve({ data: [] }),
+    sb.from("article").select("title, url").eq("media_company_id", ourId).gte("collected_at", since),
+  ]);
+
   const clusterArticleMap = new Map<number, { title: string; url: string | null }>();
-
-  if (clusterIds.length > 0) {
-    const { data: clusterArticles } = await sb
-      .from("issue_cluster_article")
-      .select("issue_cluster_id, article(title, url, media_company_id)")
-      .in("issue_cluster_id", clusterIds);
-
-    for (const row of clusterArticles ?? []) {
-      const art = row.article as { title: string; url: string | null; media_company_id: number } | null;
-      if (art && art.media_company_id === ourId && !clusterArticleMap.has(row.issue_cluster_id)) {
-        clusterArticleMap.set(row.issue_cluster_id, { title: art.title, url: art.url });
-      }
+  for (const row of clusterArticlesRes.data ?? []) {
+    const art = row.article as { title: string; url: string | null; media_company_id: number } | null;
+    if (art && art.media_company_id === ourId && !clusterArticleMap.has(row.issue_cluster_id)) {
+      clusterArticleMap.set(row.issue_cluster_id, { title: art.title, url: art.url });
     }
   }
 
-  // 키워드 폴백용: matched_cluster_id 없는 키워드를 위해 최근 48h 자사 기사
-  const since = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
-  const { data: ourArticles } = await sb
-    .from("article")
-    .select("title, url")
-    .eq("media_company_id", ourId)
-    .gte("collected_at", since);
-
-  const articles = ourArticles ?? [];
+  const articles = ourArticlesRes.data ?? [];
 
   return trending.map((t) => {
     // 1순위: 클러스터 기반 매칭
@@ -1594,6 +1594,13 @@ export async function getTrendingWithCoverage(): Promise<TrendingWithCoverage[]>
     };
   });
 }
+
+// 트렌드 페이지 전용 2분 캐시 (force-dynamic 페이지에서도 data-layer 캐시 적용)
+export const getTrendingWithCoverage = unstable_cache(
+  _getTrendingWithCoverage,
+  ["trending-with-coverage"],
+  { revalidate: 120, tags: ["trending"] }
+);
 
 export async function getIssueAISummary(
   clusterId: number
@@ -1865,11 +1872,11 @@ export const getTrafficPageData = unstable_cache(
   { revalidate: 86400, tags: ["traffic"] }
 );
 
-// 대시보드 메인 페이지의 8개 쿼리를 한 번에 캐시 (5분)
-// cron-ranking 매시, cron-publications 10분 등 가장 짧은 주기에 맞춰 5분.
+// 대시보드 메인 페이지의 7개 쿼리를 한 번에 캐시 (5분)
+// trending은 별도 2분 캐시로 분리 (getTrendingKeywords)
 export const getDashboardData = unstable_cache(
   async () => {
-    const [stats, issues, rankingNews, alerts, sub, topComments, aiSummary, trending] =
+    const [stats, issues, rankingNews, alerts, sub, topComments, aiSummary] =
       await Promise.all([
         getOverviewStats(),
         getIssues(4),
@@ -1878,9 +1885,8 @@ export const getDashboardData = unstable_cache(
         getOurSubscriberSeries(7),
         getOurTopComments(4),
         getLatestDailySummary(),
-        getTrendingKeywords(),
       ]);
-    return { stats, issues, rankingNews, alerts, sub, topComments, aiSummary, trending };
+    return { stats, issues, rankingNews, alerts, sub, topComments, aiSummary };
   },
   ["dashboard-data"],
   { revalidate: 300, tags: ["dashboard"] }

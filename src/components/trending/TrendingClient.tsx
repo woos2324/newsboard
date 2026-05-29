@@ -442,28 +442,29 @@ export function TrendingClient({ items, fetchedAt }: TrendingClientProps) {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-background text-xs text-muted">
-                <th className="px-3 py-2.5 text-center font-semibold">
+                <th className="w-6 py-3" />
+                <th className="px-4 py-3 text-center font-semibold">
                   <span className="flex items-center justify-center gap-1">
                     순위 <InfoTip text={TIPS.rank} />
                   </span>
                 </th>
-                <th className="px-3 py-2.5 text-left font-semibold">키워드</th>
-                <th className="px-3 py-2.5 text-right font-semibold">
+                <th className="px-4 py-3 text-left font-semibold">키워드</th>
+                <th className="px-4 py-3 text-right font-semibold">
                   <span className="flex items-center justify-end gap-1">
                     검색량 <InfoTip text={TIPS.volume} />
                   </span>
                 </th>
-                <th className="px-3 py-2.5 text-right font-semibold">
+                <th className="px-4 py-3 text-right font-semibold">
                   <span className="flex items-center justify-end gap-1">
                     증가율 <InfoTip text={TIPS.growth} />
                   </span>
                 </th>
-                <th className="px-3 py-2.5 text-center font-semibold">
+                <th className="px-4 py-3 text-center font-semibold">
                   <span className="flex items-center justify-center gap-1">
                     신선도 <InfoTip text={TIPS.freshness} />
                   </span>
                 </th>
-                <th className="px-3 py-2.5 text-center font-semibold">
+                <th className="px-4 py-3 text-center font-semibold">
                   <span className="flex items-center justify-center gap-1">
                     보도 <InfoTip text={TIPS.coverage} />
                   </span>
@@ -475,27 +476,34 @@ export function TrendingClient({ items, fetchedAt }: TrendingClientProps) {
                 const freshness = freshnessSignal(item.started_at);
                 const isSelected = selectedId === item.trending_id;
                 const isHigh = (item.growth_rate ?? 0) >= 500;
+                const isMissed = !item.covered;
                 return (
                   <tr
                     key={item.trending_id}
                     onClick={() => handleSelect(item)}
                     className={`cursor-pointer border-b border-border transition-colors last:border-0 hover:bg-blue-50/40 ${
                       isSelected ? "bg-blue-50" : ""
-                    } ${!item.covered ? "border-l-2 border-l-error" : ""}`}
+                    }`}
                   >
-                    <td className="px-3 py-2.5 text-center text-xs font-bold text-muted">
+                    {/* 미보도 인디케이터 셀 — 행과 분리된 독립 컬럼 */}
+                    <td className="w-6 py-4 pl-2 pr-0">
+                      {isMissed && (
+                        <div className="h-8 w-1 rounded-full bg-error" />
+                      )}
+                    </td>
+                    <td className="px-4 py-4 text-center text-sm font-bold text-muted">
                       {item.traffic_rank}
                     </td>
-                    <td className="px-3 py-2.5 font-semibold">{item.keyword}</td>
-                    <td className="px-3 py-2.5 text-right text-xs">{item.approx_traffic}</td>
-                    <td className={`px-3 py-2.5 text-right text-xs font-semibold ${isHigh ? "text-error" : ""}`}>
+                    <td className="px-4 py-4 text-base font-semibold">{item.keyword}</td>
+                    <td className="px-4 py-4 text-right text-sm">{item.approx_traffic}</td>
+                    <td className={`px-4 py-4 text-right text-sm font-semibold ${isHigh ? "text-error" : ""}`}>
                       {formatGrowth(item.growth_rate)}
                     </td>
-                    <td className="px-3 py-2.5 text-center text-xs">
+                    <td className="px-4 py-4 text-center text-sm">
                       <span title={freshness.label}>{freshness.emoji}</span>{" "}
                       <span className="text-muted">{item.started_ago_text ?? "-"}</span>
                     </td>
-                    <td className="px-3 py-2.5 text-center">
+                    <td className="px-4 py-4 text-center">
                       <span className={item.covered ? "badge badge-success" : "badge badge-error"}>
                         {item.covered ? "보도됨" : "미보도"}
                       </span>
@@ -516,7 +524,7 @@ export function TrendingClient({ items, fetchedAt }: TrendingClientProps) {
 
         {/* 우측 상세 패널 */}
         {selectedItem && (
-          <div className="w-96 shrink-0 overflow-hidden rounded-xl border border-border bg-white shadow-md">
+          <div className="w-[460px] shrink-0 overflow-hidden rounded-xl border border-border bg-white shadow-md">
             <DetailPanel
               item={selectedItem}
               history={historyLoading ? [] : history}

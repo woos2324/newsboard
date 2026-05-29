@@ -1,18 +1,45 @@
 "use client";
 
 import { Info } from "lucide-react";
+import { useState, useRef } from "react";
 
 interface InfoTipProps {
   text: string;
 }
 
 export function InfoTip({ text }: InfoTipProps) {
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const ref = useRef<HTMLSpanElement>(null);
+
+  const handleEnter = () => {
+    if (ref.current) {
+      const rect = ref.current.getBoundingClientRect();
+      setPos({ x: rect.left + rect.width / 2, y: rect.bottom + 6 });
+    }
+  };
+
   return (
-    <span className="group relative inline-flex items-center">
+    <span
+      ref={ref}
+      className="relative inline-flex items-center"
+      onMouseEnter={handleEnter}
+      onMouseLeave={() => setPos(null)}
+    >
       <Info className="h-3 w-3 cursor-help text-muted" />
-      <span className="pointer-events-none absolute top-full left-1/2 z-50 mt-1.5 w-56 -translate-x-1/2 rounded-lg border border-border bg-white px-3 py-2 text-xs leading-relaxed text-foreground opacity-0 shadow-md transition-opacity group-hover:opacity-100">
-        {text}
-      </span>
+      {pos && (
+        <span
+          style={{
+            position: "fixed",
+            left: pos.x,
+            top: pos.y,
+            transform: "translateX(-50%)",
+            zIndex: 9999,
+          }}
+          className="pointer-events-none w-56 rounded-lg border border-border bg-white px-3 py-2 text-xs leading-relaxed text-foreground shadow-md"
+        >
+          {text}
+        </span>
+      )}
     </span>
   );
 }

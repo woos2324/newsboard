@@ -12,9 +12,9 @@ import type { TrendingWithCoverage } from "@/lib/queries";
 function freshnessSignal(startedAt: string | null): { emoji: string; label: string } {
   if (!startedAt) return { emoji: "⚪", label: "알 수 없음" };
   const diffH = (Date.now() - new Date(startedAt).getTime()) / 3600000;
-  if (diffH <= 2) return { emoji: "🟢", label: "최신" };
-  if (diffH <= 4) return { emoji: "🟡", label: "보통" };
-  return { emoji: "🔴", label: "오래됨" };
+  if (diffH <= 1) return { emoji: "🟢", label: "최신 (1시간 이내)" };
+  if (diffH <= 6) return { emoji: "🟡", label: "보통 (6시간 이내)" };
+  return { emoji: "🔴", label: "오래됨 (6시간 초과)" };
 }
 
 function formatGrowth(rate: number | null): string {
@@ -30,7 +30,7 @@ const TIPS = {
   rank: "구글이 집계한 실시간 트렌드 순위",
   volume: "구글 추정 검색 횟수 (대략값)",
   growth: "직전 대비 검색량 급상승 비율. 높을수록 빠르게 뜨는 중",
-  freshness: "트렌드가 처음 감지된 시점. 🟢 최근(2h 이내) · 🟡 보통(2~4h) · 🔴 오래됨",
+  freshness: "트렌드가 처음 감지된 시점. 🟢 1시간 이내 · 🟡 1~6시간 · 🔴 6시간 초과",
   coverage: "세계일보 보도 여부 (전체 발행 기사 기준 추정). 참고용",
   relatedQueries: "함께 검색되는 연관어 (소제목·키워드 힌트)",
   relatedNews: "구글이 노출한 관련 기사 (최대 3건). 어떤 매체가 어떤 앵글로 썼는지 참고",

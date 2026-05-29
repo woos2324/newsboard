@@ -29,7 +29,7 @@ if sys.platform == "win32":
 from api.lib.ai import chat_completion
 from scripts.lib.db import get_client
 
-TRENDS_URL = "https://trends.google.com/trending?geo=KR&hl=ko&hours=4&status=active"
+TRENDS_URL = "https://trends.google.com/trending?geo=KR&hl=ko&hours=24&status=active"
 
 _UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "

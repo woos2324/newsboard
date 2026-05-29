@@ -541,6 +541,84 @@ export type Database = {
           },
         ]
       }
+      foreign_editorial: {
+        Row: {
+          ai_meta: Json | null
+          author: string | null
+          body_ko: string | null
+          body_original: string | null
+          created_at: string | null
+          edition_date: string | null
+          fetched_at: string | null
+          foreign_editorial_id: number
+          published_at: string | null
+          source_code: string
+          source_country: string
+          source_language: string
+          title_ko: string | null
+          title_original: string
+          topic: string | null
+          url: string
+        }
+        Insert: {
+          ai_meta?: Json | null
+          author?: string | null
+          body_ko?: string | null
+          body_original?: string | null
+          created_at?: string | null
+          edition_date?: string | null
+          fetched_at?: string | null
+          foreign_editorial_id?: number
+          published_at?: string | null
+          source_code: string
+          source_country: string
+          source_language: string
+          title_ko?: string | null
+          title_original: string
+          topic?: string | null
+          url: string
+        }
+        Update: {
+          ai_meta?: Json | null
+          author?: string | null
+          body_ko?: string | null
+          body_original?: string | null
+          created_at?: string | null
+          edition_date?: string | null
+          fetched_at?: string | null
+          foreign_editorial_id?: number
+          published_at?: string | null
+          source_code?: string
+          source_country?: string
+          source_language?: string
+          title_ko?: string | null
+          title_original?: string
+          topic?: string | null
+          url?: string
+        }
+        Relationships: []
+      }
+      foreign_session: {
+        Row: {
+          cookies_json: string
+          expires_at: string
+          source_code: string
+          updated_at: string
+        }
+        Insert: {
+          cookies_json: string
+          expires_at: string
+          source_code: string
+          updated_at?: string
+        }
+        Update: {
+          cookies_json?: string
+          expires_at?: string
+          source_code?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       hourly_pv_snapshot: {
         Row: {
           captured_at: string
@@ -1070,9 +1148,15 @@ export type Database = {
           ai_summary: string | null
           approx_traffic: string
           fetched_at: string
+          growth_rate: number | null
           keyword: string
           matched_cluster_id: number | null
           related_news: Json | null
+          related_queries: string[] | null
+          search_volume: number | null
+          started_ago_text: string | null
+          started_at: string | null
+          status: string | null
           title_suggestions: string[] | null
           traffic_rank: number
           trending_id: number
@@ -1081,9 +1165,15 @@ export type Database = {
           ai_summary?: string | null
           approx_traffic: string
           fetched_at?: string
+          growth_rate?: number | null
           keyword: string
           matched_cluster_id?: number | null
           related_news?: Json | null
+          related_queries?: string[] | null
+          search_volume?: number | null
+          started_ago_text?: string | null
+          started_at?: string | null
+          status?: string | null
           title_suggestions?: string[] | null
           traffic_rank: number
           trending_id?: number
@@ -1092,9 +1182,15 @@ export type Database = {
           ai_summary?: string | null
           approx_traffic?: string
           fetched_at?: string
+          growth_rate?: number | null
           keyword?: string
           matched_cluster_id?: number | null
           related_news?: Json | null
+          related_queries?: string[] | null
+          search_volume?: number | null
+          started_ago_text?: string | null
+          started_at?: string | null
+          status?: string | null
           title_suggestions?: string[] | null
           traffic_rank?: number
           trending_id?: number

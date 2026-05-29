@@ -1,0 +1,530 @@
+"use client";
+
+import { useState, useMemo } from "react";
+import { X, ExternalLink, Sparkles, PenLine, Copy, Check, Search } from "lucide-react";
+import { InfoTip } from "@/components/InfoTip";
+import type { TrendingWithCoverage } from "@/lib/queries";
+
+// ---------------------------------------------------------------------------
+// 신선도 헬퍼
+// ---------------------------------------------------------------------------
+
+function freshnessSignal(startedAt: string | null): { emoji: string; label: string } {
+  if (!startedAt) return { emoji: "⚪", label: "알 수 없음" };
+  const diffH = (Date.now() - new Date(startedAt).getTime()) / 3600000;
+  if (diffH <= 2) return { emoji: "🟢", label: "최신" };
+  if (diffH <= 4) return { emoji: "🟡", label: "보통" };
+  return { emoji: "🔴", label: "오래됨" };
+}
+
+function formatGrowth(rate: number | null): string {
+  if (rate === null) return "-";
+  return `↑${rate.toLocaleString()}%`;
+}
+
+// ---------------------------------------------------------------------------
+// InfoTip 툴팁 문구
+// ---------------------------------------------------------------------------
+
+const TIPS = {
+  rank: "구글이 집계한 실시간 트렌드 순위",
+  volume: "구글 추정 검색 횟수 (대략값)",
+  growth: "직전 대비 검색량 급상승 비율. 높을수록 빠르게 뜨는 중",
+  freshness: "트렌드가 처음 감지된 시점. 🟢 최근(2h 이내) · 🟡 보통(2~4h) · 🔴 오래됨",
+  coverage: "세계일보 보도 여부 (전체 발행 기사 기준 추정). 참고용",
+  relatedQueries: "함께 검색되는 연관어 (소제목·키워드 힌트)",
+  relatedNews: "구글이 노출한 관련 기사 (최대 3건). 어떤 매체가 어떤 앵글로 썼는지 참고",
+  trendChart: "우리가 3분마다 수집한 검색량 추이 (구글 비공개 데이터)",
+};
+
+// ---------------------------------------------------------------------------
+// 정렬 타입
+// ---------------------------------------------------------------------------
+
+type SortKey = "rank" | "freshness" | "growth" | "volume";
+
+const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: "rank", label: "구글 순위" },
+  { key: "freshness", label: "신선도" },
+  { key: "growth", label: "증가율" },
+  { key: "volume", label: "검색량" },
+];
+
+// ---------------------------------------------------------------------------
+// 추이 미니 SVG 그래프
+// ---------------------------------------------------------------------------
+
+function MiniChart({ history }: { history: { fetched_at: string; search_volume: number | null }[] }) {
+  const valid = history.filter((h) => h.search_volume !== null);
+  if (valid.length < 2) {
+    return (
+      <p className="text-xs text-muted italic">
+        관측 데이터 누적 중 (3분 주기 수집, 수 시간 후 그래프 활성화)
+      </p>
+    );
+  }
+  const volumes = valid.map((h) => h.search_volume as number);
+  const min = Math.min(...volumes);
+  const max = Math.max(...volumes);
+  const range = max - min || 1;
+  const W = 280;
+  const H = 60;
+  const pts = valid.map((h, i) => {
+    const x = (i / (valid.length - 1)) * W;
+    const y = H - ((( h.search_volume as number) - min) / range) * H;
+    return `${x},${y}`;
+  });
+  const polyline = pts.join(" ");
+  const area = `0,${H} ${polyline} ${W},${H}`;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 60 }}>
+      <polygon points={area} fill="#EFF6FF" />
+      <polyline points={polyline} fill="none" stroke="#1E40AF" strokeWidth="1.5" />
+      {/* 마지막 점 강조 */}
+      {valid.length > 0 && (
+        <circle
+          cx={(((valid.length - 1) / (valid.length - 1)) * W)}
+          cy={H - (((valid[valid.length - 1].search_volume as number) - min) / range) * H}
+          r="3"
+          fill="#1E40AF"
+        />
+      )}
+    </svg>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 복사 버튼
+// ---------------------------------------------------------------------------
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+  return (
+    <button
+      onClick={handleCopy}
+      className="ml-1 shrink-0 rounded p-0.5 text-muted hover:text-primary-500"
+      title="복사"
+    >
+      {copied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 상세 패널
+// ---------------------------------------------------------------------------
+
+interface DetailPanelProps {
+  item: TrendingWithCoverage;
+  history: { fetched_at: string; search_volume: number | null }[];
+  onClose: () => void;
+}
+
+function DetailPanel({ item, history, onClose }: DetailPanelProps) {
+  const freshness = freshnessSignal(item.started_at);
+  const relatedNews = (item.related_news ?? []) as {
+    title: string; url: string; source: string; published_ago?: string;
+  }[];
+  const relatedQueries = item.related_queries ?? [];
+  const titleSuggestions = item.title_suggestions ?? [];
+  const CIRCLE_NUM = ["①", "②", "③"];
+  const encKeyword = encodeURIComponent(item.keyword);
+
+  return (
+    <div className="flex h-full flex-col overflow-y-auto">
+      {/* 헤더 */}
+      <div className="flex items-start justify-between gap-2 border-b border-border px-5 py-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-lg font-bold">{item.keyword}</h2>
+          <span className={item.covered ? "badge badge-success" : "badge badge-error"}>
+            {item.covered ? "보도됨" : "미보도"}
+          </span>
+        </div>
+        <button onClick={onClose} className="shrink-0 rounded p-1 hover:bg-background">
+          <X className="h-4 w-4 text-muted" />
+        </button>
+      </div>
+
+      <div className="flex flex-col gap-5 px-5 py-4">
+        {/* 핵심 지표 */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-lg border border-border bg-background p-3">
+            <p className="flex items-center gap-1 text-[10px] font-semibold text-muted uppercase">
+              검색량 <InfoTip text={TIPS.volume} />
+            </p>
+            <p className="mt-1 text-xl font-bold">{item.approx_traffic}</p>
+          </div>
+          <div className="rounded-lg border border-border bg-background p-3">
+            <p className="flex items-center gap-1 text-[10px] font-semibold text-muted uppercase">
+              증가율 <InfoTip text={TIPS.growth} />
+            </p>
+            <p className={`mt-1 text-xl font-bold ${(item.growth_rate ?? 0) >= 500 ? "text-error" : ""}`}>
+              {formatGrowth(item.growth_rate)}
+            </p>
+          </div>
+          <div className="rounded-lg border border-border bg-background p-3">
+            <p className="flex items-center gap-1 text-[10px] font-semibold text-muted uppercase">
+              시작 <InfoTip text={TIPS.freshness} />
+            </p>
+            <p className="mt-1 text-sm font-semibold">
+              {freshness.emoji} {item.started_ago_text ?? "-"}
+            </p>
+          </div>
+          <div className="rounded-lg border border-border bg-background p-3">
+            <p className="text-[10px] font-semibold text-muted uppercase">상태</p>
+            <p className="mt-1 text-sm font-semibold">{item.status ?? "-"}</p>
+          </div>
+        </div>
+
+        {/* 추이 그래프 */}
+        <div>
+          <p className="mb-2 flex items-center gap-1 text-xs font-semibold text-muted">
+            📈 우리 관측 추이 <InfoTip text={TIPS.trendChart} />
+          </p>
+          <div className="rounded-lg border border-border bg-background p-3">
+            <MiniChart history={history} />
+          </div>
+        </div>
+
+        {/* AI 요약 */}
+        <div>
+          <p className="mb-1 flex items-center gap-1 text-xs font-semibold text-primary-500">
+            <Sparkles className="h-3 w-3" /> AI 요약
+          </p>
+          {item.ai_summary ? (
+            <p className="text-sm leading-relaxed text-foreground/80">{item.ai_summary}</p>
+          ) : (
+            <p className="text-xs italic text-muted">생성 중...</p>
+          )}
+        </div>
+
+        {/* 추천 기사 제목 */}
+        {titleSuggestions.length > 0 && (
+          <div>
+            <p className="mb-2 flex items-center gap-1 text-xs font-semibold text-muted">
+              <PenLine className="h-3 w-3" /> 추천 기사 제목
+            </p>
+            <ul className="space-y-2">
+              {titleSuggestions.map((title, idx) => (
+                <li key={idx} className="flex items-start gap-1.5 rounded-lg border border-border bg-background px-3 py-2 text-sm">
+                  <span className="mt-0.5 shrink-0 text-[10px] font-bold text-primary-500">
+                    {CIRCLE_NUM[idx] ?? `${idx + 1}.`}
+                  </span>
+                  <span className="flex-1">{title}</span>
+                  <CopyButton text={title} />
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* 관련 검색어 */}
+        {relatedQueries.length > 0 && (
+          <div>
+            <p className="mb-2 flex items-center gap-1 text-xs font-semibold text-muted">
+              관련 검색어 <InfoTip text={TIPS.relatedQueries} />
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {relatedQueries.map((q, i) => (
+                <span key={i} className="rounded-full border border-border bg-background px-2.5 py-1 text-xs text-foreground">
+                  {q}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 관련 보도 */}
+        {relatedNews.length > 0 && (
+          <div>
+            <p className="mb-2 flex items-center gap-1 text-xs font-semibold text-muted">
+              관련 보도 <InfoTip text={TIPS.relatedNews} />
+            </p>
+            <ul className="space-y-2">
+              {relatedNews.map((news, idx) => (
+                <li key={idx}>
+                  <a
+                    href={news.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-start gap-2 rounded-lg border border-border bg-background p-3 hover:border-primary-500/40 hover:bg-blue-50/30"
+                  >
+                    <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted" />
+                    <div className="min-w-0">
+                      <p className="text-sm leading-snug text-foreground">{news.title}</p>
+                      <p className="mt-0.5 text-[10px] text-muted">
+                        {news.source}{news.published_ago ? ` · ${news.published_ago}` : ""}
+                      </p>
+                    </div>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* 자사 기사 */}
+        <div className={`rounded-lg border-2 p-3 ${item.covered ? "border-success/40 bg-green-50/40" : "border-error/30 bg-red-50/30"}`}>
+          <p className="mb-1 flex items-center gap-1 text-xs font-semibold text-muted">
+            세계일보 보도 <InfoTip text={TIPS.coverage} />
+          </p>
+          {item.covered ? (
+            <a
+              href={item.our_article_url ?? "#"}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-sm text-foreground hover:text-primary-500 hover:underline"
+            >
+              <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+              {item.our_article_title}
+            </a>
+          ) : (
+            <p className="text-sm font-semibold text-error">아직 세계일보 미보도</p>
+          )}
+        </div>
+
+        {/* 외부 바로가기 */}
+        <div className="flex gap-2">
+          <a
+            href={`https://trends.google.com/trends/explore?q=${encKeyword}&geo=KR`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 rounded-lg border border-border bg-background py-2 text-center text-xs font-semibold text-foreground hover:border-primary-500/40 hover:text-primary-500"
+          >
+            구글 탐색
+          </a>
+          <a
+            href={`https://www.google.com/search?q=${encKeyword}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 rounded-lg border border-border bg-background py-2 text-center text-xs font-semibold text-foreground hover:border-primary-500/40 hover:text-primary-500"
+          >
+            구글 검색
+          </a>
+          <a
+            href={`https://search.naver.com/search.naver?query=${encKeyword}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 rounded-lg border border-border bg-background py-2 text-center text-xs font-semibold text-foreground hover:border-primary-500/40 hover:text-primary-500"
+          >
+            네이버 검색
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 메인 클라이언트 컴포넌트
+// ---------------------------------------------------------------------------
+
+interface TrendingClientProps {
+  items: TrendingWithCoverage[];
+  fetchedAt: string;
+}
+
+export function TrendingClient({ items, fetchedAt }: TrendingClientProps) {
+  const [sortKey, setSortKey] = useState<SortKey>("rank");
+  const [onlyMissed, setOnlyMissed] = useState(false);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [history, setHistory] = useState<{ fetched_at: string; search_volume: number | null }[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  const selectedItem = items.find((i) => i.trending_id === selectedId) ?? null;
+
+  const sorted = useMemo(() => {
+    let list = onlyMissed ? items.filter((i) => !i.covered) : [...items];
+    if (sortKey === "freshness") {
+      list.sort((a, b) => {
+        if (!a.started_at) return 1;
+        if (!b.started_at) return -1;
+        return new Date(b.started_at).getTime() - new Date(a.started_at).getTime();
+      });
+    } else if (sortKey === "growth") {
+      list.sort((a, b) => (b.growth_rate ?? 0) - (a.growth_rate ?? 0));
+    } else if (sortKey === "volume") {
+      list.sort((a, b) => (b.search_volume ?? 0) - (a.search_volume ?? 0));
+    } else {
+      list.sort((a, b) => a.traffic_rank - b.traffic_rank);
+    }
+    return list;
+  }, [items, sortKey, onlyMissed]);
+
+  const handleSelect = async (item: TrendingWithCoverage) => {
+    if (selectedId === item.trending_id) {
+      setSelectedId(null);
+      return;
+    }
+    setSelectedId(item.trending_id);
+    setHistory([]);
+    setHistoryLoading(true);
+    try {
+      const res = await fetch(`/api/trending/history?keyword=${encodeURIComponent(item.keyword)}&hours=6`);
+      if (res.ok) setHistory(await res.json());
+    } catch {
+      // 그래프 없이 패널 표시
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const missed = items.filter((i) => !i.covered).length;
+  const covered = items.filter((i) => i.covered).length;
+
+  // 업데이트 시각 KST 포맷
+  const kstTime = (() => {
+    const d = new Date(fetchedAt);
+    const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+    return `${String(kst.getUTCHours()).padStart(2, "0")}:${String(kst.getUTCMinutes()).padStart(2, "0")}`;
+  })();
+
+  return (
+    <div className="flex h-full flex-col gap-4">
+      {/* 헤더 */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight">실시간 트렌드</h1>
+          <p className="caption mt-0.5">{kstTime} 기준 · 3분마다 갱신</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* 미보도만 필터 */}
+          <button
+            onClick={() => setOnlyMissed((v) => !v)}
+            className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+              onlyMissed
+                ? "border-error bg-red-50 text-error"
+                : "border-border bg-white text-muted hover:border-error/40 hover:text-error"
+            }`}
+          >
+            미보도만
+          </button>
+          {/* 정렬 */}
+          <select
+            value={sortKey}
+            onChange={(e) => setSortKey(e.target.value as SortKey)}
+            className="rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-foreground"
+          >
+            {SORT_OPTIONS.map((o) => (
+              <option key={o.key} value={o.key}>
+                {o.label}순
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* 스탯 카드 */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="card py-3 text-center">
+          <p className="text-2xl font-bold">{items.length}</p>
+          <p className="caption mt-0.5">전체</p>
+        </div>
+        <div className="card py-3 text-center">
+          <p className="text-2xl font-bold text-error">{missed}</p>
+          <p className="caption mt-0.5">미보도</p>
+        </div>
+        <div className="card py-3 text-center">
+          <p className="text-2xl font-bold text-success">{covered}</p>
+          <p className="caption mt-0.5">보도됨</p>
+        </div>
+      </div>
+
+      {/* 테이블 + 패널 2분할 */}
+      <div className="flex min-h-0 flex-1 gap-4">
+        {/* 테이블 */}
+        <div className={`flex-1 overflow-auto rounded-xl border border-border bg-white transition-all ${selectedItem ? "min-w-0" : ""}`}>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-background text-xs text-muted">
+                <th className="px-3 py-2.5 text-center font-semibold">
+                  <span className="flex items-center justify-center gap-1">
+                    순위 <InfoTip text={TIPS.rank} />
+                  </span>
+                </th>
+                <th className="px-3 py-2.5 text-left font-semibold">키워드</th>
+                <th className="px-3 py-2.5 text-right font-semibold">
+                  <span className="flex items-center justify-end gap-1">
+                    검색량 <InfoTip text={TIPS.volume} />
+                  </span>
+                </th>
+                <th className="px-3 py-2.5 text-right font-semibold">
+                  <span className="flex items-center justify-end gap-1">
+                    증가율 <InfoTip text={TIPS.growth} />
+                  </span>
+                </th>
+                <th className="px-3 py-2.5 text-center font-semibold">
+                  <span className="flex items-center justify-center gap-1">
+                    신선도 <InfoTip text={TIPS.freshness} />
+                  </span>
+                </th>
+                <th className="px-3 py-2.5 text-center font-semibold">
+                  <span className="flex items-center justify-center gap-1">
+                    보도 <InfoTip text={TIPS.coverage} />
+                  </span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((item) => {
+                const freshness = freshnessSignal(item.started_at);
+                const isSelected = selectedId === item.trending_id;
+                const isHigh = (item.growth_rate ?? 0) >= 500;
+                return (
+                  <tr
+                    key={item.trending_id}
+                    onClick={() => handleSelect(item)}
+                    className={`cursor-pointer border-b border-border transition-colors last:border-0 hover:bg-blue-50/40 ${
+                      isSelected ? "bg-blue-50" : ""
+                    } ${!item.covered ? "border-l-2 border-l-error" : ""}`}
+                  >
+                    <td className="px-3 py-2.5 text-center text-xs font-bold text-muted">
+                      {item.traffic_rank}
+                    </td>
+                    <td className="px-3 py-2.5 font-semibold">{item.keyword}</td>
+                    <td className="px-3 py-2.5 text-right text-xs">{item.approx_traffic}</td>
+                    <td className={`px-3 py-2.5 text-right text-xs font-semibold ${isHigh ? "text-error" : ""}`}>
+                      {formatGrowth(item.growth_rate)}
+                    </td>
+                    <td className="px-3 py-2.5 text-center text-xs">
+                      <span title={freshness.label}>{freshness.emoji}</span>{" "}
+                      <span className="text-muted">{item.started_ago_text ?? "-"}</span>
+                    </td>
+                    <td className="px-3 py-2.5 text-center">
+                      <span className={item.covered ? "badge badge-success" : "badge badge-error"}>
+                        {item.covered ? "보도됨" : "미보도"}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+              {sorted.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-sm text-muted">
+                    조건에 맞는 트렌드가 없습니다.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* 우측 상세 패널 */}
+        {selectedItem && (
+          <div className="w-96 shrink-0 overflow-hidden rounded-xl border border-border bg-white shadow-md">
+            <DetailPanel
+              item={selectedItem}
+              history={historyLoading ? [] : history}
+              onClose={() => setSelectedId(null)}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

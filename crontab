@@ -7,8 +7,8 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # publications — 10분마다
 2,12,22,32,42,52 * * * * root cd /app && python -m scripts.collect_publications >> /var/log/cron.log 2>&1
 
-# trends — 10분마다
-*/10 * * * * root cd /app && python -m scripts.collect_trends >> /var/log/cron.log 2>&1
+# trends — 3분마다 (DOM 파싱 v2, hours=4&status=active)
+*/3 * * * * root cd /app && python -m scripts.collect_trends >> /var/log/cron.log 2>&1
 
 # comments — 매시 15분 UTC
 15 * * * * root cd /app && python -m scripts.collect_comments >> /var/log/cron.log 2>&1

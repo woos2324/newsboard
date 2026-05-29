@@ -1484,10 +1484,16 @@ export async function getArticleList(
 export type TrendingKeyword = {
   trending_id: number;
   keyword: string;
-  approx_traffic: string;
+  approx_traffic: string;       // 원문 "5천+"
+  search_volume: number | null; // 정렬용 정수
+  growth_rate: number | null;   // 증가율 %
   traffic_rank: number;
+  started_at: string | null;
+  started_ago_text: string | null;
+  status: string | null;
+  related_queries: string[] | null;
   matched_cluster_id: number | null;
-  related_news: { title: string; url: string; source: string }[] | null;
+  related_news: { title: string; url: string; source: string; published_ago?: string; thumbnail?: string }[] | null;
   ai_summary: string | null;
   title_suggestions: string[] | null;
   fetched_at: string;
@@ -1508,7 +1514,7 @@ async function _getTrendingKeywords(): Promise<TrendingKeyword[]> {
   const { data, error } = await sb
     .from("trending_keyword")
     .select(
-      "trending_id, keyword, approx_traffic, traffic_rank, matched_cluster_id, related_news, ai_summary, title_suggestions, fetched_at"
+      "trending_id, keyword, approx_traffic, search_volume, growth_rate, traffic_rank, started_at, started_ago_text, status, related_queries, matched_cluster_id, related_news, ai_summary, title_suggestions, fetched_at"
     )
     .eq("fetched_at", latest.fetched_at)
     .order("traffic_rank", { ascending: true });
@@ -1517,11 +1523,11 @@ async function _getTrendingKeywords(): Promise<TrendingKeyword[]> {
   return (data ?? []) as TrendingKeyword[];
 }
 
-// 트렌드는 10분마다 수집되므로 2분 캐시로 분리 (대시보드 5분 캐시와 별도)
+// 트렌드는 3분마다 수집되므로 1분 캐시로 분리 (대시보드 5분 캐시와 별도)
 export const getTrendingKeywords = unstable_cache(
   _getTrendingKeywords,
   ["trending-keywords"],
-  { revalidate: 120, tags: ["trending"] }
+  { revalidate: 60, tags: ["trending"] }
 );
 
 export type TrendingWithCoverage = TrendingKeyword & {
@@ -1595,12 +1601,29 @@ async function _getTrendingWithCoverage(): Promise<TrendingWithCoverage[]> {
   });
 }
 
-// 트렌드 페이지 전용 2분 캐시 (force-dynamic 페이지에서도 data-layer 캐시 적용)
+// 트렌드 페이지 전용 1분 캐시 (force-dynamic 페이지에서도 data-layer 캐시 적용)
 export const getTrendingWithCoverage = unstable_cache(
   _getTrendingWithCoverage,
   ["trending-with-coverage"],
-  { revalidate: 120, tags: ["trending"] }
+  { revalidate: 60, tags: ["trending"] }
 );
+
+// 특정 키워드의 최근 N시간 search_volume 시계열 (상세 패널 추이 그래프용)
+export async function getTrendingHistory(
+  keyword: string,
+  hours = 6
+): Promise<{ fetched_at: string; search_volume: number | null }[]> {
+  const sb = getSupabase();
+  const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+  const { data, error } = await sb
+    .from("trending_keyword")
+    .select("fetched_at, search_volume")
+    .eq("keyword", keyword)
+    .gte("fetched_at", since)
+    .order("fetched_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as { fetched_at: string; search_volume: number | null }[];
+}
 
 export async function getIssueAISummary(
   clusterId: number

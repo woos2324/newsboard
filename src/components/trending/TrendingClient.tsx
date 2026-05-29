@@ -524,7 +524,7 @@ export function TrendingClient({ items, fetchedAt }: TrendingClientProps) {
 
         {/* 우측 상세 패널 */}
         {selectedItem && (
-          <div className="w-[460px] shrink-0 overflow-hidden rounded-xl border border-border bg-white shadow-md">
+          <div className="w-[490px] shrink-0 overflow-hidden rounded-xl border border-border bg-white shadow-md">
             <DetailPanel
               item={selectedItem}
               history={historyLoading ? [] : history}

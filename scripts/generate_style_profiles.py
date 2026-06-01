@@ -215,11 +215,13 @@ if __name__ == "__main__":
     parser.add_argument("--reporter-id", type=str, help="특정 기자 reporter_id")
     parser.add_argument("--all", dest="do_all", action="store_true", help="전체 기자 처리")
     parser.add_argument("--domain", type=str, default="segye.com", help="이메일 도메인 필터")
+    parser.add_argument("--all-domains", action="store_true", help="도메인 필터 없이 전체 처리")
     parser.add_argument("--limit", type=int, default=0, help="처리할 최대 기자 수 (0=무제한)")
     parser.add_argument("--dry-run", action="store_true", help="DB 저장 없이 출력만")
     parser.add_argument("--skip-existing", action="store_true", help="이미 프로파일 있는 기자 건너뜀")
     args = parser.parse_args()
+    domain = "" if args.all_domains else args.domain
     asyncio.run(main(
-        args.reporter_id, args.do_all, args.domain,
+        args.reporter_id, args.do_all, domain,
         args.limit, args.dry_run, args.skip_existing,
     ))

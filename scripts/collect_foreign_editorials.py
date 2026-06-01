@@ -142,6 +142,8 @@ async def collect_and_save(
             print(f"  [{status}] {it['title_original'][:60]}")
         except Exception as e:
             print(f"  [error] {it['url']}: {e}", file=sys.stderr)
+        if translate and not already_translated:
+            await asyncio.sleep(5)  # 번역 후 rate limit 분산
 
     print(f"[{source_code}] 저장 완료: {saved}건")
     return saved

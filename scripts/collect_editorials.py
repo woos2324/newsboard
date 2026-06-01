@@ -182,7 +182,7 @@ async def analyze_with_ai(title: str, body: Optional[str], existing_issues: list
     system_prompt = build_system_prompt(existing_issues or [])
 
     async with httpx.AsyncClient() as ai_client:
-        for attempt in range(3):
+        for attempt in range(5):
             try:
                 resp = await ai_client.post(
                     f"{base_url}/chat/completions",
@@ -206,8 +206,8 @@ async def analyze_with_ai(title: str, body: Optional[str], existing_issues: list
                 return None
             except httpx.HTTPStatusError as e:
                 if e.response.status_code == 429:
-                    wait = 60 * (attempt + 1)
-                    print(f"  [rate limit] {wait}초 대기 후 재시도 ({attempt+1}/3)...", file=sys.stderr)
+                    wait = min(30 * (2 ** attempt), 480)
+                    print(f"  [rate limit] {wait}초 대기 후 재시도 ({attempt+1}/5)...", file=sys.stderr)
                     await asyncio.sleep(wait)
                 else:
                     print(f"  [AI error] {e}", file=sys.stderr)
@@ -239,13 +239,13 @@ async def reanalyze_by_date(supabase, date: str) -> None:
     """특정 날짜(YYYYMMDD)의 사설 전체를 AI로 재분석. issue 레이블 누적 적용."""
     edition_date = f"{date[:4]}-{date[4:6]}-{date[6:8]}"
     rows = supabase.table("editorial").select("editorial_id,title,body") \
-        .eq("edition_date", edition_date).execute()
-    print(f"[reanalyze-date] {date} 사설: {len(rows.data)}건")
+        .eq("edition_date", edition_date).is_("summary", "null").execute()
+    print(f"[reanalyze-date] {date} AI 없는 사설: {len(rows.data)}건")
 
     existing_issues: list[str] = []
     for row in rows.data:
         ai = await analyze_with_ai(row["title"], row["body"], existing_issues)
-        await asyncio.sleep(1)  # rate limit 방지
+        await asyncio.sleep(5)  # rate limit 방지
         if ai:
             supabase.table("editorial").update({
                 "summary": ai.get("summary"),
@@ -400,7 +400,7 @@ async def main(dry_run: bool, date: Optional[str] = None, reanalyze: bool = Fals
             body_preview = f"{len(body)}자" if body else "본문 없음"
 
             ai = await analyze_with_ai(title, body, existing_issues)
-            await asyncio.sleep(1)  # rate limit 방지
+            await asyncio.sleep(5)  # rate limit 방지
 
             published_at = article_published_at or dt.isoformat()
 

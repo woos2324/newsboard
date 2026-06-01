@@ -69,7 +69,7 @@ async def translate_article(
     source_language: str,
     *,
     model: Optional[str] = None,
-    max_retries: int = 3,
+    max_retries: int = 5,
 ) -> TranslationResult:
     """Translate title + body to Korean. Returns (title_ko, body_ko, ai_meta).
 
@@ -132,7 +132,7 @@ async def translate_article(
                 }
             except httpx.HTTPStatusError as e:
                 if e.response.status_code == 429 and attempt < max_retries - 1:
-                    wait = 30 * (attempt + 1)
+                    wait = min(30 * (2 ** attempt), 480)
                     print(f"  [translate] rate limit, {wait}s 대기 ({attempt+1}/{max_retries})", file=sys.stderr)
                     await asyncio.sleep(wait)
                     continue

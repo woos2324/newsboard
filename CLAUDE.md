@@ -86,6 +86,40 @@
 - Email Template "Confirm signup" → `{{ .Token }}` 으로 OTP 6자리 발송 (10분 만료)
 - 비밀번호 정책: 8자 이상, 대소문자 + 숫자 + 특수문자
 
+## 재개 지점 (2026-06-01, 35차 세션 종료)
+
+**이번 세션 (35차) 완료**:
+
+### 1. 버그 수정 3건
+
+- **트래픽 시간대별 조회수 0** — 네이버 hourly API는 KST 01:00에 전날 데이터 집계 미완료 → `cv=0` 반환. cron `UTC 16:00 → UTC 20:00`으로 변경. 2026-05-29~31 3일치 백필 완료.
+- **사설/해외번역 AI 분석 누락** — OpenAI 크레딧 소진 + 트렌딩 cron rate limit 충돌. retry 3→5회, 지수 백오프(`min(30*2^n, 480)s`), 건 사이 sleep 5s 적용.
+- **6/1일 사설·해외번역** — 크레딧 충전 후 NCP cron 자동 복구 (수동 백필 불필요).
+
+### 2. autowrite — 기자 문체 기반 초안 작성 기능
+
+- **설계 확정** (`documents/autowrite.md` 전면 재작성) — 외부 설계안 비교 검토 + OpenSearch 실측 검증 반영
+  - 학습 데이터: OpenSearch API `web_articles_v2` (550만 건, 본문·기자·byline 완비)
+  - 매칭 키: `reporter_id` (이메일 더미 오염 → `reporter_id`가 이메일 local part와 동일, 일관)
+  - 팩트 추출: **Lazy** (초안 진입 시 + 캐싱) — Eager 전량은 99% 낭비
+  - 프로파일: 계정 비의존(`reporter_id` 키) → 오픈 전 선학습 → 가입 시 `profiles.email` local part 연결
+- **M1 완료** — `scripts/lib/opensearch_client.py` + DB 마이그레이션 `0026_autowrite_tables` (`reporter_style_profile` / `article_fact` / `article_draft` + RLS)
+- **M2 완료** — `scripts/generate_style_profiles.py` (gpt-4o, `--all-domains`, `--skip-existing`) → **212명 전원 성공** (실패 0명, ~53분 소요)
+
+**판단 사항 (35차)**:
+1. **gpt-4o 선택** — 프로파일은 초안 품질의 근간, 1회성 배치라 비용 부담 낮음. gpt-4o-mini 부적합.
+2. **도메인 필터 Python 레벨** — OpenSearch wildcard leading-`*` 불허 → aggregation 후 Python에서 suffix 매칭.
+3. **reporter_id 그룹핑** — 같은 기자가 `reporter_email`이 정상/더미로 갈려도 `reporter_id`는 일관. 그룹핑 키로 확정.
+4. **rate limit 패턴** — gpt-4o 호출마다 429 걸리고 30s 후 자동 복구. 5회 retry로 안정 처리.
+
+**미완료 (다음 세션)**:
+- ⚠ **M3**: 미보도 트렌드 키워드 → `related_news` 본문 크롤링 → 팩트 추출 → `article_fact` 캐싱 (Lazy)
+- ⚠ **M4**: 초안 생성 API + 검수 UI (reporter 전용, `roles.ts` 연동)
+- ⚠ OpenSearch NCP ACG 미개방 — 현재 로컬 전용. NCP 서버 배포 전 ACG 개방 필요
+- 기존 미완료 항목 (naver-pv revalidate, 사설 백필 등) 유지
+
+---
+
 ## 재개 지점 (2026-05-29, 34차 세션 종료)
 
 **이번 세션 (34차) 완료** — 실시간 트렌드 v2 전면 개편:

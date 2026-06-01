@@ -133,6 +133,8 @@ def parse_hourly_pv_json(payload: dict, data_date: date) -> list[HourlyPvJsonRow
         # startDate = 어제 → cv가 실제 값
         # startDate = 오늘 → cv=0, cv_yesterday=어제 값
         # 수집 로직에서 startDate=어제로 호출하므로 cv가 실데이터
+        # 주의: KST 01:00 수집 시 전날 데이터 집계 미완료 → cv=0 반환됨
+        # cron은 UTC 20:00 (KST 05:00) 에 실행해야 데이터 정상 수집 가능
         pv = int(row.get("cv", 0))
         result.append(HourlyPvJsonRow(data_date=data_date, hour=hour, pv=pv))
     return result

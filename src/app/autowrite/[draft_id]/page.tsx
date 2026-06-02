@@ -91,32 +91,32 @@ export default async function DraftDetailPage({ params }: PageProps) {
         </div>
 
         {/* 우측: 팩트 패널 */}
-        <div className="w-[420px] shrink-0 overflow-y-auto border-l border-border bg-background px-5 py-6">
-          <h2 className="mb-4 text-sm font-bold text-foreground">근거 팩트</h2>
+        <div className="w-[470px] shrink-0 overflow-y-auto border-l border-border bg-background px-5 py-6">
+          <h2 className="mb-4 text-base font-bold text-foreground">근거 팩트</h2>
 
           {facts.length === 0 ? (
-            <p className="text-xs text-muted">팩트 정보가 없습니다.</p>
+            <p className="text-sm text-muted">팩트 정보가 없습니다.</p>
           ) : (
             <div className="space-y-5">
               {facts.map((f, i) => (
                 <div key={i} className="rounded-lg border border-border bg-white p-4">
-                  <p className="mb-3 text-[11px] font-semibold text-primary-500">
+                  <p className="mb-3 text-sm font-semibold text-primary-500">
                     출처: {f.source_name || "알 수 없음"}
                   </p>
 
                   {f.facts?.summary && (
                     <div className="mb-2">
-                      <p className="text-[10px] font-semibold uppercase text-muted">요약</p>
-                      <p className="mt-0.5 text-xs leading-relaxed text-foreground/80">{f.facts.summary}</p>
+                      <p className="text-[13px] font-semibold uppercase text-muted">요약</p>
+                      <p className="mt-0.5 text-[15px] leading-relaxed text-foreground/80">{f.facts.summary}</p>
                     </div>
                   )}
 
                   {f.facts?.figures && f.facts.figures.length > 0 && (
                     <div className="mb-2">
-                      <p className="text-[10px] font-semibold uppercase text-muted">수치</p>
+                      <p className="text-[13px] font-semibold uppercase text-muted">수치</p>
                       <ul className="mt-0.5 space-y-1">
                         {f.facts.figures.map((fig, j) => (
-                          <li key={j} className="text-xs text-foreground/80">
+                          <li key={j} className="text-[15px] text-foreground/80">
                             <span className="font-medium">{fig.label}</span> {fig.value}
                             {fig.source && <span className="text-muted"> ({fig.source})</span>}
                           </li>
@@ -127,10 +127,10 @@ export default async function DraftDetailPage({ params }: PageProps) {
 
                   {f.facts?.quotes && f.facts.quotes.length > 0 && (
                     <div className="mb-2">
-                      <p className="text-[10px] font-semibold uppercase text-muted">인용</p>
+                      <p className="text-[13px] font-semibold uppercase text-muted">인용</p>
                       <ul className="mt-0.5 space-y-1.5">
                         {f.facts.quotes.map((q, j) => (
-                          <li key={j} className="rounded border-l-2 border-primary-500/30 pl-2 text-xs text-foreground/80">
+                          <li key={j} className="rounded border-l-2 border-primary-500/30 pl-2 text-[15px] text-foreground/80">
                             <span className="font-medium">{q.speaker}</span> — {q.text}
                             {q.source && <span className="text-muted"> ({q.source})</span>}
                           </li>
@@ -141,17 +141,17 @@ export default async function DraftDetailPage({ params }: PageProps) {
 
                   {f.facts?.background && (
                     <div>
-                      <p className="text-[10px] font-semibold uppercase text-muted">배경</p>
-                      <p className="mt-0.5 text-xs leading-relaxed text-foreground/80">{f.facts.background}</p>
+                      <p className="text-[13px] font-semibold uppercase text-muted">배경</p>
+                      <p className="mt-0.5 text-[15px] leading-relaxed text-foreground/80">{f.facts.background}</p>
                     </div>
                   )}
 
                   {/* 참고 이미지 (타사 저작물 — URL만 표시, 참고 전용) */}
                   {(f.facts as { image_url?: string })?.image_url && (
                     <div className="mt-2">
-                      <p className="mb-1 text-[10px] font-semibold uppercase text-muted">참고 이미지</p>
+                      <p className="mb-1 text-[13px] font-semibold uppercase text-muted">참고 이미지</p>
                       <FactImage src={(f.facts as { image_url?: string }).image_url!} />
-                      <p className="mt-0.5 text-[9px] text-muted">참고용 — 저작권은 해당 매체에 있습니다</p>
+                      <p className="mt-0.5 text-xs text-muted">참고용 — 저작권은 해당 매체에 있습니다</p>
                     </div>
                   )}
                 </div>

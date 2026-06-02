@@ -186,7 +186,7 @@ function DraftSection({ item, userId, reporterId }: DraftSectionProps) {
       }
 
       const draft = await draftRes.json();
-      router.push(`/autowrite/${draft.draft_id}`);
+      router.push(`/autowrite/${draft.draft_id}?keyword=${encodeURIComponent(item.keyword)}`);
     } catch (e) {
       setStep({ type: "error", message: e instanceof Error ? e.message : "알 수 없는 오류가 발생했습니다." });
     }
@@ -500,14 +500,23 @@ interface TrendingClientProps {
   isReporter: boolean;
   userId: string;
   reporterId: string;
+  initialKeyword?: string;
 }
 
-export function TrendingClient({ items, fetchedAt, isReporter, userId, reporterId }: TrendingClientProps) {
+export function TrendingClient({ items, fetchedAt, isReporter, userId, reporterId, initialKeyword }: TrendingClientProps) {
   const [sortKey, setSortKey] = useState<SortKey>("rank");
   const [onlyMissed, setOnlyMissed] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [history, setHistory] = useState<{ fetched_at: string; search_volume: number | null }[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+
+  // 뒤로 가기 복원: initialKeyword가 있으면 마운트 시 해당 항목 자동 선택
+  useEffect(() => {
+    if (!initialKeyword) return;
+    const target = items.find((i) => i.keyword === initialKeyword);
+    if (target) handleSelect(target);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const selectedItem = items.find((i) => i.trending_id === selectedId) ?? null;
 

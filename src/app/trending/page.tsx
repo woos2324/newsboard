@@ -5,7 +5,10 @@ import { getCurrentProfile } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-export default async function TrendingPage() {
+type Props = { searchParams: Promise<{ keyword?: string }> };
+
+export default async function TrendingPage({ searchParams }: Props) {
+  const { keyword: initialKeyword } = await searchParams;
   const [items, profile] = await Promise.all([
     getTrendingWithCoverage(),
     getCurrentProfile(),
@@ -35,6 +38,7 @@ export default async function TrendingPage() {
           isReporter={isReporter}
           userId={userId}
           reporterId={reporterId}
+          initialKeyword={initialKeyword}
         />
       )}
     </PageShell>

@@ -20,10 +20,12 @@ async function getDraft(draftId: number, userId: string) {
 
 interface PageProps {
   params: Promise<{ draft_id: string }>;
+  searchParams: Promise<{ keyword?: string }>;
 }
 
-export default async function DraftDetailPage({ params }: PageProps) {
+export default async function DraftDetailPage({ params, searchParams }: PageProps) {
   const { draft_id } = await params;
+  const { keyword: fromKeyword } = await searchParams;
   const draftId = parseInt(draft_id, 10);
   if (isNaN(draftId)) notFound();
 
@@ -59,7 +61,7 @@ export default async function DraftDetailPage({ params }: PageProps) {
       {/* 상단 네비 */}
       <div className="flex items-center gap-3 border-b border-border px-6 py-3">
         <Link
-          href="/trending"
+          href={fromKeyword ? `/trending?keyword=${encodeURIComponent(fromKeyword)}` : "/trending"}
           className="flex items-center gap-1.5 text-sm text-muted hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" />

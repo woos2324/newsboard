@@ -31,6 +31,7 @@ from scripts.lib.cluster import (
     pick_representative,
 )
 from scripts.lib.db import get_client
+from scripts.lib.revalidate import revalidate
 
 _NORMALIZE_RE = re.compile("[^0-9A-Za-z\uAC00-\uD7A3]+")
 
@@ -308,6 +309,7 @@ async def main() -> None:
         print(f"\n[dry-run] {len(kept)}개 후보 클러스터 — DB 적재 생략")
     else:
         print(f"\n신규 클러스터 {created}개, 기존 흡수 {absorbed}개 완료")
+    revalidate("dashboard", dry_run=args.dry_run)
 
 
 if __name__ == "__main__":

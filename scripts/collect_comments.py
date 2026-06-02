@@ -29,6 +29,7 @@ if sys.platform == "win32":
         pass
 
 from scripts.lib.db import get_client
+from scripts.lib.revalidate import revalidate
 
 TARGET_MEDIA = ["segye", "chosun", "joongang", "donga", "mk"]
 ARTICLE_URL_RE = re.compile(r"n\.news\.naver\.com/(?:mnews/)?article/(\d+)/(\d+)")
@@ -181,6 +182,7 @@ async def main() -> None:
     print(f"\n적재 완료: {len(metric_rows)}건")
     for mid, cnt in media_cnt.most_common():
         print(f"  {media_map.get(mid, mid)}: {cnt}건")
+    revalidate("dashboard")
 
 
 if __name__ == "__main__":

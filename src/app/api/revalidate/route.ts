@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-const TAGS = ["traffic", "trending", "dashboard"] as const;
+const TAGS = ["traffic", "trending", "dashboard", "compare", "articles"] as const;
 
 export async function GET(req: NextRequest) {
   const tag = req.nextUrl.searchParams.get("tag");

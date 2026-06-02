@@ -24,6 +24,7 @@ if sys.platform == "win32":
 
 from scripts.lib.db import get_client
 from scripts.lib.http import fetch_html
+from scripts.lib.revalidate import revalidate
 from scripts.lib.naver import (
     NAVER_SECTIONS,
     PUBLICATION_LIST_URL_TEMPLATE,
@@ -277,6 +278,7 @@ async def main() -> None:
 
     if args.dry_run:
         print("[dry-run] DB 쓰기 생략")
+    revalidate("articles", "dashboard", dry_run=args.dry_run)
 
 
 if __name__ == "__main__":

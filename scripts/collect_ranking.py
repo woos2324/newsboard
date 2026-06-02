@@ -22,6 +22,7 @@ if sys.platform == "win32":
 from scripts.lib.db import get_client, list_media
 from scripts.lib.http import fetch_html
 from scripts.lib.naver import RANKING_URL_TEMPLATE, RankingItem, parse_ranking_html
+from scripts.lib.revalidate import revalidate
 
 
 async def collect_one(
@@ -139,6 +140,7 @@ async def main() -> None:
         print("\n[dry-run] DB 적재 생략")
     else:
         print(f"\n총 적재 {total_articles}개 아이템")
+    revalidate("compare", "dashboard", dry_run=args.dry_run)
 
 
 if __name__ == "__main__":

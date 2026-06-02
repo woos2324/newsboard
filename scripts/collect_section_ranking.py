@@ -26,6 +26,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 from scripts.lib.db import get_client
+from scripts.lib.revalidate import revalidate
 
 NAVER_HEADERS = {
     "User-Agent": (
@@ -177,6 +178,7 @@ async def main() -> None:
     for m, rows in zip(media_rows, results):
         if rows:
             print(f"  {m['name']}: {len(rows)}건")
+    revalidate("compare")
 
 
 if __name__ == "__main__":

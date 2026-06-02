@@ -26,6 +26,7 @@ if sys.platform == "win32":
 from scripts.lib.db import get_client, list_media
 from scripts.lib.http import fetch_json
 from scripts.lib.naver import SUBSCRIBER_API_URL_TEMPLATE, extract_subscriber_count
+from scripts.lib.revalidate import revalidate
 
 
 async def collect_one(
@@ -138,6 +139,7 @@ async def main() -> None:
         .execute()
     )
     print(f"적재 완료: {len(res.data)} 행")
+    revalidate("dashboard")
 
 
 if __name__ == "__main__":

@@ -33,6 +33,7 @@ import httpx
 from dotenv import load_dotenv
 
 from scripts.lib.db import get_client
+from scripts.lib.revalidate import revalidate
 from scripts.lib.naver_pv_json_parser import (
     parse_article_pv_json,
     parse_hourly_pv_json,
@@ -578,6 +579,7 @@ def main() -> int:
         print(f"  월간: {n}건 완료")
 
     print(f"\n완료: 총 {total}건 적재")
+    revalidate("traffic", dry_run=args.dry_run)
     return 0
 
 

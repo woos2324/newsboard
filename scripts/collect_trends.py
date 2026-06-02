@@ -28,6 +28,7 @@ if sys.platform == "win32":
 
 from api.lib.ai import chat_completion
 from scripts.lib.db import get_client
+from scripts.lib.revalidate import revalidate
 
 TRENDS_URL = "https://trends.google.com/trending?geo=KR&hl=ko&hours=24&status=active"
 
@@ -472,6 +473,7 @@ async def main() -> None:
     print(f"  AI 콘텐츠 완료: {generated}/{len(trends)}")
 
     _save(sb, trends, dry_run=args.dry_run)
+    revalidate("trending", dry_run=args.dry_run)
 
 
 if __name__ == "__main__":

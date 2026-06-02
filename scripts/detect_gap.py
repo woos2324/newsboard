@@ -20,6 +20,7 @@ if sys.platform == "win32":
         pass
 
 from scripts.lib.db import get_client
+from scripts.lib.revalidate import revalidate
 
 KST = timezone(timedelta(hours=9))
 
@@ -345,6 +346,7 @@ def main() -> None:
     existing_titles = _load_existing_titles(sb, our["media_company_id"])
     inserted, updated = _upsert_alerts(sb, gaps, existing_titles)
     print(f"\n완료: {inserted}개 신규 / {updated}개 업데이트.")
+    revalidate("dashboard")
 
 
 if __name__ == "__main__":

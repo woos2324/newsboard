@@ -603,7 +603,7 @@ async function _getCompareMatrix(
 export const getCompareMatrix = unstable_cache(
   _getCompareMatrix,
   ["compare-matrix"],
-  { tags: ["compare"], revalidate: 300 }
+  { tags: ["compare"], revalidate: 3600 }
 );
 
 export async function getMediaNaverIds(
@@ -689,7 +689,7 @@ async function _getSectionRankings(
 export const getSectionRankings = unstable_cache(
   _getSectionRankings,
   ["compare-section-rankings"],
-  { tags: ["compare"], revalidate: 300 }
+  { tags: ["compare"], revalidate: 3600 }
 );
 
 // ===================================================================

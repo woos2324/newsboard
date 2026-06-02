@@ -665,7 +665,7 @@ export function TrendingClient({ items, fetchedAt, isReporter, userId, reporterI
                     }`}
                   >
                     <td className="w-6 py-4 pl-2 pr-0">
-                      {isMissed && <div className="h-8 w-1 rounded-full bg-error" />}
+                      <div className={`h-8 w-1 rounded-full ${isMissed ? "bg-error" : "bg-success"}`} />
                     </td>
                     <td className="px-4 py-4 text-center text-sm font-bold text-muted">
                       {item.traffic_rank}

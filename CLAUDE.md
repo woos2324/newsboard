@@ -86,6 +86,61 @@
 - Email Template "Confirm signup" → `{{ .Token }}` 으로 OTP 6자리 발송 (10분 만료)
 - 비밀번호 정책: 8자 이상, 대소문자 + 숫자 + 특수문자
 
+## 재개 지점 (2026-06-02, 36차 세션 종료)
+
+**이번 세션 (36차) 완료**:
+
+### 1. autowrite M3/M4 완료
+
+**M3 — Lazy 팩트 추출**
+- `api/lib/fact_extractor.py` — related_news URL 크롤링 + GPT gpt-4o-mini 팩트 추출 + `og:image` 추출 → `article_fact` 캐싱
+- `POST /api/autowrite/facts` — 캐시 히트 즉시 반환, 미스 10~20초
+- `GET /api/autowrite/keywords` — 미보도 활성 트렌드 키워드 목록
+
+**M4 — 초안 생성 + 검수 UI**
+- `POST /api/autowrite/draft` — reporter_id 있으면 문체 프로파일+few-shot 포함, 없으면 팩트만으로 gpt-4o 초안 생성
+- 트렌딩 우측 패널: "추천 기사 제목" 삭제 → reporter 전용 "초안 작성" 섹션 (DraftSection)
+- `src/app/autowrite/[draft_id]/page.tsx` — 초안 상세 (좌측 본문 + 우측 팩트 패널 w-[470px])
+- `/api/autowrite/drafts` — 본인 초안 목록 (세션 쿠키 인증)
+- 뒤로 가기 시 키워드 패널 자동 복원 (`?keyword=` URL 파라미터)
+- 김현주 계정 생성: `egg0love@segye.com` / reporter 역할 / 즉시 승인
+
+**판단 사항 (36차)**:
+1. **M3/M4에 OpenSearch 불필요** — M1/M2 한정. M3는 `trending_keyword.related_news` URL 크롤링으로 충분.
+2. **팩트 추출 URL별 개별 GPT 호출** — UNIQUE(keyword, source_url) 캐시와 자연스럽게 매핑.
+3. **reporter_id null → 빈 문자열** — `article_draft.reporter_id` NOT NULL 제약 대응.
+4. **FactImage Client Component 분리** — Server Component에 onError 핸들러 불가.
+5. **`/api/autowrite/drafts` 세션 쿠키 인증** — 미들웨어 x-user-* 헤더가 API Route에 전달 안 됨.
+
+### 2. 버그 수정 및 개선
+
+- **트래픽 시간대별 PV 0 재발** — 6/1 hourly 데이터 전부 0(KST 05:00 집계 미완료). `getLatestTrafficDate()`를 `hourly_pv_snapshot pv>0` 기준으로 변경. 6/1 데이터는 수동 실행(KST 15:30)으로 백필 완료(141만 PV). `upsert_hourly_pv`에 전 시간대 0 경고 로그 추가.
+- **경쟁사 비교 탭 전환 속도** — `getCompareMatrix`를 N+1 쿼리 → `ranking_news_snapshot` 기반 3번 통합 쿼리로 최적화. `getCompareMatrix`·`getSectionRankings` `unstable_cache` 1시간 적용.
+- **스켈레톤 UI 불일치** — 트렌딩(카드그리드→테이블구조), 트래픽(신규), 회원관리(신규) loading.tsx 실제 레이아웃에 맞게 재작성.
+
+### 3. 캐시 자동 무효화 (On-demand Revalidation 전면 도입)
+
+- `scripts/lib/revalidate.py` 공용 유틸 생성
+- `/api/revalidate` 엔드포인트에 `compare`, `articles` 태그 추가 (총 5개)
+- 9개 수집 스크립트 완료 시 해당 태그 즉시 무효화:
+  - collect_ranking → compare, dashboard
+  - collect_publications → articles, dashboard
+  - collect_section_ranking → compare
+  - collect_subscribers, collect_comments, cluster_articles, detect_gap → dashboard
+  - collect_naver_pv → traffic
+  - collect_trends → trending
+
+### 4. UI 개선
+
+- 트렌딩: 보도됨 키워드에 녹색 바 추가 (미보도=빨강, 보도됨=초록)
+- collect_trends.py: `title_suggestions` AI 생성 제거 (summary만 유지, 비용 절감)
+
+**미완료 (다음 세션)**:
+- ⚠ naver-pv KST 05:00 수집 재확인 필요 — 내일(6/3) 로그 확인 후 수집 시간 조정 여부 결정
+- 기존 미완료 항목 유지 (사설 백필, signup UI 등)
+
+---
+
 ## 재개 지점 (2026-06-01, 35차 세션 종료)
 
 **이번 세션 (35차) 완료**:

@@ -533,47 +533,78 @@ export async function getRankingNews(limit = 500): Promise<RankingNewsItem[]> {
 // Compare — 매체별 최근 기사 grid (순위 x 매체)
 // ===================================================================
 
-export async function getCompareMatrix(
-  normalizedNames: string[] = ["chosun", "joongang", "hani", "mk"],
+async function _getCompareMatrix(
+  normalizedNames: string[],
   limit = 5
 ): Promise<CompareMatrix> {
   const sb = getSupabase();
 
+  // 1. 매체 정보 조회
   const { data: mediaList, error: mediaErr } = await sb
     .from("media_company")
-    .select("name, normalized_name")
+    .select("media_company_id, name, normalized_name")
     .in("normalized_name", normalizedNames);
   if (mediaErr) throw mediaErr;
+  if (!mediaList?.length) return { cards: [] };
 
-  const mediaByNorm = new Map(
-    (mediaList ?? []).map((m) => [m.normalized_name, m.name])
-  );
+  const mediaIds = mediaList.map((m) => m.media_company_id);
 
-  const cards = await Promise.all(
-    normalizedNames
-      .filter((n) => mediaByNorm.has(n))
-      .map(async (normalizedName) => {
-        const mediaName = mediaByNorm.get(normalizedName)!;
-        const { data, error } = await sb
-          .from("article")
-          .select("title, url, media_company!inner(name)")
-          .eq("media_company.name", mediaName)
-          .order("published_at", { ascending: false, nullsFirst: false })
-          .limit(limit);
-        if (error) throw error;
-        return {
-          mediaName,
-          normalizedName,
-          articles: (data ?? []).map((a) => ({
-            title: a.title as string,
-            url: (a.url as string) ?? null,
-          })),
-        };
-      })
-  );
+  // 2. 최근 24시간 내 각 매체의 최신 랭킹 스냅샷 조회 (1번 쿼리)
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { data: snapshots } = await sb
+    .from("ranking_news_snapshot")
+    .select("ranking_snapshot_id, media_company_id")
+    .in("media_company_id", mediaIds)
+    .gte("snapshot_at", since)
+    .order("snapshot_at", { ascending: false });
+
+  // 매체별 최신 스냅샷 ID만 추출
+  const latestByMedia = new Map<number, number>();
+  for (const snap of snapshots ?? []) {
+    if (!latestByMedia.has(snap.media_company_id)) {
+      latestByMedia.set(snap.media_company_id, snap.ranking_snapshot_id);
+    }
+  }
+
+  // 3. 랭킹 기사 일괄 조회 (1번 쿼리)
+  const snapshotIds = [...latestByMedia.values()];
+  const { data: items } = snapshotIds.length
+    ? await sb
+        .from("ranking_news_item")
+        .select("ranking_snapshot_id, rank_position, article!inner(title, url)")
+        .in("ranking_snapshot_id", snapshotIds)
+        .lte("rank_position", limit)
+        .order("rank_position")
+    : { data: [] };
+
+  // 스냅샷별 기사 그룹핑
+  const itemsBySnapshot = new Map<number, { title: string; url: string | null }[]>();
+  for (const item of items ?? []) {
+    const art = item.article as unknown as { title: string; url: string };
+    const list = itemsBySnapshot.get(item.ranking_snapshot_id) ?? [];
+    list.push({ title: art.title, url: art.url ?? null });
+    itemsBySnapshot.set(item.ranking_snapshot_id, list);
+  }
+
+  // 4. 결과 조합 (요청 순서 유지)
+  const cards = normalizedNames
+    .map((normalizedName) => {
+      const media = mediaList.find((m) => m.normalized_name === normalizedName);
+      if (!media) return null;
+      const snapshotId = latestByMedia.get(media.media_company_id);
+      const articles = snapshotId ? (itemsBySnapshot.get(snapshotId) ?? []) : [];
+      return { mediaName: media.name, normalizedName, articles };
+    })
+    .filter((c): c is NonNullable<typeof c> => !!c);
 
   return { cards };
 }
+
+export const getCompareMatrix = unstable_cache(
+  _getCompareMatrix,
+  ["compare-matrix"],
+  { tags: ["compare"], revalidate: 300 }
+);
 
 export async function getMediaNaverIds(
   normalizedNames: string[]
@@ -595,7 +626,7 @@ export async function getMediaNaverIds(
     }));
 }
 
-export async function getSectionRankings(
+async function _getSectionRankings(
   normalizedNames: string[]
 ): Promise<MediaSectionRanking[]> {
   const sb = getSupabase();
@@ -654,6 +685,12 @@ export async function getSectionRankings(
     })
     .filter((m): m is MediaSectionRanking => !!m);
 }
+
+export const getSectionRankings = unstable_cache(
+  _getSectionRankings,
+  ["compare-section-rankings"],
+  { tags: ["compare"], revalidate: 300 }
+);
 
 // ===================================================================
 // Missed issue alerts (Gap)

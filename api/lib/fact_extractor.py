@@ -53,8 +53,8 @@ def _is_korean(text: str, threshold: float = 0.2) -> bool:
     return hangul / len(text) >= threshold
 
 
-async def _fetch_body(url: str) -> str | None:
-    """URL에서 기사 본문 텍스트 추출. 실패·비한국어 시 None."""
+async def _fetch_body(url: str) -> tuple[str | None, str | None]:
+    """URL에서 (기사 본문 텍스트, og:image URL) 추출. 실패 시 (None, None)."""
     try:
         async with httpx.AsyncClient(
             headers={
@@ -69,6 +69,13 @@ async def _fetch_body(url: str) -> str | None:
             resp.raise_for_status()
 
         soup = BeautifulSoup(resp.text, "html.parser")
+
+        # og:image 추출
+        image_url: str | None = None
+        og_image = soup.find("meta", property="og:image") or soup.find("meta", attrs={"name": "twitter:image"})
+        if og_image:
+            image_url = og_image.get("content") or None
+
         for tag in soup(["script", "style", "nav", "header", "footer", "aside"]):
             tag.decompose()
 
@@ -77,17 +84,17 @@ async def _fetch_body(url: str) -> str | None:
             if el:
                 text = el.get_text(separator="\n", strip=True)
                 if len(text) > 200:
-                    return text[:3000]
+                    return text[:3000], image_url
 
         body = soup.body
         if body:
             text = body.get_text(separator="\n", strip=True)
-            return text[:3000] if len(text) > 200 else None
+            return (text[:3000] if len(text) > 200 else None), image_url
 
     except Exception:
-        return None
+        return None, None
 
-    return None
+    return None, None
 
 
 async def _call_gpt(keyword: str, body: str, source_name: str) -> dict:
@@ -125,7 +132,7 @@ async def _process_one(
     url = news_item.get("url", "")
     source = news_item.get("source", "")
 
-    body = await _fetch_body(url)
+    body, image_url = await _fetch_body(url)
     if not body or not _is_korean(body):
         return None
 
@@ -133,6 +140,10 @@ async def _process_one(
         facts = await _call_gpt(keyword, body, source)
     except Exception:
         return None
+
+    # og:image를 facts에 포함 (참고용 이미지 — 타사 저작물이므로 URL만 저장)
+    if image_url:
+        facts["image_url"] = image_url
 
     row = {
         "keyword": keyword,

@@ -122,26 +122,26 @@ function DraftSection({ item, userId, reporterId }: DraftSectionProps) {
   const router = useRouter();
   const [step, setStep] = useState<DraftStep>({ type: "idle" });
   const [drafts, setDrafts] = useState<DraftItem[]>([]);
-  const [draftsLoaded, setDraftsLoaded] = useState(false);
 
-  // 키워드 변경 시 초안 목록 로드
-  const loadDrafts = useCallback(async () => {
-    if (draftsLoaded) return;
-    try {
-      const res = await fetch(`/api/autowrite/drafts?keyword=${encodeURIComponent(item.keyword)}`);
-      if (res.ok) {
-        const data = await res.json();
-        setDrafts(data.drafts ?? []);
+  // 키워드 변경 시마다 초안 목록 새로 로드
+  useEffect(() => {
+    let cancelled = false;
+    async function loadDrafts() {
+      try {
+        const res = await fetch(`/api/autowrite/drafts?keyword=${encodeURIComponent(item.keyword)}`);
+        if (res.ok && !cancelled) {
+          const data = await res.json();
+          setDrafts(data.drafts ?? []);
+        }
+      } catch {
+        // 목록 로드 실패는 무시
       }
-    } catch {
-      // 목록 로드 실패는 무시
-    } finally {
-      setDraftsLoaded(true);
     }
-  }, [item.keyword, draftsLoaded]);
-
-  // 컴포넌트 마운트 시 목록 로드
-  useEffect(() => { loadDrafts(); }, [loadDrafts]);
+    setDrafts([]);
+    setStep({ type: "idle" });
+    loadDrafts();
+    return () => { cancelled = true; };
+  }, [item.keyword]);
 
   const handleStart = async () => {
     // reporter_id로 프로파일 존재 여부 확인

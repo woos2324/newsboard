@@ -1741,9 +1741,13 @@ async function _getDailyCvHistory(
 
 async function _getLatestTrafficDate(): Promise<string | null> {
   const sb = getSupabase();
+  // hourly_pv_snapshot 기준으로 실제 pv > 0 데이터가 있는 최신 날짜 반환
+  // (article_pv_snapshot 기준 시 hourly 집계 미완료 날짜가 선택되는 문제 방지)
   const { data } = await sb
-    .from("article_pv_snapshot")
+    .from("hourly_pv_snapshot")
     .select("data_date")
+    .eq("device", "all")
+    .gt("pv", 0)
     .order("data_date", { ascending: false })
     .limit(1)
     .maybeSingle();

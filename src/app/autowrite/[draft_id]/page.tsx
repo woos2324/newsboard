@@ -90,7 +90,7 @@ export default async function DraftDetailPage({ params }: PageProps) {
         </div>
 
         {/* 우측: 팩트 패널 */}
-        <div className="w-80 shrink-0 overflow-y-auto border-l border-border bg-background px-5 py-6">
+        <div className="w-[420px] shrink-0 overflow-y-auto border-l border-border bg-background px-5 py-6">
           <h2 className="mb-4 text-sm font-bold text-foreground">근거 팩트</h2>
 
           {facts.length === 0 ? (
@@ -142,6 +142,22 @@ export default async function DraftDetailPage({ params }: PageProps) {
                     <div>
                       <p className="text-[10px] font-semibold uppercase text-muted">배경</p>
                       <p className="mt-0.5 text-xs leading-relaxed text-foreground/80">{f.facts.background}</p>
+                    </div>
+                  )}
+
+                  {/* 참고 이미지 (타사 저작물 — URL만 표시, 참고 전용) */}
+                  {(f.facts as { image_url?: string })?.image_url && (
+                    <div className="mt-2">
+                      <p className="mb-1 text-[10px] font-semibold uppercase text-muted">참고 이미지</p>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={(f.facts as { image_url?: string }).image_url}
+                        alt="참고 이미지"
+                        className="w-full rounded border border-border object-cover"
+                        style={{ maxHeight: 160 }}
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                      />
+                      <p className="mt-0.5 text-[9px] text-muted">참고용 — 저작권은 해당 매체에 있습니다</p>
                     </div>
                   )}
                 </div>

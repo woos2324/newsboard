@@ -207,12 +207,12 @@ async def create_draft(req: DraftRequest):
     if not content:
         raise HTTPException(status_code=502, detail="초안 생성 결과가 비어 있습니다.")
 
-    # article_draft 저장
+    # article_draft 저장 (reporter_id NOT NULL — 프로파일 없으면 빈 문자열)
     draft_row = (
         supabase.table("article_draft")
         .insert({
             "user_id": req.user_id,
-            "reporter_id": req.reporter_id,
+            "reporter_id": req.reporter_id or "",
             "keyword": req.keyword,
             "title": title,
             "content": content,

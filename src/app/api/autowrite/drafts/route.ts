@@ -1,21 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
-import { getCurrentProfile } from "@/lib/auth";
+import { getSupabaseServer } from "@/lib/supabase-server";
 
 // 본인 초안 목록 조회 (keyword 기준 필터 선택)
 export async function GET(req: NextRequest) {
-  const profile = await getCurrentProfile();
-  if (!profile) {
+  // 미들웨어 헤더 대신 세션 쿠키로 직접 인증
+  const supabaseAuth = await getSupabaseServer();
+  const { data: { user } } = await supabaseAuth.auth.getUser();
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const keyword = req.nextUrl.searchParams.get("keyword");
-  const supabase = getSupabase();
+  const db = getSupabase();
 
-  let query = supabase
+  let query = db
     .from("article_draft")
     .select("id, keyword, title, status, created_at")
-    .eq("user_id", profile.user_id)
+    .eq("user_id", user.id)
     .order("created_at", { ascending: false })
     .limit(20);
 

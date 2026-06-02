@@ -3,6 +3,7 @@ import { AlertTriangle, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { getSupabase } from "@/lib/supabase";
 import { getCurrentProfile } from "@/lib/auth";
+import { FactImage } from "./FactImage";
 
 export const dynamic = "force-dynamic";
 
@@ -149,14 +150,7 @@ export default async function DraftDetailPage({ params }: PageProps) {
                   {(f.facts as { image_url?: string })?.image_url && (
                     <div className="mt-2">
                       <p className="mb-1 text-[10px] font-semibold uppercase text-muted">참고 이미지</p>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={(f.facts as { image_url?: string }).image_url}
-                        alt="참고 이미지"
-                        className="w-full rounded border border-border object-cover"
-                        style={{ maxHeight: 160 }}
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                      />
+                      <FactImage src={(f.facts as { image_url?: string }).image_url!} />
                       <p className="mt-0.5 text-[9px] text-muted">참고용 — 저작권은 해당 매체에 있습니다</p>
                     </div>
                   )}

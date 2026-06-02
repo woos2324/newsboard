@@ -297,6 +297,15 @@ def upsert_hourly_pv(items: list, device_label: str, dry_run: bool) -> int:
         }
         for it in items
     ]
+
+    # 전 시간대 PV=0 → 네이버 집계 미완료 가능성 경고
+    if rows and all(r["pv"] == 0 for r in rows):
+        sample = [(r["hour"], r["pv"]) for r in rows[:4]]
+        print(
+            f"    ⚠ [hourly_pv/{device_label}] 전 시간대 PV=0 — "
+            f"네이버 집계 미완료 가능성. sample={sample}"
+        )
+
     if dry_run:
         print(f"     [dry-run] hourly_pv ({device_label}): {len(rows)}건 skipped")
         return len(rows)

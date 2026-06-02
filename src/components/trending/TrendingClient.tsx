@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { X, ExternalLink, Sparkles, PenLine, Copy, Check, Search } from "lucide-react";
+import { useState, useMemo, useCallback, useEffect } from "react";
+import { X, ExternalLink, Sparkles, FileText, Loader2, AlertTriangle } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { InfoTip } from "@/components/InfoTip";
 import type { TrendingWithCoverage } from "@/lib/queries";
 
@@ -71,7 +72,7 @@ function MiniChart({ history }: { history: { fetched_at: string; search_volume: 
   const H = 60;
   const pts = valid.map((h, i) => {
     const x = (i / (valid.length - 1)) * W;
-    const y = H - ((( h.search_volume as number) - min) / range) * H;
+    const y = H - (((h.search_volume as number) - min) / range) * H;
     return `${x},${y}`;
   });
   const polyline = pts.join(" ");
@@ -80,10 +81,9 @@ function MiniChart({ history }: { history: { fetched_at: string; search_volume: 
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 60 }}>
       <polygon points={area} fill="#EFF6FF" />
       <polyline points={polyline} fill="none" stroke="#1E40AF" strokeWidth="1.5" />
-      {/* 마지막 점 강조 */}
       {valid.length > 0 && (
         <circle
-          cx={(((valid.length - 1) / (valid.length - 1)) * W)}
+          cx={W}
           cy={H - (((valid[valid.length - 1].search_volume as number) - min) / range) * H}
           r="3"
           fill="#1E40AF"
@@ -94,24 +94,208 @@ function MiniChart({ history }: { history: { fetched_at: string; search_volume: 
 }
 
 // ---------------------------------------------------------------------------
-// 복사 버튼
+// 초안 작성 섹션 (reporter 전용)
 // ---------------------------------------------------------------------------
 
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+type DraftStep =
+  | { type: "idle" }
+  | { type: "confirm_no_profile" }
+  | { type: "extracting" }
+  | { type: "generating" }
+  | { type: "error"; message: string };
+
+interface DraftItem {
+  id: number;
+  keyword: string;
+  title: string;
+  status: string;
+  created_at: string;
+}
+
+interface DraftSectionProps {
+  item: TrendingWithCoverage;
+  userId: string;
+  reporterId: string;
+}
+
+function DraftSection({ item, userId, reporterId }: DraftSectionProps) {
+  const router = useRouter();
+  const [step, setStep] = useState<DraftStep>({ type: "idle" });
+  const [drafts, setDrafts] = useState<DraftItem[]>([]);
+  const [draftsLoaded, setDraftsLoaded] = useState(false);
+
+  // 키워드 변경 시 초안 목록 로드
+  const loadDrafts = useCallback(async () => {
+    if (draftsLoaded) return;
+    try {
+      const res = await fetch(`/api/autowrite/drafts?keyword=${encodeURIComponent(item.keyword)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setDrafts(data.drafts ?? []);
+      }
+    } catch {
+      // 목록 로드 실패는 무시
+    } finally {
+      setDraftsLoaded(true);
+    }
+  }, [item.keyword, draftsLoaded]);
+
+  // 컴포넌트 마운트 시 목록 로드
+  useEffect(() => { loadDrafts(); }, [loadDrafts]);
+
+  const handleStart = async () => {
+    // reporter_id로 프로파일 존재 여부 확인
+    if (!reporterId) {
+      setStep({ type: "confirm_no_profile" });
+      return;
+    }
+    // 프로파일 DB 조회는 초안 생성 API에서 처리 — 여기선 바로 진행
+    await runGenerate(true);
   };
+
+  const runGenerate = async (withProfile: boolean) => {
+    setStep({ type: "extracting" });
+    try {
+      // 팩트 추출
+      const factsRes = await fetch("/api/autowrite/facts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          keyword: item.keyword,
+          related_news: item.related_news ?? [],
+        }),
+      });
+      if (!factsRes.ok) throw new Error("팩트 추출에 실패했습니다.");
+
+      setStep({ type: "generating" });
+
+      // 초안 생성
+      const draftRes = await fetch("/api/autowrite/draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          keyword: item.keyword,
+          user_id: userId,
+          reporter_id: withProfile ? reporterId : null,
+          related_news: item.related_news ?? [],
+        }),
+      });
+      if (!draftRes.ok) {
+        const err = await draftRes.json().catch(() => ({}));
+        throw new Error(err.detail ?? "초안 생성에 실패했습니다.");
+      }
+
+      const draft = await draftRes.json();
+      router.push(`/autowrite/${draft.draft_id}`);
+    } catch (e) {
+      setStep({ type: "error", message: e instanceof Error ? e.message : "알 수 없는 오류가 발생했습니다." });
+    }
+  };
+
+  const isMissed = !item.covered;
+  const hasRelatedNews = (item.related_news ?? []).length > 0;
+  const canGenerate = isMissed && hasRelatedNews;
+
   return (
-    <button
-      onClick={handleCopy}
-      className="ml-1 shrink-0 rounded p-0.5 text-muted hover:text-primary-500"
-      title="복사"
-    >
-      {copied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
-    </button>
+    <div>
+      <p className="mb-2 flex items-center gap-1 text-xs font-semibold text-muted">
+        <FileText className="h-3 w-3" /> 초안 작성
+      </p>
+
+      {/* 기존 초안 목록 */}
+      {drafts.length > 0 && (
+        <ul className="mb-3 space-y-1.5">
+          {drafts.map((d) => (
+            <li key={d.id}>
+              <button
+                onClick={() => router.push(`/autowrite/${d.id}`)}
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-left hover:border-primary-500/40 hover:bg-blue-50/30"
+              >
+                <p className="truncate text-sm text-foreground">{d.title || "(제목 없음)"}</p>
+                <p className="mt-0.5 text-[10px] text-muted">
+                  {new Date(d.created_at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                </p>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* 상태별 UI */}
+      {step.type === "idle" && (
+        <button
+          onClick={handleStart}
+          disabled={!canGenerate}
+          className={`w-full rounded-lg border py-2 text-center text-xs font-semibold transition-colors ${
+            canGenerate
+              ? "border-primary-500 bg-primary-500 text-white hover:bg-primary-600"
+              : "cursor-not-allowed border-border bg-background text-muted"
+          }`}
+        >
+          {!hasRelatedNews
+            ? "관련 기사 없음 (초안 작성 불가)"
+            : !isMissed
+            ? "이미 보도된 키워드"
+            : "초안 작성하기"}
+        </button>
+      )}
+
+      {step.type === "confirm_no_profile" && (
+        <div className="rounded-lg border border-warning/40 bg-amber-50/60 p-3 text-sm">
+          <p className="mb-3 leading-relaxed text-foreground/80">
+            문체 학습 데이터가 준비되지 않은 계정입니다.
+            팩트 기반으로만 초안을 작성해 드릴까요?
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => runGenerate(false)}
+              className="flex-1 rounded-lg bg-primary-500 py-1.5 text-xs font-semibold text-white hover:bg-primary-600"
+            >
+              작성하기
+            </button>
+            <button
+              onClick={() => setStep({ type: "idle" })}
+              className="flex-1 rounded-lg border border-border py-1.5 text-xs font-semibold text-muted hover:bg-background"
+            >
+              취소
+            </button>
+          </div>
+        </div>
+      )}
+
+      {step.type === "extracting" && (
+        <div className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-3 text-xs text-muted">
+          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary-500" />
+          관련 기사 분석 중...
+        </div>
+      )}
+
+      {step.type === "generating" && (
+        <div className="rounded-lg border border-primary-500/20 bg-blue-50/40 px-3 py-3">
+          <div className="mb-1.5 flex items-center gap-2 text-xs font-semibold text-primary-500">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            기사 초안을 작성하고 있습니다.
+          </div>
+          <p className="text-[11px] text-muted">약 20~40초 소요됩니다.</p>
+        </div>
+      )}
+
+      {step.type === "error" && (
+        <div className="rounded-lg border border-error/30 bg-red-50/40 px-3 py-3">
+          <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-error">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            초안 생성 실패
+          </div>
+          <p className="mb-2 text-[11px] text-muted">{step.message}</p>
+          <button
+            onClick={() => setStep({ type: "idle" })}
+            className="text-xs font-semibold text-primary-500 hover:underline"
+          >
+            다시 시도
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -123,16 +307,17 @@ interface DetailPanelProps {
   item: TrendingWithCoverage;
   history: { fetched_at: string; search_volume: number | null }[];
   onClose: () => void;
+  isReporter: boolean;
+  userId: string;
+  reporterId: string;
 }
 
-function DetailPanel({ item, history, onClose }: DetailPanelProps) {
+function DetailPanel({ item, history, onClose, isReporter, userId, reporterId }: DetailPanelProps) {
   const freshness = freshnessSignal(item.started_at);
   const relatedNews = (item.related_news ?? []) as {
     title: string; url: string; source: string; published_ago?: string;
   }[];
   const relatedQueries = item.related_queries ?? [];
-  const titleSuggestions = item.title_suggestions ?? [];
-  const CIRCLE_NUM = ["①", "②", "③"];
   const encKeyword = encodeURIComponent(item.keyword);
 
   return (
@@ -203,24 +388,9 @@ function DetailPanel({ item, history, onClose }: DetailPanelProps) {
           )}
         </div>
 
-        {/* 추천 기사 제목 */}
-        {titleSuggestions.length > 0 && (
-          <div>
-            <p className="mb-2 flex items-center gap-1 text-xs font-semibold text-muted">
-              <PenLine className="h-3 w-3" /> 추천 기사 제목
-            </p>
-            <ul className="space-y-2">
-              {titleSuggestions.map((title, idx) => (
-                <li key={idx} className="flex items-start gap-1.5 rounded-lg border border-border bg-background px-3 py-2 text-sm">
-                  <span className="mt-0.5 shrink-0 text-[10px] font-bold text-primary-500">
-                    {CIRCLE_NUM[idx] ?? `${idx + 1}.`}
-                  </span>
-                  <span className="flex-1">{title}</span>
-                  <CopyButton text={title} />
-                </li>
-              ))}
-            </ul>
-          </div>
+        {/* 초안 작성 (reporter 전용) */}
+        {isReporter && (
+          <DraftSection item={item} userId={userId} reporterId={reporterId} />
         )}
 
         {/* 관련 검색어 */}
@@ -327,9 +497,12 @@ function DetailPanel({ item, history, onClose }: DetailPanelProps) {
 interface TrendingClientProps {
   items: TrendingWithCoverage[];
   fetchedAt: string;
+  isReporter: boolean;
+  userId: string;
+  reporterId: string;
 }
 
-export function TrendingClient({ items, fetchedAt }: TrendingClientProps) {
+export function TrendingClient({ items, fetchedAt, isReporter, userId, reporterId }: TrendingClientProps) {
   const [sortKey, setSortKey] = useState<SortKey>("rank");
   const [onlyMissed, setOnlyMissed] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -377,7 +550,6 @@ export function TrendingClient({ items, fetchedAt }: TrendingClientProps) {
   const missed = items.filter((i) => !i.covered).length;
   const covered = items.filter((i) => i.covered).length;
 
-  // 업데이트 시각 KST 포맷
   const kstTime = (() => {
     const d = new Date(fetchedAt);
     const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
@@ -393,7 +565,6 @@ export function TrendingClient({ items, fetchedAt }: TrendingClientProps) {
           <p className="caption mt-0.5">{kstTime} 기준 · 3분마다 갱신</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {/* 미보도만 필터 */}
           <button
             onClick={() => setOnlyMissed((v) => !v)}
             className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
@@ -404,7 +575,6 @@ export function TrendingClient({ items, fetchedAt }: TrendingClientProps) {
           >
             미보도만
           </button>
-          {/* 정렬 */}
           <select
             value={sortKey}
             onChange={(e) => setSortKey(e.target.value as SortKey)}
@@ -485,11 +655,8 @@ export function TrendingClient({ items, fetchedAt }: TrendingClientProps) {
                       isSelected ? "bg-blue-50" : ""
                     }`}
                   >
-                    {/* 미보도 인디케이터 셀 — 행과 분리된 독립 컬럼 */}
                     <td className="w-6 py-4 pl-2 pr-0">
-                      {isMissed && (
-                        <div className="h-8 w-1 rounded-full bg-error" />
-                      )}
+                      {isMissed && <div className="h-8 w-1 rounded-full bg-error" />}
                     </td>
                     <td className="px-4 py-4 text-center text-sm font-bold text-muted">
                       {item.traffic_rank}
@@ -529,6 +696,9 @@ export function TrendingClient({ items, fetchedAt }: TrendingClientProps) {
               item={selectedItem}
               history={historyLoading ? [] : history}
               onClose={() => setSelectedId(null)}
+              isReporter={isReporter}
+              userId={userId}
+              reporterId={reporterId}
             />
           </div>
         )}

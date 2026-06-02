@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routes import comments, gap, issues, overview, ranking, report, subscribers
+from api.routes import autowrite, comments, gap, issues, overview, ranking, report, subscribers
 
 app = FastAPI(title="Newsboard API", version="0.1.0")
 
@@ -19,6 +19,7 @@ app.include_router(gap.router, prefix="/api")
 app.include_router(subscribers.router, prefix="/api")
 app.include_router(comments.router, prefix="/api")
 app.include_router(report.router, prefix="/api")
+app.include_router(autowrite.router, prefix="/api")
 
 
 @app.get("/api/health")

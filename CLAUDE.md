@@ -115,7 +115,7 @@
 **미완료 (다음 세션)**:
 - ⚠ **M3**: 미보도 트렌드 키워드 → `related_news` 본문 크롤링 → 팩트 추출 → `article_fact` 캐싱 (Lazy)
 - ⚠ **M4**: 초안 생성 API + 검수 UI (reporter 전용, `roles.ts` 연동)
-- ⚠ OpenSearch NCP ACG 미개방 — 현재 로컬 전용. NCP 서버 배포 전 ACG 개방 필요
+- ℹ️ OpenSearch NCP ACG 미개방 메모는 **M1/M2 한정** (이미 완료). M3/M4는 OpenSearch 불필요 — `trending_keyword.related_news` URL 크롤링 + Supabase `reporter_style_profile` 조회만으로 구현 가능
 - 기존 미완료 항목 (naver-pv revalidate, 사설 백필 등) 유지
 
 ---

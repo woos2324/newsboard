@@ -163,6 +163,72 @@ export type Database = {
           },
         ]
       }
+      article_draft: {
+        Row: {
+          content: string | null
+          created_at: string | null
+          id: number
+          keyword: string
+          reporter_id: string
+          status: string
+          title: string | null
+          updated_at: string | null
+          used_facts: Json | null
+          user_id: string | null
+        }
+        Insert: {
+          content?: string | null
+          created_at?: string | null
+          id?: number
+          keyword: string
+          reporter_id: string
+          status?: string
+          title?: string | null
+          updated_at?: string | null
+          used_facts?: Json | null
+          user_id?: string | null
+        }
+        Update: {
+          content?: string | null
+          created_at?: string | null
+          id?: number
+          keyword?: string
+          reporter_id?: string
+          status?: string
+          title?: string | null
+          updated_at?: string | null
+          used_facts?: Json | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      article_fact: {
+        Row: {
+          extracted_at: string | null
+          facts: Json | null
+          id: number
+          keyword: string
+          source_name: string | null
+          source_url: string
+        }
+        Insert: {
+          extracted_at?: string | null
+          facts?: Json | null
+          id?: number
+          keyword: string
+          source_name?: string | null
+          source_url: string
+        }
+        Update: {
+          extracted_at?: string | null
+          facts?: Json | null
+          id?: number
+          keyword?: string
+          source_name?: string | null
+          source_url?: string
+        }
+        Relationships: []
+      }
       article_pv_snapshot: {
         Row: {
           article_id: number | null
@@ -1000,6 +1066,48 @@ export type Database = {
             referencedColumns: ["media_company_id"]
           },
         ]
+      }
+      reporter_style_profile: {
+        Row: {
+          article_count: number | null
+          created_at: string | null
+          generated_at: string | null
+          id: number
+          model: string | null
+          profile: Json | null
+          reporter_id: string
+          reporter_name: string | null
+          sample_articles: Json | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          article_count?: number | null
+          created_at?: string | null
+          generated_at?: string | null
+          id?: number
+          model?: string | null
+          profile?: Json | null
+          reporter_id: string
+          reporter_name?: string | null
+          sample_articles?: Json | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          article_count?: number | null
+          created_at?: string | null
+          generated_at?: string | null
+          id?: number
+          model?: string | null
+          profile?: Json | null
+          reporter_id?: string
+          reporter_name?: string | null
+          sample_articles?: Json | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
       }
       search_keyword_daily: {
         Row: {

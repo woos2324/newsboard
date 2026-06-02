@@ -208,7 +208,7 @@ function DraftSection({ item, userId, reporterId }: DraftSectionProps) {
           {drafts.map((d) => (
             <li key={d.id}>
               <button
-                onClick={() => router.push(`/autowrite/${d.id}`)}
+                onClick={() => router.push(`/autowrite/${d.id}?keyword=${encodeURIComponent(item.keyword)}`)}
                 className="w-full rounded-lg border border-border bg-background px-3 py-2 text-left hover:border-primary-500/40 hover:bg-blue-50/30"
               >
                 <p className="truncate text-sm text-foreground">{d.title || "(제목 없음)"}</p>

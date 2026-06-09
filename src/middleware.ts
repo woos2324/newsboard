@@ -39,7 +39,13 @@ export async function middleware(request: NextRequest) {
 
   // 1) 비로그인 사용자
   if (!user) {
-    if (isPublicPath(pathname)) return response;
+    if (isPublicPath(pathname)) {
+      // OTP 인증 없이 /reset-password?step=3 직접 접근 차단
+      if (pathname === "/reset-password" && request.nextUrl.searchParams.get("step") === "3") {
+        return redirectTo("/reset-password");
+      }
+      return response;
+    }
     return redirectTo("/login");
   }
 

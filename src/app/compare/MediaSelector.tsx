@@ -5,17 +5,54 @@ import { useRouter } from "next/navigation";
 import { Plus, Search, X } from "lucide-react";
 import type { CompareMediaOption } from "@/lib/queries";
 
+const STORAGE_KEY = "compare:media";
+
 export function MediaSelector({
   selected,
   options,
+  explicit,
 }: {
   selected: string[];
   options: CompareMediaOption[];
+  /** URL 에 ?media= 가 명시됐는지 (false = 기본값으로 진입) */
+  explicit: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const panelRef = useRef<HTMLDivElement>(null);
+
+  // URL 명시 선택을 localStorage 에 저장
+  useEffect(() => {
+    if (!explicit) return;
+    try {
+      localStorage.setItem(STORAGE_KEY, selected.join(","));
+    } catch {
+      /* localStorage 비활성 환경 무시 */
+    }
+  }, [explicit, selected]);
+
+  // 파라미터 없이 진입 시 저장된 선택으로 복원 (최초 1회)
+  useEffect(() => {
+    if (explicit) return;
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem(STORAGE_KEY);
+    } catch {
+      /* 무시 */
+    }
+    if (!saved) return;
+    const ids = ["segye", ...saved.split(",").filter((s) => s && s !== "segye")];
+    // 현재 선택과 동일하면 redirect 불필요
+    const same =
+      ids.length === selected.length &&
+      ids.every((id) => selected.includes(id));
+    if (ids.length > 1 && !same) {
+      router.replace(`/compare?media=${ids.join(",")}`);
+    }
+    // 의도적으로 최초 마운트 시 1회만 실행
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const labelOf = useMemo(() => {
     const map = new Map(options.map((o) => [o.normalizedName, o.name]));

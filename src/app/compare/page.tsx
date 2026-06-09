@@ -47,7 +47,11 @@ export default async function ComparePage({ searchParams }: Props) {
       title="경쟁사 비교"
       description="매체별 랭킹 뉴스를 나란히 비교해 포지셔닝을 확인하세요."
     >
-      <MediaSelector selected={mediaIds} options={mediaOptions} />
+      <MediaSelector
+        selected={mediaIds}
+        options={mediaOptions}
+        explicit={Boolean(mediaParam)}
+      />
       <CompareTabView popularData={popularData} sectionRankings={sectionRankings} />
     </PageShell>
   );

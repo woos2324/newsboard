@@ -48,6 +48,11 @@ export async function loginWithPassword(formData: FormData): Promise<ActionResul
       if (willLock) {
         return { ok: false, error: LOCKED_MESSAGE };
       }
+      const remaining = MAX_FAILED_ATTEMPTS - attempts;
+      return {
+        ok: false,
+        error: `이메일 또는 비밀번호가 올바르지 않습니다. ${remaining}회 더 실패하면 계정이 잠깁니다.`,
+      };
     }
     return { ok: false, error: "이메일 또는 비밀번호가 올바르지 않습니다." };
   }

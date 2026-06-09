@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { GitCompare } from 'lucide-react'
+import { GitCompare, Check, RefreshCw } from 'lucide-react'
 import { Editorial, getEditorialById } from '@/lib/queries'
 import EditorialModal from './EditorialModal'
 
@@ -81,11 +81,14 @@ export default function TodayTab({
   editorials,
   date,
   initialOpenId,
+  comparedIssues = [],
 }: {
   editorials: Editorial[]
   date: string
   initialOpenId?: number | null
+  comparedIssues?: string[]
 }) {
+  const comparedSet = new Set(comparedIssues)
   const [filter, setFilter] = useState<FilterType>('전체')
   const [selected, setSelected] = useState<Editorial | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
@@ -219,14 +222,32 @@ export default function TodayTab({
                   {!isSingle &&
                     filter !== '매체별' &&
                     items.some((e) => e.media_company?.is_our_company) &&
-                    items.some((e) => !e.media_company?.is_our_company) && (
+                    items.some((e) => !e.media_company?.is_our_company) &&
+                    (comparedSet.has(issue) ? (
+                      <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
+                        <Link
+                          href={`/compare?date=${date}&issue=${encodeURIComponent(issue)}`}
+                          className="flex items-center gap-1 rounded-lg border border-green-200 bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700 hover:bg-green-100 transition-colors"
+                        >
+                          <Check className="w-3.5 h-3.5" /> 비교 분석됨
+                        </Link>
+                        <Link
+                          href={`/compare?date=${date}&issue=${encodeURIComponent(issue)}&regen=1`}
+                          title="재생성"
+                          aria-label="비교 분석 재생성"
+                          className="flex items-center justify-center rounded-lg border border-gray-200 bg-white p-1 text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                        </Link>
+                      </div>
+                    ) : (
                       <Link
                         href={`/compare?date=${date}&issue=${encodeURIComponent(issue)}`}
                         className="ml-auto flex items-center gap-1 flex-shrink-0 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100 transition-colors"
                       >
                         <GitCompare className="w-3.5 h-3.5" /> 언론사 비교
                       </Link>
-                    )}
+                    ))}
                 </div>
                 <div className="overflow-hidden rounded-xl border border-gray-200 bg-white divide-y divide-gray-100">
                   {visibleItems.map((e) => (

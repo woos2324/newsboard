@@ -11,6 +11,7 @@ interface Props {
   date: string
   today: string
   initialIssue: string | null
+  initialRegen?: boolean
 }
 
 function formatTime(iso: string) {
@@ -57,10 +58,11 @@ function updateUrlIssue(date: string, issue: string | null) {
   if (issue) url.searchParams.set('issue', issue)
   else url.searchParams.delete('issue')
   if (date) url.searchParams.set('date', date)
+  url.searchParams.delete('regen')
   window.history.replaceState({}, '', url.toString())
 }
 
-export default function CompareClient({ comparisons, date, today, initialIssue }: Props) {
+export default function CompareClient({ comparisons, date, today, initialIssue, initialRegen = false }: Props) {
   const [list, setList] = useState<EditorialComparison[]>(comparisons)
   const [selectedIssue, setSelectedIssue] = useState<string | null>(initialIssue)
   const [generating, setGenerating] = useState(false)
@@ -86,12 +88,14 @@ export default function CompareClient({ comparisons, date, today, initialIssue }
     }
   }
 
-  // ?issue= 딥링크: 캐시에 없으면 1회 자동 생성
+  // ?issue= 딥링크: 캐시에 없으면 1회 자동 생성. ?regen=1 이면 캐시 있어도 강제 재생성.
   useEffect(() => {
     if (!initialIssue) return
     const exists = list.some((c) => c.issue === initialIssue)
-    if (!exists && !attempted.current.has(initialIssue)) {
+    if (!attempted.current.has(initialIssue) && (!exists || initialRegen)) {
       attempted.current.add(initialIssue)
+      // regen 파라미터는 URL 에서 제거 (새로고침 시 재재생성 방지)
+      updateUrlIssue(date, initialIssue)
       runGenerate(initialIssue)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

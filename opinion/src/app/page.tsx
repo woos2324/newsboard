@@ -1,4 +1,5 @@
 import { getTodayEditorials, getPastEditorials, getLatestEditionDate } from '@/lib/queries'
+import { getComparisonsByDate } from '@/lib/comparison-queries'
 import TodayTab from '@/components/TodayTab'
 import DateNav from '@/components/DateNav'
 
@@ -19,6 +20,11 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
     ? await getLatestEditionDate().catch(() => null)
     : null
 
+  // 이미 비교 분석이 생성된 issue 목록 (그룹 헤더에 '생성됨' 표시용)
+  const comparedIssues = await getComparisonsByDate(date)
+    .then((rows) => rows.map((r) => r.issue))
+    .catch(() => [])
+
   const initialOpenId = openParam ? Number(openParam) : null
 
   return (
@@ -37,6 +43,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ d
         editorials={editorials}
         date={date}
         initialOpenId={Number.isFinite(initialOpenId) ? initialOpenId : null}
+        comparedIssues={comparedIssues}
       />
     </div>
   )

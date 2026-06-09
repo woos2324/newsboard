@@ -1,11 +1,26 @@
 import { PageShell } from "@/components/PageShell";
-import { getCompareMatrix, getSectionRankings } from "@/lib/queries";
+import {
+  getActiveCompareMedia,
+  getCompareMatrix,
+  getSectionRankings,
+} from "@/lib/queries";
 import { CompareTabView } from "./CompareTabView";
 import { MediaSelector } from "./MediaSelector";
 
 export const revalidate = 300
 
-const DEFAULT_MEDIA: string[] = [];
+// URL 파라미터 없이 진입 시 기본 선택 매체 (세계일보 + 주요 경쟁사)
+const DEFAULT_MEDIA = [
+  "chosun",
+  "joongang",
+  "donga",
+  "mk",
+  "hankyung",
+  "hani",
+  "jtbc",
+  "kbs",
+  "ytn",
+];
 
 type Props = {
   searchParams: Promise<{ media?: string }>;
@@ -21,9 +36,10 @@ export default async function ComparePage({ searchParams }: Props) {
   // 세계일보 항상 첫 번째
   const mediaIds = ["segye", ...rawIds.filter((s) => s !== "segye")];
 
-  const [popularData, sectionRankings] = await Promise.all([
+  const [popularData, sectionRankings, mediaOptions] = await Promise.all([
     getCompareMatrix(mediaIds, 5),
     getSectionRankings(mediaIds),
+    getActiveCompareMedia(),
   ]);
 
   return (
@@ -31,7 +47,7 @@ export default async function ComparePage({ searchParams }: Props) {
       title="경쟁사 비교"
       description="매체별 랭킹 뉴스를 나란히 비교해 포지셔닝을 확인하세요."
     >
-      <MediaSelector selected={mediaIds} />
+      <MediaSelector selected={mediaIds} options={mediaOptions} />
       <CompareTabView popularData={popularData} sectionRankings={sectionRankings} />
     </PageShell>
   );

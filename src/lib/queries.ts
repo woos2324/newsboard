@@ -606,6 +606,30 @@ export const getCompareMatrix = unstable_cache(
   { tags: ["compare"], revalidate: 3600 }
 );
 
+export type CompareMediaOption = { normalizedName: string; name: string };
+
+const _getActiveCompareMedia = async (): Promise<CompareMediaOption[]> => {
+  const sb = getSupabase();
+  const { data, error } = await sb
+    .from("media_company")
+    .select("name, normalized_name, is_our_company")
+    .eq("is_active", true)
+    .not("naver_media_id", "is", null)
+    .order("is_our_company", { ascending: false })
+    .order("name");
+  if (error) throw error;
+  return (data ?? []).map((m) => ({
+    normalizedName: m.normalized_name,
+    name: m.name,
+  }));
+};
+
+export const getActiveCompareMedia = unstable_cache(
+  _getActiveCompareMedia,
+  ["active-compare-media"],
+  { tags: ["compare"], revalidate: 3600 }
+);
+
 export async function getMediaNaverIds(
   normalizedNames: string[]
 ): Promise<MediaNaverIdView[]> {

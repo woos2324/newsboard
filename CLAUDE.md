@@ -88,6 +88,74 @@
 - Email Template "Confirm signup" → `{{ .Token }}` 으로 OTP 6자리 발송 (10분 만료)
 - 비밀번호 정책: 8자 이상, 대소문자 + 숫자 + 특수문자
 
+## 재개 지점 (2026-06-09, 38차 세션 종료)
+
+**이번 세션 (38차) = 설계 확정만, 구현 미착수.** 다음 세션에서 아래 체크리스트대로 바로 구현.
+
+### 기능: opinion "today 사설 분석" (언론사 비교 보고서)
+
+opinion 앱 **오늘의 사설**의 같은-주제 그룹에서 **세계일보 vs 타사 사설을 AI로 비교**해, **논설위원 회의 보고용** 구조화 리포트를 생성·열람. (단순 비교가 아니라 회의 안건 자료)
+
+**확정 설계 (16개 결정)**:
+
+1. **버튼 노출** — 오늘의 사설 그룹 헤더([TodayTab.tsx](opinion/src/components/TodayTab.tsx))에 "언론사 비교" 버튼. **세계일보 포함 멀티-매체 그룹만**(세계일보 1+ & 타사 1+). `issue` 기준 그룹, 단독("기타")·세계일보 없는 그룹 제외.
+2. **클릭 흐름** — `/compare?date=…&issue=…` 로 이동 → 그 페이지에서 생성(스피너) → 결과 렌더. 이미 있으면 즉시 표시.
+3. **생성 위치** — opinion **Server Action에서 OpenAI 직접 호출**(opinion엔 현재 AI 연동 없음 → 헬퍼 신규).
+4. **모델** — **gpt-4o**.
+5. **입력** — 그룹 내 전 사설 **본문(`body`) 전량** 투입(길이 캡 없음). `body` 없으면 `summary`→제목 fallback. 세계일보 다건이면 모두 포함. 타사 전부 포함. ⚠ 목록 쿼리(`EDITORIAL_LIST_COLS`)엔 `body` 없음 → editorial_ids로 본문 별도 조회 함수 필요.
+6. **출력 = 구조화 JSON 5섹션** — ①핵심 쟁점 ②세계일보 논조·핵심 주장 ③타사 논조(매체별 서술, **stance 뱃지 없음**) ④공통점·차이점 ⑤**세계일보 시사점·논의 포인트**(회의 안건용 bullet).
+   ```json
+   { "issue_summary": "...", "segye_stance": "...",
+     "others": [ { "media": "조선일보", "stance": "..." } ],
+     "common": "...", "differences": "...",
+     "implications": ["..."] }
+   ```
+7. **저장/캐시** — 클릭 즉석 생성 + DB 저장. `(edition_date, issue)` 키 캐시. **신선도 자동감지 없음 + 수동 "재생성" 버튼**(덮어쓰기, updated_at 갱신).
+8. **DB 마이그레이션 `0028_editorial_comparison`** (미적용):
+   ```
+   editorial_comparison
+     comparison_id BIGSERIAL PK
+     edition_date  DATE NOT NULL
+     issue         TEXT NOT NULL
+     editorial_ids BIGINT[] NOT NULL   -- 참여 사설(매체 표시·링크용)
+     result        JSONB NOT NULL      -- 위 5섹션
+     model         TEXT NOT NULL
+     created_at    TIMESTAMPTZ DEFAULT now()
+     updated_at    TIMESTAMPTZ DEFAULT now()
+     UNIQUE (edition_date, issue)
+   -- RLS enable + anon SELECT + service role full (0014 editorial_anon_read 패턴)
+   ```
+   쓰기=`supabaseAdmin`(service role), 읽기=anon.
+9. **새 메뉴** — 라벨 "today 사설 분석", 경로 **`/compare`**(opinion 내, newsboard `/compare`와 별개 배포), 아이콘 lucide `GitCompare`. [OpinionSidebar.tsx](opinion/src/components/OpinionSidebar.tsx) 에서 `사설 일일 동향`(/report)은 **나브 주석 처리만**(페이지·코드 유지 — 성향 비교 패턴).
+10. **`/compare` 페이지** — 상단 DateNav(`basePath="/compare"`) + 그날 **생성된 비교 카드 리스트**(이슈 제목·참여 매체 수·생성시각·종합 한줄 미리보기) → 카드 클릭 시 5섹션 상세. `?issue=` 딥링크 자동 선택(없으면 생성, 있으면 표시).
+11. **보고서 복사 버튼** — 5섹션을 마크다운/플레인텍스트로 클립보드 복사(회의 자료·메신저 붙여넣기용). 인쇄/PDF는 추후.
+12. **인증** — v1 없음(opinion 공개 앱 일관). 비용은 `(date,issue)` 캐시 + 명시적 재생성 버튼으로 통제.
+13. **실패/장시간** — 생성 route/action `maxDuration 60s`. 실패 시 **DB 저장 안 함 + "다시 시도" 버튼**, 스피너에 "최대 30초" 안내.
+
+**구현 체크리스트 (파일별)**:
+- `supabase/migrations/0028_editorial_comparison.sql` 작성 + `mcp__supabase__apply_migration`
+- `opinion/src/lib/comparison-queries.ts` (신규) — `getComparisonsByDate(date)`, `getComparison(date, issue)`, 그룹 사설 본문 조회(`editorial_id[]` → `body`)
+- `opinion/src/app/compare/actions.ts` (신규) — `generateComparison(date, issue)` Server Action: 본문 수집 → gpt-4o 호출(JSON mode) → `editorial_comparison` upsert(supabaseAdmin). `maxDuration = 60`
+- `opinion/src/lib/ai.ts` (신규) — OpenAI 호출 헬퍼 (`AI_BASE_URL`/`OPENAI_API_KEY`/`gpt-4o`)
+- `opinion/src/app/compare/page.tsx` + `CompareClient.tsx` (신규) — DateNav + 카드 리스트 + 5섹션 상세 + 복사 버튼 + 스피너/재시도
+- `opinion/src/components/TodayTab.tsx` — 그룹 헤더에 "언론사 비교" 버튼(세계일보 포함 멀티-매체 조건) → `/compare?date&issue` 링크
+- `opinion/src/components/OpinionSidebar.tsx` — `사설 일일 동향` 주석, `today 사설 분석`(/compare, GitCompare) 추가
+- `opinion/src/components/DateNav.tsx` — `basePath` prop 이미 있는지 확인(28차 foreign 때 추가됨), 재사용
+
+**구현 전 운영 확인 2건 (필수)**:
+1. ⚠ **opinion Vercel 프로젝트에 `OPENAI_API_KEY`(+ `AI_BASE_URL`) 환경변수 추가** — 현재 opinion엔 없음. `vercel env add`. opinion은 **수동 배포**(`cd opinion && vercel --prod --yes`).
+2. ⚠ **opinion `maxDuration` 상한 확인** — Fluid Compute 아니면 60s 불가할 수 있음. 안 되면 본문 길이 캡(예: 2000자/건) 재도입.
+
+**판단 사항 (38차)**:
+1. **opinion Server Action 직접 호출** — newsboard FastAPI 재사용 대신. opinion 기존 Server Action+supabase-admin 패턴 일관, 크로스-프로젝트 호출 회피.
+2. **gpt-4o** — 논조 대비 분석 품질이 회의 보고의 핵심. 캐시로 반복 무료, 저볼륨이라 비용 부담 작음(호출당 ~30~50원).
+3. **신선도 자동감지 미적용, 수동 재생성** — 사용자 선택. 저녁 배치 추가분은 사용자가 재생성으로 반영.
+4. **stance 뱃지 제외** — AI 추정 성향 라벨이 회의 보고 신뢰도를 깎음. 진보/보수 대비는 종합 섹션 서술로.
+5. **본문 전량(캡 없음)** — 품질 우선. 단 maxDuration/토큰 한계 시 캡 재검토(운영 확인 2번).
+6. **경로 `/compare`** — opinion·newsboard 별개 배포라 충돌 없음.
+
+---
+
 ## 재개 지점 (2026-06-09, 37차 세션 종료)
 
 **이번 세션 (37차) 완료**:

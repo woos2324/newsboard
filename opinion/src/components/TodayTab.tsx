@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
+import { GitCompare } from 'lucide-react'
 import { Editorial, getEditorialById } from '@/lib/queries'
 import EditorialModal from './EditorialModal'
 
@@ -214,6 +216,17 @@ export default function TodayTab({
                       {filter === '매체별' ? `${items.length}건` : `${items.length}개 언론사가 같은 주제`}
                     </span>
                   )}
+                  {!isSingle &&
+                    filter !== '매체별' &&
+                    items.some((e) => e.media_company?.is_our_company) &&
+                    items.some((e) => !e.media_company?.is_our_company) && (
+                      <Link
+                        href={`/compare?date=${date}&issue=${encodeURIComponent(issue)}`}
+                        className="ml-auto flex items-center gap-1 flex-shrink-0 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100 transition-colors"
+                      >
+                        <GitCompare className="w-3.5 h-3.5" /> 언론사 비교
+                      </Link>
+                    )}
                 </div>
                 <div className="overflow-hidden rounded-xl border border-gray-200 bg-white divide-y divide-gray-100">
                   {visibleItems.map((e) => (

@@ -90,7 +90,18 @@
 
 ## 재개 지점 (2026-06-09, 38차 세션 종료)
 
-**이번 세션 (38차) = 설계 확정만, 구현 미착수.** 다음 세션에서 아래 체크리스트대로 바로 구현.
+**이번 세션 (38차) = 설계 확정 + 구현·배포·검증 전부 완료.** (아래 "확정 설계 16개"는 그대로 구현됨, 명세 보존용)
+
+**구현 결과 (2026-06-09 완료, opinion 프로덕션 배포)**:
+- **`0028_editorial_comparison`** 마이그레이션 적용 (edition_date+issue UNIQUE, JSONB result, RLS anon read)
+- opinion 첫 AI 연동: [opinion/src/lib/ai.ts](opinion/src/lib/ai.ts)(gpt-4o JSON mode, fetch) + [comparison-queries.ts](opinion/src/lib/comparison-queries.ts) + [compare/actions.ts](opinion/src/app/compare/actions.ts)(`generateComparison`, upsert) + [compare/page.tsx](opinion/src/app/compare/page.tsx)(`maxDuration=60`, page-level) + [CompareClient.tsx](opinion/src/app/compare/CompareClient.tsx)
+- [TodayTab.tsx](opinion/src/components/TodayTab.tsx): 멀티-매체 그룹 헤더에 "언론사 비교" 버튼 / **생성된 주제는 `✓ 비교 분석됨` 배지 + 재생성(↻) 아이콘**(메인 페이지가 `getComparisonsByDate`로 생성여부 조회 → prop 전달). 재생성은 `/compare?...&regen=1`로 이동해 maxDuration=60 페이지에서 강제 실행
+- [OpinionSidebar.tsx](opinion/src/components/OpinionSidebar.tsx): `today 사설 분석`(/compare, GitCompare) **맨 아래** 추가, `사설 일일 동향`(/report) 주석
+- **본문(body) 전량 분석** (캡 없음, 사설당 ~900~1,800자). 요약 분량 지침 상향(세계일보 5~8문장/타사 3~5문장 등) → 출력 2~3배
+- **부수 수정**: opinion 로컬 빌드 깨짐 — 루트+opinion 양쪽 `package-lock.json` 으로 Next 16 turbopack 이 워크스페이스 루트를 부모로 오추론 → 루트 `src/middleware.ts` 유입. [opinion/next.config.ts](opinion/next.config.ts) `turbopack.root=__dirname` 고정으로 해결 (프로덕션은 opinion 컨텍스트만 올라가 무관, 로컬 한정)
+- **프로덕션 E2E 10/10 PASS** (Playwright): 버튼 노출/사이드바/5섹션 생성/복사·재생성. DB row 저장 확인
+- 커밋: `94aa374`(본체) `b76b0f5`(분량확대+사이드바순서) `0a4290a`(생성표시+재생성아이콘)
+- ⚠ **opinion Vercel 환경변수 `OPENAI_API_KEY` 등록 완료** (사용자 직접). `AI_BASE_URL` 미등록(ai.ts 기본값 openai.com 사용). opinion 배포는 **수동**(`cd opinion && vercel --prod --yes`) — git 비연동
 
 ### 기능: opinion "today 사설 분석" (언론사 비교 보고서)
 
@@ -153,6 +164,16 @@ opinion 앱 **오늘의 사설**의 같은-주제 그룹에서 **세계일보 vs
 4. **stance 뱃지 제외** — AI 추정 성향 라벨이 회의 보고 신뢰도를 깎음. 진보/보수 대비는 종합 섹션 서술로.
 5. **본문 전량(캡 없음)** — 품질 우선. 단 maxDuration/토큰 한계 시 캡 재검토(운영 확인 2번).
 6. **경로 `/compare`** — opinion·newsboard 별개 배포라 충돌 없음.
+7. **재생성을 /compare 페이지로 위임** — 오늘의 사설(`/`) 페이지엔 maxDuration 미설정 → 무거운 gpt-4o 호출을 maxDuration=60 인 `/compare`에서 처리하도록 `?regen=1` 링크로 넘김. `/`에 maxDuration 추가 회피.
+8. **요약 분량 확대(사용자 피드백)** — 초기 출력이 너무 짧다는 피드백 → 프롬프트 섹션별 문장 수 지침 상향. 기존 캐시는 재생성해야 반영(자동 갱신 없음).
+
+**미완료 (다음 세션 이어받을 것)**:
+- ⚠ **로그인 실패 시 잔여 횟수 안내** (37차 잠금 기능 후속, 사용자 요청) — newsboard 로그인 화면에서 "이메일 또는 비밀번호가 올바르지 않습니다" 만 표시됨 → **"N회 더 실패하면 계정이 잠깁니다"** 안내 추가. [login/actions.ts](src/app/(auth)/login/actions.ts) `loginWithPassword` 가 실패 시 `failed_login_attempts` 증가 중 → 남은 횟수(`MAX_FAILED_ATTEMPTS - attempts`)를 에러 메시지/반환값에 포함. superadmin 제외 로직 유지. 계정 enumeration 우려는 사내도구라 허용(37차 판단 4와 동일선상).
+- (기존 미완료 유지: 사설 백필, signup UI 다듬기, naver-pv KST 05:00 재확인 등)
+
+**opinion 비교 분석 — 다음 세션 참고**:
+- 다른 날짜에 **이전 짧은 버전**으로 캐시된 비교가 있으면 화면의 **재생성** 버튼으로 긴 버전 갱신.
+- 톤/길이/섹션 조정은 [compare/actions.ts](opinion/src/app/compare/actions.ts) 의 `SYSTEM`/`SCHEMA_GUIDE` 수정 → opinion 수동 재배포.
 
 ---
 

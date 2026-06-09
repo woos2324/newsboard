@@ -7,11 +7,11 @@ import { Newspaper, BarChart2, TrendingUp, PenSquare, X, Tag, ClipboardList, Glo
 const nav = [
   { href: '/', label: '오늘의 사설', icon: Newspaper },
   // { href: '/stance', label: '성향 비교', icon: BarChart2 },
-  { href: '/compare', label: 'today 사설 분석', icon: GitCompare },
   { href: '/foreign', label: '해외 논조', icon: Globe },
   { href: '/trend', label: '세계일보 트렌드', icon: TrendingUp },
   { href: '/label', label: '성향 레이블링', icon: Tag },
   // { href: '/report', label: '사설 일일 동향', icon: ClipboardList },
+  { href: '/compare', label: 'today 사설 분석', icon: GitCompare },
 ]
 
 type Props = { isOpen?: boolean; onClose?: () => void }

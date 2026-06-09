@@ -43,7 +43,14 @@ export async function middleware(request: NextRequest) {
     return redirectTo("/login");
   }
 
-  // 2) 로그인 사용자가 /login 에 오면 → / 로
+  // 2) 비밀번호 찾기 진행 중 보호: OTP 인증 완료 후 비밀번호 변경 전까지 다른 페이지 차단
+  const resetPending = request.cookies.get("nb_reset_pending")?.value === "1";
+  if (resetPending) {
+    if (pathname !== "/reset-password") return redirectTo("/reset-password?step=3");
+    return response; // /reset-password 이면 그대로 통과
+  }
+
+  // 3) 로그인 사용자가 /login 에 오면 → / 로
   //    /signup 은 profile 없는 신규 가입자가 step3 를 완료해야 하므로 여기서 redirect 하지 않음
   //    /signup/pending 은 미승인 사용자가 봐야 하므로 예외
   const isOnPendingPage = pathname === "/signup/pending";

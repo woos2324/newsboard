@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { getSupabaseServer } from "@/lib/supabase-server";
 import { getSupabase } from "@/lib/supabase";
 
@@ -74,11 +75,14 @@ export async function loginWithPassword(formData: FormData): Promise<ActionResul
     redirect("/signup/pending");
   }
 
-  // 로그인 성공 → 실패 카운트 초기화
+  // 로그인 성공 → 실패 카운트 초기화 + 혹시 남아있을 reset_pending 쿠키 제거
   await admin
     .from("profiles")
     .update({ failed_login_attempts: 0, locked: false })
     .eq("user_id", data.user.id);
+
+  const cookieStore = await cookies();
+  cookieStore.delete("nb_reset_pending");
 
   redirect(profile.role === "business" ? "/traffic" : "/");
 }

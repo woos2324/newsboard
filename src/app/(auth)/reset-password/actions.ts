@@ -1,10 +1,13 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { getSupabaseServer } from "@/lib/supabase-server";
 import { getSupabase } from "@/lib/supabase";
 import { isAllowedEmail } from "@/lib/roles";
 import { getMissingPasswordRequirements } from "@/lib/password";
+
+const RESET_PENDING_COOKIE = "nb_reset_pending";
 
 type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -54,6 +57,17 @@ export async function verifyResetOtp(formData: FormData): Promise<ActionResult> 
   const { error } = await supabase.auth.verifyOtp({ email, token, type: "email" });
 
   if (error) return { ok: false, error: "인증 코드가 올바르지 않거나 만료되었습니다." };
+
+  // 비밀번호 변경 완료 전까지 다른 페이지 접근 차단용 세션 쿠키
+  const cookieStore = await cookies();
+  cookieStore.set(RESET_PENDING_COOKIE, "1", {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    secure: process.env.NODE_ENV === "production",
+    // maxAge 미설정 → 세션 쿠키 (브라우저 종료 시 삭제, Supabase auth 쿠키와 생명주기 일치)
+  });
+
   return { ok: true };
 }
 
@@ -76,6 +90,9 @@ export async function updatePassword(formData: FormData): Promise<ActionResult> 
   // 비밀번호 변경 후 전체 세션 무효화
   const admin = getSupabase();
   await admin.auth.admin.signOut(user.id, "global").catch(() => {});
+
+  const cookieStore = await cookies();
+  cookieStore.delete(RESET_PENDING_COOKIE);
 
   redirect("/login");
 }

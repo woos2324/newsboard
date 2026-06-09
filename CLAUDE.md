@@ -88,6 +88,40 @@
 - Email Template "Confirm signup" → `{{ .Token }}` 으로 OTP 6자리 발송 (10분 만료)
 - 비밀번호 정책: 8자 이상, 대소문자 + 숫자 + 특수문자
 
+## 재개 지점 (2026-06-10, 39차 세션 종료)
+
+**이번 세션 (39차) 완료** — 인증 보안 버그 수정 3건:
+
+### 1. 로그인 실패 잔여 횟수 안내 (38차 미완료 → 완료)
+- [login/actions.ts](src/app/(auth)/login/actions.ts) — 실패 시 `"N회 더 실패하면 계정이 잠깁니다"` 메시지 포함
+- superadmin·미가입 계정은 기존 generic 메시지 유지
+
+### 2. 비밀번호 찾기 OTP 인증 후 로그인 상태 유지 버그 수정
+- **원인**: `verifyOtp()` 호출 시 Supabase가 auth 세션 자동 생성 → 기존 사용자는 profile 존재 → middleware가 완전 로그인 판단
+- **해결**: `nb_reset_pending` 세션 쿠키(maxAge 없음, 브라우저 종료 시 삭제)로 "리셋 진행 중" 상태 표시
+  - [reset-password/actions.ts](src/app/(auth)/reset-password/actions.ts) — `verifyResetOtp` 성공 시 쿠키 set, `updatePassword` 완료 시 delete
+  - [middleware.ts](src/middleware.ts) — 쿠키 있으면 `/reset-password` 외 모든 경로 차단 → `?step=3` redirect
+  - [login/actions.ts](src/app/(auth)/login/actions.ts) — 로그인 성공 시 쿠키 삭제 (브라우저 세션 복원 대비)
+  - [reset-password/page.tsx](src/app/(auth)/reset-password/page.tsx) → 서버 컴포넌트 래퍼로 교체 + [ResetPasswordClient.tsx](src/app/(auth)/reset-password/ResetPasswordClient.tsx) 신규 분리 (`initialStep` prop)
+  - redirect 루프 버그 추가 수정: `redirectTo("/reset-password?step=3")` → URL API가 `?`를 `%3F` 인코딩 → `url.pathname`/`url.search` 분리 설정으로 해결
+
+### 3. 비로그인 `/reset-password?step=3` 직접 접근 차단
+- [middleware.ts](src/middleware.ts) — `!user` 분기에서 `/reset-password?step=3` 접근 시 `/reset-password`로 redirect
+
+**확인 사항 (버그 없음)**:
+- 회원가입 플로우 — URL 파라미터로 step 스킵 불가 (client-side useState 전용), `completeSignup` Server Action 세션 검증으로 보호됨
+- 초안 작성 — 본인 것만 표시 (API `.eq("user_id")` + DB RLS 이중 보호)
+- 디바이스별 시간대 차트 — 이미 구현됨 (전체/PC/모바일 토글, `DateDeviceSelector`) → 로드맵에서 제거
+
+**판단 사항 (39차)**:
+1. **`nb_reset_pending` 세션 쿠키** — maxAge 없이 세션 쿠키로 설정. 브라우저 종료 시 Supabase auth 쿠키와 함께 삭제되어 생명주기 일치. 브라우저 세션 복원 대비 로그인 성공 시도 명시적 삭제 추가.
+2. **/traffic 양방향 점프 구현 불가** — `article_pv_snapshot`은 기사별 일 단위 집계, `hourly_pv_snapshot`은 전체 사이트 시간대 집계 — 교차 데이터 없음. 미래 기능으로 유지.
+
+**미완료 (다음 세션 이어받을 것)**:
+- (기존 미완료 유지: 사설 백필, signup UI 다듬기 등)
+
+---
+
 ## 재개 지점 (2026-06-09, 38차 세션 종료)
 
 **이번 세션 (38차) = 설계 확정 + 구현·배포·검증 전부 완료.** (아래 "확정 설계 16개"는 그대로 구현됨, 명세 보존용)
@@ -168,7 +202,7 @@ opinion 앱 **오늘의 사설**의 같은-주제 그룹에서 **세계일보 vs
 8. **요약 분량 확대(사용자 피드백)** — 초기 출력이 너무 짧다는 피드백 → 프롬프트 섹션별 문장 수 지침 상향. 기존 캐시는 재생성해야 반영(자동 갱신 없음).
 
 **미완료 (다음 세션 이어받을 것)**:
-- ⚠ **로그인 실패 시 잔여 횟수 안내** (37차 잠금 기능 후속, 사용자 요청) — newsboard 로그인 화면에서 "이메일 또는 비밀번호가 올바르지 않습니다" 만 표시됨 → **"N회 더 실패하면 계정이 잠깁니다"** 안내 추가. [login/actions.ts](src/app/(auth)/login/actions.ts) `loginWithPassword` 가 실패 시 `failed_login_attempts` 증가 중 → 남은 횟수(`MAX_FAILED_ATTEMPTS - attempts`)를 에러 메시지/반환값에 포함. superadmin 제외 로직 유지. 계정 enumeration 우려는 사내도구라 허용(37차 판단 4와 동일선상).
+- ~~**로그인 실패 시 잔여 횟수 안내**~~ ✅ 완료 (39차)
 - (기존 미완료 유지: 사설 백필, signup UI 다듬기, naver-pv KST 05:00 재확인 등)
 
 **opinion 비교 분석 — 다음 세션 참고**:
@@ -730,7 +764,7 @@ NCP 한국 IP 로 GitHub Actions(Azure IP) 차단이 일부 해제됨을 확인�
 - ⚠ **트래픽/기사 페이지 추가 성능 최적화** (27차에서 이어짐) — Streaming SSR + Suspense / SWR
 - ~~**Vercel 자동 배포 webhook 안정화**~~ ✅ 완료 (29차)
 - ~~**opinion 오늘의 사설 fallback 배너**~~ ✅ 완료 (29차)
-- ⚠ **/traffic 인터랙티브 추가** — 매칭 기사 양방향 점프, 디바이스별 시간대 차트
+- ⚠ **/traffic 인터랙티브 추가** — 매칭 기사 양방향 점프 (기사별 시간대 PV 데이터 없어 현재 구현 불가, 미래 기능)
 - ⚠ **subscriber_snapshot / daily_publication_count 보존 기간 미결정**
 - ⚠ **미보도 탐지 3단계** (임베딩 기반) — article.body 수집 + NCP 이전 후
 - ⚠ **StanceTab 차트 레이블 겹침** — 스태거드 방식 적용

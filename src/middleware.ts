@@ -46,7 +46,14 @@ export async function middleware(request: NextRequest) {
   // 2) 비밀번호 찾기 진행 중 보호: OTP 인증 완료 후 비밀번호 변경 전까지 다른 페이지 차단
   const resetPending = request.cookies.get("nb_reset_pending")?.value === "1";
   if (resetPending) {
-    if (pathname !== "/reset-password") return redirectTo("/reset-password?step=3");
+    if (pathname !== "/reset-password") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/reset-password";
+      url.search = "?step=3";
+      const r = NextResponse.redirect(url);
+      copyCookies(r, response);
+      return r;
+    }
     return response; // /reset-password 이면 그대로 통과
   }
 

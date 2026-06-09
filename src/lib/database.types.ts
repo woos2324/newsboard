@@ -935,6 +935,8 @@ export type Database = {
           approved: boolean
           created_at: string
           email: string
+          failed_login_attempts: number
+          locked: boolean
           name: string
           role: string
           updated_at: string
@@ -944,6 +946,8 @@ export type Database = {
           approved?: boolean
           created_at?: string
           email: string
+          failed_login_attempts?: number
+          locked?: boolean
           name: string
           role?: string
           updated_at?: string
@@ -953,6 +957,8 @@ export type Database = {
           approved?: boolean
           created_at?: string
           email?: string
+          failed_login_attempts?: number
+          locked?: boolean
           name?: string
           role?: string
           updated_at?: string

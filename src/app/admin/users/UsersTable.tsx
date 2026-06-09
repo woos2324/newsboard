@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, Trash2, X } from "lucide-react";
-import { deleteUser, updateUserApproval, updateUserRole } from "./actions";
+import { Check, LockOpen, Trash2, X } from "lucide-react";
+import { deleteUser, unlockUser, updateUserApproval, updateUserRole } from "./actions";
 import type { Role } from "@/lib/roles";
 
 type UserRow = {
@@ -11,6 +11,8 @@ type UserRow = {
   name: string;
   role: string;
   approved: boolean;
+  locked: boolean;
+  failed_login_attempts: number;
   created_at: string;
   updated_at: string;
 };
@@ -56,6 +58,16 @@ export function UsersTable({ users }: { users: UserRow[] }) {
     setPendingId(userId);
     startTransition(async () => {
       const result = await updateUserApproval(userId, approve);
+      setPendingId(null);
+      if (!result.ok) setError(result.error);
+    });
+  }
+
+  function handleUnlock(userId: string) {
+    setError(null);
+    setPendingId(userId);
+    startTransition(async () => {
+      const result = await unlockUser(userId);
       setPendingId(null);
       if (!result.ok) setError(result.error);
     });
@@ -120,15 +132,31 @@ export function UsersTable({ users }: { users: UserRow[] }) {
                     </select>
                   </td>
                   <td className="px-4 py-3">
-                    {u.approved ? (
-                      <span className="badge badge-success">승인됨</span>
-                    ) : (
-                      <span className="badge badge-warning">대기</span>
-                    )}
+                    <div className="flex flex-wrap items-center gap-1">
+                      {u.approved ? (
+                        <span className="badge badge-success">승인됨</span>
+                      ) : (
+                        <span className="badge badge-warning">대기</span>
+                      )}
+                      {u.locked && (
+                        <span className="badge badge-error">잠김</span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-muted">{formatDate(u.created_at)}</td>
                   <td className="px-4 py-3 text-right">
                     <div className="inline-flex items-center gap-1">
+                      {u.locked && (
+                        <button
+                          type="button"
+                          onClick={() => handleUnlock(u.user_id)}
+                          disabled={busy}
+                          className="inline-flex items-center gap-1 rounded border border-primary-500/40 bg-primary-500/5 px-2 py-1 text-xs font-medium text-primary-500 hover:bg-primary-500/10 disabled:opacity-50"
+                        >
+                          <LockOpen className="h-3 w-3" />
+                          잠금 해제
+                        </button>
+                      )}
                       {!u.approved ? (
                         <button
                           type="button"

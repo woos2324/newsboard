@@ -53,6 +53,22 @@ export async function updateUserApproval(userId: string, approved: boolean): Pro
   return { ok: true };
 }
 
+export async function unlockUser(userId: string): Promise<Result> {
+  const auth = await assertSuperadmin();
+  if (!auth.ok) return auth;
+
+  const admin = getSupabase();
+  const { error } = await admin
+    .from("profiles")
+    .update({ locked: false, failed_login_attempts: 0 })
+    .eq("user_id", userId);
+
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/admin/users");
+  return { ok: true };
+}
+
 export async function deleteUser(userId: string): Promise<Result> {
   const auth = await assertSuperadmin();
   if (!auth.ok) return auth;

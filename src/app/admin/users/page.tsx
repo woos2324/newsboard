@@ -8,7 +8,7 @@ export default async function AdminUsersPage() {
   const admin = getSupabase();
   const { data: users } = await admin
     .from("profiles")
-    .select("user_id, email, name, role, approved, created_at, updated_at")
+    .select("user_id, email, name, role, approved, locked, failed_login_attempts, created_at, updated_at")
     .order("approved", { ascending: true })
     .order("created_at", { ascending: false });
 

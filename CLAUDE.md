@@ -65,6 +65,8 @@
 - `0023` — profiles (auth.users 1:1, role/approved 기반 접근 제어, 30차)
 - `0024` — profiles RLS 보안 패치 (31차)
 - `0025` — trending_keyword 6개 컬럼 추가 (search_volume, growth_rate, started_at, started_ago_text, status, related_queries) (34차)
+- `0026` — autowrite 3개 테이블 (reporter_style_profile / article_fact / article_draft + RLS, 35차)
+- `0027` — profiles 로그인 잠금 (failed_login_attempts INT, locked BOOL, 37차)
 - 마이그레이션 상세: [supabase/migrations/](supabase/migrations/)
 - 매체 51개 (naver_media_id 보유 47개) + 해외 8개 매체 코드 (foreign_sources.py: wapo/nyt/ft/scmp/guardian/wtimes/mainichi/sankei)
 
@@ -85,6 +87,38 @@
 - Sender email: `noreply@segye.com`
 - Email Template "Confirm signup" → `{{ .Token }}` 으로 OTP 6자리 발송 (10분 만료)
 - 비밀번호 정책: 8자 이상, 대소문자 + 숫자 + 특수문자
+
+## 재개 지점 (2026-06-09, 37차 세션 종료)
+
+**이번 세션 (37차) 완료**:
+
+### 1. 경쟁사 비교 — 수집 매체 전체 노출 (선택 UI 동적화)
+
+- **문제**: `/compare` 에서 수집 매체가 다 안 나옴. 원인은 수집/데이터가 아니라 [MediaSelector.tsx](src/app/compare/MediaSelector.tsx) 의 `CHIP_LIST` 가 **10개 매체 하드코딩** (실제 활성 수집 매체는 자사 포함 48개, 최근 24h 47개 데이터 적재).
+- **수정**:
+  - `getActiveCompareMedia()` 추가 ([queries.ts](src/lib/queries.ts)) — `is_active=TRUE AND naver_media_id IS NOT NULL` 전체 조회, `unstable_cache` `compare` 태그 재사용
+  - [page.tsx](src/app/compare/page.tsx) — 전체 매체 옵션 prop 주입, `DEFAULT_MEDIA` 주요 9개 경쟁사로 복원(빈 화면 방지), `explicit` prop 전달
+  - [MediaSelector.tsx](src/app/compare/MediaSelector.tsx) — 하드코딩 제거. 선택 칩(× 제거, segye 고정) + "매체 추가" 검색 드롭다운(외부 클릭 닫힘)
+- **localStorage 저장/복원**: `?media=` 명시 선택은 `compare:media` 키로 저장, 파라미터 없이 진입 시 마지막 선택 복원(`router.replace`). 기기/브라우저 단위. 서버는 기본값 렌더 후 클라가 복원 → 커스텀 조합 시 짧은 깜빡임 있음(내부도구라 허용).
+
+### 2. 로그인 5회 실패 시 계정 잠금 (관리자 수동 해제)
+
+- **`0027_profiles_login_lock`** — `profiles.failed_login_attempts INT`, `locked BOOL` 추가 (운영 DB 적용 완료)
+- [login/actions.ts](src/app/(auth)/login/actions.ts) — 인증 전 이메일로 잠금 확인 → 잠겼으면 즉시 거부. 실패 시 카운트+1, **5회 도달 시 `locked=true`**. 성공 시 카운트·잠금 초기화. **superadmin 은 락아웃 제외**(영구 잠금 방지)
+- 회원관리 ([UsersTable.tsx](src/app/admin/users/UsersTable.tsx) / [actions.ts](src/app/admin/users/actions.ts)) — `잠김` 배지 + `잠금 해제` 버튼(`unlockUser`, superadmin 전용, `locked=false`+`attempts=0`)
+- **E2E 테스트 7/7 PASS** — 일회용 reporter 계정 + Playwright(python) 로 로컬 dev 실제 로그인 화면 구동: 1~4회 일반실패 / 5회째 잠김 / DB locked·attempts 기록 / 잠긴 상태 정답거부 / 해제 / 해제후 정답 성공. 테스트 계정 삭제 완료
+- **이메일 대소문자**: 가입(`requestSignupOtp` lowercase + GoTrue 정규화 → `profiles.email` 소문자) / 로그인(입력 lowercase) 모두 소문자 통일 확인. DB 현 6명 mixed_case 0건. **잠금 매칭 정상, 수정 불필요**
+
+**판단 사항 (37차)**:
+1. **검색 드롭다운 UX 채택** — 48개 매체를 칩 전체 나열(화면 차지)·카테고리 그룹(DB 분류 컬럼 없음) 대신 검색+다중선택. 확장성·화면 깔끔함 우선.
+2. **localStorage(계정 DB 저장 X)** — 매체 선택 기억은 기기 단위면 충분. DB/마이그레이션 부담 회피.
+3. **superadmin 락아웃 제외** — 마지막 관리자가 잠기면 영구 잠금(DB 직접 복구 필요). 자동 잠금 대상에서 superadmin 제외.
+4. **잠김 메시지 명시적 유지** — "5회 실패로 잠겼습니다" 가 계정 존재 신호가 되지만 사내 도구라 허용. 모호화 미적용.
+
+**미완료 (다음 세션)**:
+- 기존 미완료 항목 유지 (naver-pv KST 05:00 수집 재확인, 사설 백필, signup UI 다듬기 등)
+
+---
 
 ## 재개 지점 (2026-06-02, 36차 세션 종료)
 

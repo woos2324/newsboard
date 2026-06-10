@@ -43,12 +43,13 @@
 | cron-editorials | KST 06:00, 14:00, 22:00 (하루 3회) | 네이버 사설 수집 + AI 성향 분석 → editorial |
 | cron-daily-briefing | UTC 15:00 (KST 00:00) | AI 일간 브리핑 → ai_summary |
 | cron-cleanup | UTC 15:00 (KST 00:00) | 7일 이전 스냅샷 삭제 |
-| cron-naver-pv | 매일 KST 01:00 | 네이버 파트너센터 PV 수집 → 4개 테이블 |
+| cron-naver-pv | UTC 20:00 (KST 05:00) 1차 + 22:00 fallback | 전일 확정 PV 수집 → 4개 테이블 |
+| **cron-naver-pv 실시간** | **10분마다 (`*/10`)** | **오늘 지표 실시간 수집 `--realtime` (/api/today: 총조회수·기사순위·유입경로 device별 + 검색키워드 + realtime_pv_tick) (40차)** |
 | **cron-foreign-editorials** | **UTC 22:00 (KST 07:00)** | **해외 매체 사설 수집 + gpt-4o-mini 한국어 번역 → foreign_editorial** |
 
 **cron chain**: `ranking → cluster → gap` (매시 자동 연쇄)
 
-## DB 스키마 (마이그레이션 23건)
+## DB 스키마 (마이그레이션 30건)
 
 - `0001_init` — 11개 코어 테이블
 - `0002` ~ `0006` — daily_publication_count, section_ranking, 성능 인덱스, section_ranking_unique, gap_verdict
@@ -67,6 +68,9 @@
 - `0025` — trending_keyword 6개 컬럼 추가 (search_volume, growth_rate, started_at, started_ago_text, status, related_queries) (34차)
 - `0026` — autowrite 3개 테이블 (reporter_style_profile / article_fact / article_draft + RLS, 35차)
 - `0027` — profiles 로그인 잠금 (failed_login_attempts INT, locked BOOL, 37차)
+- `0028` — editorial_comparison (opinion 사설 비교 보고서, 38차)
+- `0029` — realtime_pv_tick (오늘 누적 PV 시계열, 시간대별 PV 차분 계산용, 40차)
+- `0030` — traffic_source_daily.device 컬럼 (유입경로 device별 분리, 40차)
 - 마이그레이션 상세: [supabase/migrations/](supabase/migrations/)
 - 매체 51개 (naver_media_id 보유 47개) + 해외 8개 매체 코드 (foreign_sources.py: wapo/nyt/ft/scmp/guardian/wtimes/mainichi/sankei)
 
@@ -87,6 +91,49 @@
 - Sender email: `noreply@segye.com`
 - Email Template "Confirm signup" → `{{ .Token }}` 으로 OTP 6자리 발송 (10분 만료)
 - 비밀번호 정책: 8자 이상, 대소문자 + 숫자 + 특수문자
+
+## 재개 지점 (2026-06-10, 40차 세션 종료)
+
+**이번 세션 (40차) = 네이버 실시간 PV 수집 + `/traffic` 오늘 실시간 표시. 설계·구현·배포·검증 전부 완료.**
+
+### 배경 / 문제
+- 기존 `collect_naver_pv.py` 는 **전일 확정 데이터만** 수집(KST 05:00). 파트너센터 "오늘 지표" 화면은 분 단위 실시간(조회수·기사순위·유입경로)을 제공 → 편집국이 "지금"의 트래픽을 보게 하는 게 목표.
+
+### 핵심 발견 (정찰)
+- **실시간 = `GET /api/today` 단일 엔드포인트** (사전 `GET /api/misAuthCertification?targetApiPath=/api/today` 필요). 응답 `statDataList` 의 dataId:
+  - `normal` — 오늘 포함 일별 total/pc/mobile (오늘 행 = 실시간 누적), `utime` = "현재" 시각
+  - `pvRank` — 실시간 기사순위 Top100 (uri·cv·reporter·title·createDate)
+  - `referer` / `refererDetail` — 실시간 유입경로
+- `section`/`device` 파라미터 정상 작동 → device(전체/PC/모바일)·섹션별 수집 가능. **유입경로도 device별로 크게 다름**(PC=네이버뉴스/PC메인, 모바일=언론사별판).
+- ⚠ **오늘 시간대별 PV 는 네이버가 안 줌**: `/api/userV2/time?startDate=today` → **500**. `/api/today` 에도 시간대 분해 없음(일별만).
+- ✅ **검색 키워드는 오늘도 정상** (`/api/search/keywordTotal?startDate=today` → 200).
+- 응답 포맷이 기존 파서와 동일 → `parse_article_pv_json(data_id="pvRank")` / `parse_traffic_source_json`("referer") / `parse_daily_cv_all_devices`(normal 첫 행=오늘) 재사용.
+
+### 구현
+- **마이그레이션** `0029_realtime_pv_tick`(오늘 누적 PV 10분 스냅샷), `0030_traffic_source_device`(유입경로 device 컬럼)
+- **`collect_naver_pv.py --realtime`** ([scripts/collect_naver_pv.py](scripts/collect_naver_pv.py)): `data_date=오늘(KST)`, device×section 루프로 `/api/today` 호출 → article_pv(device별)·daily_cv(all/pc/mobile)·traffic_source(device별)·realtime_pv_tick·검색키워드를 **오늘 날짜로 upsert(덮어쓰기)**. 종료 시 `revalidate("traffic")`.
+- **시간대별 PV = tick 차분**: 네이버가 오늘 시간대를 안 주므로, 10분마다 저장한 누적 PV(`realtime_pv_tick`)를 시간 경계로 차분해 "오늘 경과 시간대 PV"를 **우리가 직접 계산**(관측 시작 시점 누적은 분해 불가 → "관측 구간만" 표시, 내일부터 0시부터 전 시간대).
+- **프론트** ([page.tsx](src/app/traffic/page.tsx)/[TrafficContent.tsx](src/app/traffic/TrafficContent.tsx)/[HourlyChart.tsx](src/app/traffic/HourlyChart.tsx)/[queries.ts](src/lib/queries.ts)): `getLatestRealtimeDate()` 로 오늘 실시간분 있으면 **오늘 기본 표시**, "실시간 HH:MM 현재" 펄스 배지, device 토글에 기사순위·유입경로·검색비중 반응. 시간대 차트는 tick 차분 막대(`RealtimeHourlyChart`) + 어제 동시간 비교.
+- **대시보드 조회수 카드** ([src/app/page.tsx](src/app/page.tsx)): "전일기준" → 오늘 실시간이면 "오늘 실시간"/"전일 종일 대비", 없으면 전일 fallback.
+- **crontab** `*/10` 실시간 cron 추가(기존 전일 수집 UTC 20:00/22:00 유지). NCP worker 배포 완료, **17:10 KST 첫 자동 실행 확인**.
+- **하이드레이션 수정**: 실시간 차트 마운트 후 클라 렌더(SSR/CSR 스냅샷 불일치 차단) + `toLocaleString`(서버/클라 ICU 차이) → 로케일 비의존 `fmtNum` 으로 전면 교체.
+
+### 데이터 수명주기 (중요)
+- 오늘 D: 실시간 누적, 10분 갱신. 다음날 D+1 자정~05:00: D 는 마지막 실시간 누적값으로 고정(tick 차분 차트). **D+1 KST 05:00 일간 수집이 D 를 확정값으로 upsert 덮어쓰기 + hourly 채움 → 화면 자동으로 확정 모드 전환**(자연 승격, 데이터 손실 없음).
+
+**판단 사항 (40차)**:
+1. **`/api/today` 단일 호출 채택** — 3종이 한 응답. device×section 그리드(30콜/run)로 기존 일간 수집과 동일 구조 + 검색키워드 1콜.
+2. **시간대별 PV 는 tick 차분으로 자체 합성** — 네이버 미제공(500). 관측 구간 한정이지만 익일부터 전 시간대. (사용자 선택)
+3. **유입경로 device 분리** — PC/모바일 유입 구조가 완전히 달라 가치 큼. `traffic_source_daily.device` 추가, 과거 날짜는 'all' fallback.
+4. **로컬 dev 캐시 함정** — `unstable_cache` 가 `.next/cache` 디스크에 24h 영구 저장돼 서버 재시작으로도 안 비워짐. 로컬 검증 시 `curl localhost:3000/api/revalidate?tag=traffic` 또는 `.next/cache` 삭제 필요. **프로덕션은 수집기 `revalidate("traffic")` 로 매번 무효화되어 무관.**
+
+**미완료 / 다음 세션 이어받을 것**:
+- ⚠ **`realtime_pv_tick` 7일 cleanup 추가** — `cleanup_old_data` 에 미반영(현재 ~432행/일 누적, 급하진 않음)
+- ⚠ **기사×시간대 양방향 점프** — 실시간 도입으로 가능해진 신기능(39차 "구현 불가" 재개방). 기사별 누적 PV 시계열(`article_pv_tick` 류) 저장 → 차분 → "N시에 많이 읽힌 기사" 점프. 별도 설계 필요(저장량·오늘 한정·근사치)
+- ⏸ **작업 A (다음 Daum 실시간 트렌드)** — 보류. 설계 명세는 plan 파일에 보존 (`/trending` 소스 토글 + 우리-DB 제목 문맥 AI요약)
+- (기존 미완료 유지: 사설 백필, signup UI 다듬기 등)
+
+---
 
 ## 재개 지점 (2026-06-10, 39차 세션 종료)
 

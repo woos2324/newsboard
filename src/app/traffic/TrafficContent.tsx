@@ -12,8 +12,12 @@ const SOURCE_COLORS = ["#1e40af", "#60a5fa", "#93c5fd", "#bfdbfe", "#dbeafe", "#
 const ART_TOP = 25;
 const KW_TOP  = 15;
 
+// 로케일 비의존 천단위 콤마 (toLocaleString 은 서버/클라 ICU 차이로 hydration mismatch 유발)
+function fmtNum(n: number): string {
+  return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
 function fmtPv(n: number): string {
-  return n >= 10000 ? (n / 10000).toFixed(1) + "만" : n.toLocaleString();
+  return n >= 10000 ? (n / 10000).toFixed(1) + "만" : fmtNum(n);
 }
 function deltaPct(curr: number, prev: number): number {
   return prev ? ((curr - prev) / prev) * 100 : 0;
@@ -63,10 +67,26 @@ export function TrafficContent({ title, description, date, initialData, dailyCvH
   const {
     articles, hourlyToday, hourlyYesterday, trafficSources, keywords,
     topArticlePv, searchRatio, totalHourlyToday, totalHourlyYesterday,
+    isRealtime, realtimeTicks, capturedAt,
   } = data;
 
-  const noData   = articles.length === 0 && hourlyToday.length === 0;
+  // "HH:MM 현재" (실시간 수집 시각) — 브라우저 TZ 무관하게 KST(UTC+9) 환산
+  const capturedLabel = capturedAt
+    ? (() => { const d = new Date(capturedAt); const h = (d.getUTCHours()+9)%24; return `${String(h).padStart(2,"0")}:${String(d.getUTCMinutes()).padStart(2,"0")} 현재`; })()
+    : "";
+
+  const noData   = articles.length === 0 && hourlyToday.length === 0 && realtimeTicks.length === 0;
   const peakHour = hourlyToday.reduce((b, h) => h.pv > b.pv ? h : b, { hour: 0, pv: 0 });
+  // 실시간 급증 구간: 연속 tick 간 최대 증가량과 그 시각
+  const tickPeak = (() => {
+    if (!isRealtime || realtimeTicks.length < 2) return null;
+    let best = { hour: 0, delta: 0 };
+    for (let i = 1; i < realtimeTicks.length; i++) {
+      const delta = realtimeTicks[i].pv - realtimeTicks[i - 1].pv;
+      if (delta > best.delta) best = { hour: (new Date(realtimeTicks[i].captured_at).getUTCHours()+9)%24, delta };
+    }
+    return best.delta > 0 ? best : null;
+  })();
   const avgHourly = hourlyToday.length ? Math.round(totalHourlyToday / hourlyToday.length) : 0;
   const peakVsAvg = avgHourly ? deltaPct(peakHour.pv, avgHourly) : 0;
   const topSource = trafficSources[0];
@@ -80,7 +100,18 @@ export function TrafficContent({ title, description, date, initialData, dailyCvH
       {/* 헤더: title + description 좌측, 날짜·디바이스 우측 */}
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
+            {isRealtime && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-600 border border-red-100">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-red-500" />
+                </span>
+                실시간 {capturedLabel}
+              </span>
+            )}
+          </div>
           <p className="mt-1 text-sm text-muted">{description}</p>
         </div>
         <div className="shrink-0">
@@ -98,7 +129,7 @@ export function TrafficContent({ title, description, date, initialData, dailyCvH
           <div className="grid grid-cols-4 gap-4 mb-5">
             <div className="card">
               <div className="flex items-center justify-between mb-2">
-                <p className="text-xs text-muted">총 조회수</p>
+                <p className="text-xs text-muted">총 조회수{isRealtime && <span className="text-[10px] text-red-500 ml-1">오늘 누적</span>}</p>
                 {dailyCvHistory.length > 0 && <TotalPvModal initialHistory={dailyCvHistory} />}
               </div>
               <p className="text-3xl font-bold leading-tight">
@@ -109,7 +140,7 @@ export function TrafficContent({ title, description, date, initialData, dailyCvH
                   {totalHourlyYesterday ? (totalHourlyToday >= totalHourlyYesterday ? "▲" : "▼") : ""}{" "}
                   {totalHourlyYesterday ? `${Math.abs(deltaPct(totalHourlyToday, totalHourlyYesterday)).toFixed(1)}%` : "—"}
                 </span>
-                전일 {fmtPv(totalHourlyYesterday)} 대비
+                {isRealtime ? "전일 종일" : "전일"} {fmtPv(totalHourlyYesterday)} 대비
               </div>
               <div className="mt-2.5 h-1.5 rounded-full bg-gray-100 overflow-hidden">
                 <div className="h-full rounded-full" style={{ width: `${totalHourlyYesterday ? Math.min(100, (totalHourlyToday/totalHourlyYesterday)*80) : 80}%`, background: "linear-gradient(90deg,#93c5fd,#1e3a8a)" }} />
@@ -130,13 +161,31 @@ export function TrafficContent({ title, description, date, initialData, dailyCvH
             </div>
 
             <div className="card">
-              <p className="text-xs text-muted mb-2">피크 시간대</p>
-              <p className="text-3xl font-bold leading-tight">
-                {peakHour.hour}<span className="text-sm font-medium text-muted ml-1">시</span>
-              </p>
-              <p className="text-xs text-muted mt-1.5">
-                {fmtPv(peakHour.pv)} PV · 평균 {peakVsAvg >= 0 ? "+" : ""}{peakVsAvg.toFixed(0)}%
-              </p>
+              <p className="text-xs text-muted mb-2">{isRealtime ? "급증 시간대" : "피크 시간대"}</p>
+              {isRealtime ? (
+                tickPeak ? (
+                  <>
+                    <p className="text-3xl font-bold leading-tight">
+                      {tickPeak.hour}<span className="text-sm font-medium text-muted ml-1">시</span>
+                    </p>
+                    <p className="text-xs text-muted mt-1.5">최근 관측 중 +{fmtPv(tickPeak.delta)} PV 구간</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-3xl font-bold leading-tight text-muted">—</p>
+                    <p className="text-xs text-muted mt-1.5">관측 데이터 누적 중</p>
+                  </>
+                )
+              ) : (
+                <>
+                  <p className="text-3xl font-bold leading-tight">
+                    {peakHour.hour}<span className="text-sm font-medium text-muted ml-1">시</span>
+                  </p>
+                  <p className="text-xs text-muted mt-1.5">
+                    {fmtPv(peakHour.pv)} PV · 평균 {peakVsAvg >= 0 ? "+" : ""}{peakVsAvg.toFixed(0)}%
+                  </p>
+                </>
+              )}
               <div className="mt-2.5 h-1.5 rounded-full bg-gray-100 overflow-hidden">
                 <div className="h-full rounded-full" style={{ width: "90%", background: "linear-gradient(90deg,#93c5fd,#1e3a8a)" }} />
               </div>
@@ -194,7 +243,7 @@ export function TrafficContent({ title, description, date, initialData, dailyCvH
                           <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                             <div className="h-full rounded-full" style={{ width: `${topArticlePv ? (a.pv/topArticlePv)*100 : 0}%`, background: "linear-gradient(90deg,#bfdbfe,#1e40af)" }} />
                           </div>
-                          <div className="text-xs font-semibold tabular-nums w-16 text-right">{a.pv.toLocaleString()}</div>
+                          <div className="text-xs font-semibold tabular-nums w-16 text-right">{fmtNum(a.pv)}</div>
                         </div>
                       </td>
                     </tr>
@@ -202,7 +251,7 @@ export function TrafficContent({ title, description, date, initialData, dailyCvH
                 </tbody>
               </table>
             </div>
-            <HourlyChart hourlyToday={hourlyToday} hourlyYesterday={hourlyYesterday} date={date} />
+            <HourlyChart hourlyToday={hourlyToday} hourlyYesterday={hourlyYesterday} date={date} isRealtime={isRealtime} realtimeTicks={realtimeTicks} capturedLabel={capturedLabel} />
           </div>
 
           {/* Row 2: Source / Keywords */}
@@ -261,7 +310,7 @@ export function TrafficContent({ title, description, date, initialData, dailyCvH
                             <div className="h-full rounded-full bg-blue-700" style={{ width: `${maxKwClicks ? (kw.clicks/maxKwClicks)*100 : 0}%` }} />
                           </div>
                         </td>
-                        <td className="py-2 text-xs text-muted tabular-nums text-right w-16">{kw.clicks.toLocaleString()}</td>
+                        <td className="py-2 text-xs text-muted tabular-nums text-right w-16">{fmtNum(kw.clicks)}</td>
                       </tr>
                     ))}
                   </tbody>

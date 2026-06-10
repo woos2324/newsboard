@@ -92,8 +92,9 @@ def _parse_kst_datetime(s: str) -> datetime:
     return datetime.strptime(s, "%Y-%m-%d %H:%M:%S").replace(tzinfo=KST)
 
 
-def parse_article_pv_json(payload: dict) -> list[ArticlePvJsonRow]:
-    data = _find_stat(payload, "normal")
+def parse_article_pv_json(payload: dict, data_id: str = "normal") -> list[ArticlePvJsonRow]:
+    # 일반 일간 수집: dataId="normal" / 실시간(/api/today): dataId="pvRank"
+    data = _find_stat(payload, data_id)
     rows = _to_rows(data)
     result: list[ArticlePvJsonRow] = []
     for rank, row in enumerate(rows, 1):

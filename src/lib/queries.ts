@@ -1749,6 +1749,11 @@ export type SearchKeywordItem = {
   ratio: number;
 };
 
+export type RealtimeTickItem = {
+  captured_at: string; // ISO
+  pv: number;          // 그 시각까지의 오늘 누적 PV
+};
+
 export type TrafficPageData = {
   data_date: string;
   articles: ArticlePvItem[];
@@ -1764,6 +1769,10 @@ export type TrafficPageData = {
   totalHourlyYesterday: number;
   topArticlePv: number;
   searchRatio: number; // 검색 유입 비중 (%)
+  // 실시간(오늘) 모드 — 네이버가 오늘 시간대별 PV를 안 주므로 누적 tick 으로 대체
+  isRealtime: boolean;
+  realtimeTicks: RealtimeTickItem[]; // 오늘 누적 PV 시계열 (선택 device)
+  capturedAt: string | null;         // 최신 tick 수집 시각 ("HH:MM 현재")
 };
 
 export type DailyCvRow = {
@@ -1800,6 +1809,19 @@ async function _getDailyCvHistory(
     .sort((a, b) => b.data_date.localeCompare(a.data_date));
 }
 
+async function _getLatestRealtimeDate(): Promise<string | null> {
+  // realtime_pv_tick 에 데이터가 있는 최신 날짜 (오늘 실시간 수집 여부 판정용)
+  const sb = getSupabase();
+  const { data } = await sb
+    .from("realtime_pv_tick")
+    .select("data_date")
+    .eq("device", "all")
+    .order("data_date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data?.data_date ?? null;
+}
+
 async function _getLatestTrafficDate(): Promise<string | null> {
   const sb = getSupabase();
   // hourly_pv_snapshot 기준으로 실제 pv > 0 데이터가 있는 최신 날짜 반환
@@ -1831,6 +1853,9 @@ async function _getTrafficPageData(
     hourlyYestRes,
     sourcesRes,
     keywordsRes,
+    dailyCvTodayRes,
+    dailyCvYestRes,
+    ticksRes,
   ] = await Promise.all([
     sb
       .from("article_pv_snapshot")
@@ -1862,7 +1887,7 @@ async function _getTrafficPageData(
       .order("hour", { ascending: true }),
     sb
       .from("traffic_source_daily")
-      .select("source_category, category_ratio")
+      .select("source_category, category_ratio, device")
       .eq("data_date", date)
       .is("source_detail_url", null)
       .order("category_ratio", { ascending: false }),
@@ -1872,6 +1897,28 @@ async function _getTrafficPageData(
       .eq("data_date", date)
       .order("rank", { ascending: true })
       .limit(keywordsLimit),
+    sb
+      .from("daily_cv_snapshot")
+      .select("pv")
+      .eq("data_date", date)
+      .eq("section", "all")
+      .eq("time_dimension", "daily")
+      .eq("device", device)
+      .maybeSingle(),
+    sb
+      .from("daily_cv_snapshot")
+      .select("pv")
+      .eq("data_date", prev)
+      .eq("section", "all")
+      .eq("time_dimension", "daily")
+      .eq("device", device)
+      .maybeSingle(),
+    sb
+      .from("realtime_pv_tick")
+      .select("captured_at, cum_pv")
+      .eq("data_date", date)
+      .eq("device", device)
+      .order("captured_at", { ascending: true }),
   ]);
 
   if (articlesRes.error) throw articlesRes.error;
@@ -1898,7 +1945,11 @@ async function _getTrafficPageData(
     pv: r.pv,
   }));
 
-  const trafficSources: TrafficSourceItem[] = (sourcesRes.data ?? []).map((r) => ({
+  // 유입경로: 선택 device 행 우선, 없으면(과거 날짜 등) 'all' 로 fallback
+  const allSrc = sourcesRes.data ?? [];
+  const devSrc = allSrc.filter((r) => r.device === device);
+  const chosenSrc = devSrc.length ? devSrc : allSrc.filter((r) => r.device === "all");
+  const trafficSources: TrafficSourceItem[] = chosenSrc.map((r) => ({
     source_category: r.source_category,
     category_ratio: Number(r.category_ratio),
   }));
@@ -1915,9 +1966,28 @@ async function _getTrafficPageData(
     (s, r) => s + (r.pv ?? 0),
     0
   );
-  const totalHourlyToday = hourlyToday.reduce((s, h) => s + h.pv, 0);
-  const totalHourlyYesterday = hourlyYesterday.reduce((s, h) => s + h.pv, 0);
+  const sumHourlyToday = hourlyToday.reduce((s, h) => s + h.pv, 0);
+  const totalHourlyYesterdaySum = hourlyYesterday.reduce((s, h) => s + h.pv, 0);
   const topArticlePv = articles[0]?.pv ?? 0;
+
+  // ── 실시간(오늘) 모드: hourly 가 없고 tick 이 있으면 누적 tick 으로 대체
+  const realtimeTicks: RealtimeTickItem[] = (ticksRes.data ?? []).map((r) => ({
+    captured_at: r.captured_at as string,
+    pv: Number(r.cum_pv ?? 0),
+  }));
+  const isRealtime = hourlyToday.length === 0 && realtimeTicks.length > 0;
+  const dailyCvToday = Number(dailyCvTodayRes.data?.pv ?? 0);
+  const dailyCvYest = Number(dailyCvYestRes.data?.pv ?? 0);
+  const capturedAt = realtimeTicks.length ? realtimeTicks[realtimeTicks.length - 1].captured_at : null;
+
+  // 오늘 총 PV: 실시간이면 daily_cv 누적값(없으면 마지막 tick), 아니면 시간대 합
+  const totalHourlyToday = isRealtime
+    ? (dailyCvToday || (realtimeTicks.length ? realtimeTicks[realtimeTicks.length - 1].pv : 0))
+    : sumHourlyToday;
+  // 어제 총 PV: 실시간 비교용으로 daily_cv 우선(확정), 없으면 시간대 합
+  const totalHourlyYesterday = isRealtime
+    ? (dailyCvYest || totalHourlyYesterdaySum)
+    : totalHourlyYesterdaySum;
 
   // 검색 유입 비중 = 검색 카테고리 source_category들의 ratio 합
   const searchRatio = trafficSources
@@ -1939,6 +2009,9 @@ async function _getTrafficPageData(
     totalHourlyYesterday,
     topArticlePv,
     searchRatio,
+    isRealtime,
+    realtimeTicks,
+    capturedAt,
   };
 }
 
@@ -1952,6 +2025,12 @@ export const getLatestTrafficDate = unstable_cache(
   _getLatestTrafficDate,
   ["latest-traffic-date"],
   { revalidate: 3600, tags: ["traffic"] }
+);
+
+export const getLatestRealtimeDate = unstable_cache(
+  _getLatestRealtimeDate,
+  ["latest-realtime-date"],
+  { revalidate: 600, tags: ["traffic"] }
 );
 
 export const getTrafficPageData = unstable_cache(

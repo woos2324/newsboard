@@ -63,6 +63,8 @@ ENDPOINTS = {
     "daily_cv":       f"{API_BASE}/api/visitV2/cv",
     "traffic_source": f"{API_BASE}/api/user/referer",
     "search_keyword": f"{API_BASE}/api/search/keywordTotal",
+    # 실시간 '오늘 지표' — 단일 호출로 normal(오늘 총조회수)+pvRank(기사순위)+referer(유입경로) 반환
+    "today":          f"{API_BASE}/api/today",
 }
 
 DEVICES = ["TOTAL", "PC", "MOBILE"]
@@ -212,6 +214,55 @@ def _call_one(
     return payload
 
 
+def _misauth_today(client: httpx.Client, cookies: dict[str, str]) -> None:
+    """/api/today 사전 인증(misAuthCertification). run 당 1회 호출로 충분."""
+    try:
+        client.get(
+            f"{API_BASE}/api/misAuthCertification",
+            params={"targetApiPath": "/api/today"},
+            headers=HEADERS, cookies=cookies,
+        )
+    except Exception:
+        pass
+
+
+def _call_today(
+    client: httpx.Client,
+    cookies: dict[str, str],
+    data_date: date,
+    device: str = "TOTAL",
+    section: str = "total",
+) -> dict:
+    """실시간 '오늘 지표' 호출. 호출 전 _misauth_today() 선행 필요."""
+    params = {
+        "timeDimension": "DATE",
+        "startDate": data_date.isoformat(),
+        "section": section,
+        "device": device,
+        "channelMainTabType": "ALL",
+    }
+    resp = client.get(ENDPOINTS["today"], params=params, headers=HEADERS, cookies=cookies)
+    resp.raise_for_status()
+    payload = resp.json()
+    if payload.get("statusCode") != 200:
+        raise RuntimeError(f"API 오류 (/api/today): {payload.get('message')}")
+    time.sleep(API_DELAY)
+    return payload
+
+
+def _extract_today_utime(payload: dict, data_date: date) -> datetime:
+    """/api/today 응답의 normal.utime(KST, tz 없음) → aware datetime. 없으면 now(KST)."""
+    for stat in (payload.get("result") or {}).get("statDataList", []):
+        if stat.get("dataId") == "normal":
+            u = stat.get("utime")
+            if u:
+                try:
+                    return datetime.fromisoformat(u).replace(tzinfo=KST)
+                except ValueError:
+                    pass
+    return datetime.now(KST)
+
+
 def get_cookies_with_refresh(existing: dict[str, str] | None) -> dict[str, str]:
     if existing:
         return existing
@@ -339,13 +390,14 @@ def upsert_daily_cv(
     return 1
 
 
-def insert_traffic_source(items: list, dry_run: bool) -> int:
+def insert_traffic_source(items: list, device_label: str, dry_run: bool) -> int:
     if not items:
         return 0
     data_date = items[0].data_date.isoformat()
     rows = [
         {
             "data_date": data_date,
+            "device": device_label,
             "source_category": it.source_category,
             "source_detail_url": None,
             "category_ratio": it.pv_ratio,
@@ -354,11 +406,36 @@ def insert_traffic_source(items: list, dry_run: bool) -> int:
         for it in items
     ]
     if dry_run:
-        print(f"     [dry-run] traffic_source: {len(rows)}건 skipped")
+        print(f"     [dry-run] traffic_source ({device_label}): {len(rows)}건 skipped")
         return len(rows)
     sb = get_client()
-    sb.table("traffic_source_daily").delete().eq("data_date", data_date).execute()
+    sb.table("traffic_source_daily").delete().eq("data_date", data_date).eq("device", device_label).execute()
     sb.table("traffic_source_daily").insert(rows).execute()
+    return len(rows)
+
+
+def upsert_realtime_ticks(
+    cv_map: dict[str, int],
+    data_date: date,
+    captured_at: datetime,
+    dry_run: bool,
+) -> int:
+    """오늘 누적 PV 스냅샷(device별)을 realtime_pv_tick 에 저장."""
+    rows = [
+        {
+            "data_date": data_date.isoformat(),
+            "captured_at": captured_at.isoformat(),
+            "device": dev,
+            "cum_pv": pv,
+        }
+        for dev, pv in cv_map.items()
+    ]
+    if dry_run:
+        print(f"     [dry-run] realtime_tick @ {captured_at.isoformat()}: {cv_map}")
+        return len(rows)
+    get_client().table("realtime_pv_tick").upsert(
+        rows, on_conflict="data_date,captured_at,device"
+    ).execute()
     return len(rows)
 
 
@@ -454,7 +531,7 @@ def collect_daily(
             payload_t = _call_one(client, cookies, ENDPOINTS["traffic_source"],
                                   data_date, device="TOTAL", section="total", time_dim="DATE")
             items_t = parse_traffic_source_json(payload_t)
-            total += insert_traffic_source(items_t, dry_run)
+            total += insert_traffic_source(items_t, "all", dry_run)
         except Exception as e:
             print(f"    [WARN] traffic_source: {e}")
 
@@ -466,6 +543,77 @@ def collect_daily(
             total += upsert_search_keyword(items_k, dry_run)
         except Exception as e:
             print(f"    [WARN] search_keyword: {e}")
+
+    return cookies, total
+
+
+def collect_realtime(
+    data_date: date,
+    cookies: dict[str, str],
+    aid_map: dict[str, int],
+    dry_run: bool,
+) -> tuple[dict[str, str], int]:
+    """실시간 '오늘 지표' 수집. /api/today 단일 엔드포인트로 3종 동시 수집.
+      - normal  → 오늘 총 PV (all/pc/mobile) → daily_cv_snapshot + realtime_pv_tick
+      - pvRank  → 실시간 기사순위 Top100      → article_pv_snapshot (device=all)
+      - referer → 실시간 유입경로            → traffic_source_daily
+    section 루프(device=TOTAL)로 섹션별 데이터까지 채운다. 오늘 날짜로 upsert(덮어쓰기).
+    """
+    total = 0
+    time_dimension = "daily"
+    combo = len(DEVICES) * len(SECTIONS)
+
+    with httpx.Client(timeout=30) as client:
+        _misauth_today(client, cookies)  # run 당 1회 사전 인증
+        print(f"  [realtime/api_today] {combo}개 조합 (device×section)...")
+        for dev in DEVICES:
+            for sec in SECTIONS:
+                sec_label = SECTION_LABEL.get(sec, sec)
+                try:
+                    payload = _call_today(client, cookies, data_date, device=dev, section=sec)
+                except httpx.HTTPStatusError as e:
+                    if e.response.status_code in (401, 403):
+                        cookies = _playwright_login(); _save_cookies(cookies)
+                        _misauth_today(client, cookies)
+                        try:
+                            payload = _call_today(client, cookies, data_date, device=dev, section=sec)
+                        except Exception as e2:
+                            print(f"    [WARN] today {dev}/{sec} (재시도 실패): {e2}")
+                            continue
+                    else:
+                        print(f"    [WARN] today {dev}/{sec}: {e}")
+                        continue
+                except Exception as e:
+                    print(f"    [WARN] today {dev}/{sec}: {e}")
+                    continue
+
+                # 1) 기사순위 → article_pv (device별)
+                items_a = parse_article_pv_json(payload, data_id="pvRank")
+                total += upsert_article_pv(items_a, aid_map, DEVICE_LABEL[dev], sec_label, time_dimension, dry_run)
+
+                # 2) 유입경로(referer)는 device별로 저장 (전체/PC/모바일 분포가 크게 다름)
+                if sec == "total":
+                    items_t = parse_traffic_source_json(payload)
+                    total += insert_traffic_source(items_t, DEVICE_LABEL[dev], dry_run)
+
+                # 3) daily_cv + 누적 tick 은 device=TOTAL 호출에서만
+                #    (normal 이 all/pc/mobile 총 PV 를 모두 포함)
+                if dev == "TOTAL":
+                    cv_map = parse_daily_cv_all_devices(payload)
+                    for dev_label, pv in cv_map.items():
+                        total += upsert_daily_cv(pv, data_date, dev_label, sec_label, time_dimension, dry_run)
+                    if sec == "total":
+                        captured_at = _extract_today_utime(payload, data_date)
+                        total += upsert_realtime_ticks(cv_map, data_date, captured_at, dry_run)
+
+        # ── 검색 유입 키워드 (오늘) — /api/search/keywordTotal 은 오늘 날짜도 정상 반환
+        try:
+            payload_k = _call_one(client, cookies, ENDPOINTS["search_keyword"],
+                                  data_date, device="TOTAL", section="total", time_dim="DATE")
+            items_k = parse_search_keyword_json(payload_k)
+            total += upsert_search_keyword(items_k, dry_run)
+        except Exception as e:
+            print(f"    [WARN] search_keyword(realtime): {e}")
 
     return cookies, total
 
@@ -527,9 +675,28 @@ def main() -> int:
     ap.add_argument("--monthly", action="store_true", help="월간 수집 강제 실행")
     ap.add_argument("--week-date", help="주간 수집 시작일(월요일) YYYYMMDD — --weekly 함께 사용")
     ap.add_argument("--month-date", help="월간 수집 시작일(1일) YYYYMMDD — --monthly 함께 사용")
+    ap.add_argument("--skip-if-collected", action="store_true",
+                    help="해당 날짜 hourly_pv에 pv>0 데이터가 이미 있으면 수집 건너뜀 (fallback 재실행용)")
+    ap.add_argument("--realtime", action="store_true",
+                    help="실시간 '오늘 지표' 수집 (/api/today). 기본 날짜=오늘(KST). 10분 주기 cron용")
     args = ap.parse_args()
 
     kst_today = datetime.now(KST).date()
+
+    # ── 실시간 수집 모드 (오늘 지표 — 별도 흐름, 주간/월간 미적용)
+    if args.realtime:
+        rt_date = datetime.strptime(args.date, "%Y%m%d").date() if args.date else kst_today
+        print(f"[실시간 수집] data_date={rt_date}  dry_run={args.dry_run}")
+        cookies = _load_cookies() or {}
+        if not cookies:
+            cookies = _playwright_login(); _save_cookies(cookies)
+        aid_map = {} if args.dry_run else load_article_aid_map()
+        if not args.dry_run:
+            print(f"  article_id 매핑 {len(aid_map)}건")
+        cookies, n = collect_realtime(rt_date, cookies, aid_map, args.dry_run)
+        print(f"\n완료(실시간): 총 {n}건 적재")
+        revalidate("traffic", dry_run=args.dry_run)
+        return 0
 
     if args.date:
         data_date = datetime.strptime(args.date, "%Y%m%d").date()
@@ -537,6 +704,22 @@ def main() -> int:
         data_date = kst_today - timedelta(days=1)
 
     print(f"[수집 시작] data_date={data_date}  dry_run={args.dry_run}")
+
+    if args.skip_if_collected:
+        rows = (
+            get_client()
+            .table("hourly_pv_snapshot")
+            .select("pv", count="exact")
+            .eq("data_date", data_date.isoformat())
+            .eq("device", "all")
+            .gt("pv", 0)
+            .limit(1)
+            .execute()
+        )
+        if rows.data:
+            print(f"[skip] {data_date} hourly_pv pv>0 데이터 존재 — 재수집 불필요")
+            return 0
+        print(f"[fallback] {data_date} hourly_pv pv=0 확인 — 재수집 진행")
 
     # 쿠키 로드
     print("[1] 쿠키 로드...")

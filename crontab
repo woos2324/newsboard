@@ -33,8 +33,12 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # cleanup — UTC 15:05
 5 15 * * * root cd /app && python -m scripts.cleanup_old_data >> /var/log/cron.log 2>&1
 
-# naver-pv — UTC 20:00 (KST 05:00) — KST 01:00는 전날 hourly 데이터 집계 미완료
+# naver-pv — UTC 20:00 (KST 05:00) 1차 수집, UTC 22:00 (KST 07:00) fallback (pv=0이면 재수집)
 0 20 * * * root cd /app && python -m scripts.collect_naver_pv >> /var/log/cron.log 2>&1
+0 22 * * * root cd /app && python -m scripts.collect_naver_pv --skip-if-collected >> /var/log/cron.log 2>&1
+
+# naver-pv 실시간(오늘 지표) — 10분마다. /api/today 로 오늘 총조회수·기사순위·유입경로 + 누적 tick 수집
+*/10 * * * * root cd /app && python -m scripts.collect_naver_pv --realtime >> /var/log/cron.log 2>&1
 
 # subscribers — UTC 23:00 (KST 08:00)
 0 23 * * * root cd /app && python -m scripts.collect_subscribers >> /var/log/cron.log 2>&1

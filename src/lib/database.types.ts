@@ -1073,6 +1073,30 @@ export type Database = {
           },
         ]
       }
+      realtime_pv_tick: {
+        Row: {
+          captured_at: string
+          cum_pv: number
+          data_date: string
+          device: string
+          tick_id: number
+        }
+        Insert: {
+          captured_at: string
+          cum_pv: number
+          data_date: string
+          device?: string
+          tick_id?: number
+        }
+        Update: {
+          captured_at?: string
+          cum_pv?: number
+          data_date?: string
+          device?: string
+          tick_id?: number
+        }
+        Relationships: []
+      }
       reporter_style_profile: {
         Row: {
           article_count: number | null
@@ -1233,6 +1257,7 @@ export type Database = {
           category_ratio: number
           data_date: string
           detail_ratio: number
+          device: string
           source_category: string
           source_detail_url: string | null
           traffic_source_id: number
@@ -1242,6 +1267,7 @@ export type Database = {
           category_ratio: number
           data_date: string
           detail_ratio: number
+          device?: string
           source_category: string
           source_detail_url?: string | null
           traffic_source_id?: number
@@ -1251,6 +1277,7 @@ export type Database = {
           category_ratio?: number
           data_date?: string
           detail_ratio?: number
+          device?: string
           source_category?: string
           source_detail_url?: string | null
           traffic_source_id?: number

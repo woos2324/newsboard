@@ -49,7 +49,7 @@
 
 **cron chain**: `ranking → cluster → gap` (매시 자동 연쇄)
 
-## DB 스키마 (마이그레이션 30건)
+## DB 스키마 (마이그레이션 32건)
 
 - `0001_init` — 11개 코어 테이블
 - `0002` ~ `0006` — daily_publication_count, section_ranking, 성능 인덱스, section_ranking_unique, gap_verdict
@@ -71,6 +71,8 @@
 - `0028` — editorial_comparison (opinion 사설 비교 보고서, 38차)
 - `0029` — realtime_pv_tick (오늘 누적 PV 시계열, 시간대별 PV 차분 계산용, 40차)
 - `0030` — traffic_source_daily.device 컬럼 (유입경로 device별 분리, 40차)
+- `0031` — editorial.issue_canonical (사후 LLM 병합 canonical 주제, 41차)
+- `0032` — editorial.issue_manual (편집자 수동 보정 주제, 최우선, 41차)
 - 마이그레이션 상세: [supabase/migrations/](supabase/migrations/)
 - 매체 51개 (naver_media_id 보유 47개) + 해외 8개 매체 코드 (foreign_sources.py: wapo/nyt/ft/scmp/guardian/wtimes/mainichi/sankei)
 
@@ -91,6 +93,47 @@
 - Sender email: `noreply@segye.com`
 - Email Template "Confirm signup" → `{{ .Token }}` 으로 OTP 6자리 발송 (10분 만료)
 - 비밀번호 정책: 8자 이상, 대소문자 + 숫자 + 특수문자
+
+## 재개 지점 (2026-06-10, 41차 세션 종료)
+
+**이번 세션 (41차) = opinion 사설 그룹화 전면 개선 (canonical 병합 + 수동 보정) + /trend 날짜 선택. 구현·배포 전부 완료.**
+
+### 이번 세션 (41차) 완료
+
+**1. 오늘의 사설 그룹화 파편화 해소 — 사후 LLM canonical 병합** (커밋 `329b692`)
+- 문제: `issue`는 사설마다 gpt-4o가 독립 생성 → 같은 사건도 매체 논조에 따라 라벨이 갈려 그룹 파편화 (예: 북·중 정상회담이 "비핵화 언급 부재" vs "전략적 협력 강화"로 분리)
+- `0031_editorial_issue_canonical` — `editorial.issue_canonical TEXT` + 인덱스
+- [scripts/merge_editorial_issues.py](scripts/merge_editorial_issues.py) (신규) — 그날 전체 사설(제목+issue)을 gpt-4o 1회 호출로 **사건 단위 병합 + 중립 canonical 라벨 재배정**. cron 기본 모드 = 어제+오늘 병합. 6-10 실측: 40→16개 사건 (투표용지 11건·북·중 9건 통합)
+- [crontab](crontab) — editorials 수집 3회(KST 06/14/22) 직후 `&& python -m scripts.merge_editorial_issues` 체이닝. **NCP 워커 반영 완료** (이미지 빌드 재실행 후 `docker compose pull && up -d`)
+- opinion: [TodayTab.tsx](opinion/src/components/TodayTab.tsx) 그룹화를 `groupKey()` 기준으로. [queries.ts](opinion/src/lib/queries.ts) `groupKey()` 헬퍼 추가
+- 판단: (a) `issue_canonical` 신설(덮어쓰기 X), (b) 매 수집 직후 3회 병합, (c) 키 바뀐 비교 캐시는 그냥 둠(`/compare` 카드로는 보임, 버튼 다시 누르면 새 키로 재생성)
+
+**2. 사설 주제 그룹 수동 보정** (커밋 `44017d5`, `c496456`)
+- AI 병합이 놓친 사설을 편집자가 직접 올바른 주제로 이동
+- `0032_editorial_issue_manual` — `editorial.issue_manual TEXT` (최우선). merge는 `issue_canonical`만 갱신하므로 수동 보정 영구 보존
+- 우선순위: `issue_manual ?? issue_canonical ?? issue` ([queries.ts](opinion/src/lib/queries.ts) `groupKey`)
+- UI: 사설 행 hover 시 우측 "주제 변경" → 인라인 드롭다운(기존 그룹 선택/새 주제 입력/자동 복원), "보정" 배지
+- [editorial-actions.ts](opinion/src/app/editorial-actions.ts) (신규) — `setEditorialIssue` Server Action + `updateTag('editorials')`
+- **수동 보정 사설은 1건이어도 독립 그룹 유지**(기타 통합 제외). groupOptions에 수동 그룹(1건)도 포함
+- 판단: opinion 공개 앱 그대로 배포(인증은 내일 공용 계정 1개로 별도)
+
+**3. /trend 날짜 선택 추가** (커밋 `adffc1c`, `8121bb5`)
+- [trend/page.tsx](opinion/src/app/trend/page.tsx) `searchParams` date + [DateNav](opinion/src/components/DateNav.tsx)(`basePath="/trend"`) — **사설 목록 바로 위**에 배치
+- [TrendTab.tsx](opinion/src/components/TrendTab.tsx) 사설 목록만 선택일 필터(showAll/더보기 제거). 통계 카드·성향 추이 차트는 90일 전체 기준 그대로 유지
+- 페이징은 불필요로 종료(하루 사설 수 적음)
+
+**⚠ 발견 — Next 16.2.6 `revalidateTag` 시그니처 변경 (중요)**:
+- 16.2.6에서 `revalidateTag(tag, profile)` **2인자 필수**로 변경 → 빌드 실패. 로컬 node_modules(루트 hoisting 15.5.15)는 1인자라 `tsc` 통과했으나 Vercel(16.2.6)에서 깨짐
+- **해결**: Server Action 내 즉시 무효화는 `updateTag(tag)`(1인자, read-your-own-writes) 사용
+- **교훈**: opinion 로컬 검증은 `tsc`만으론 부족(버전 불일치). 이번에 `opinion/node_modules`를 16.2.6으로 맞춰뒀으니 로컬 `next build`가 프로덕션과 일치. 단 `next build`는 로컬 `SUPABASE_SERVICE_ROLE_KEY` 부재로 `/stance`에서 charCodeAt 에러(환경 문제, Vercel 무관)
+
+### 미완료 / 다음 세션(42차, 2026-06-11) 할 일
+
+1. **opinion 공용 계정 로그인 (주 작업)** — newsboard 수준 X, **공용 계정 1개**만. 수동 보정(`setEditorialIssue`) 등 쓰기 기능을 비로그인 노출에서 보호. 설계 결정 필요: 로그인 방식(공용 ID/PW 환경변수 vs Supabase Auth 단일 계정), 보호 범위(보정 기능만 vs 전체), 세션 유지
+2. **sankei `edition_date` 타임존 버그 수정** — 원인 확정: [_to_edition_date](scripts/collect_foreign_editorials.py#L65)가 발행시각의 "표기된 오프셋" 날짜를 그대로 사용(`dt.strftime`, astimezone 변환 없음). sankei는 `<meta article:published_time>`을 **UTC(Z)로 표기** → 한국/일본보다 9h 이른 전날(06-09)로 적재. mainichi는 JST(+09:00) 표기라 정상(06-10). **수정**: 매체 현지 tz로 `astimezone()` 변환 후 날짜 추출, 매체별 tz를 [foreign_sources.py](scripts/lib/foreign_sources.py)에 추가. 기존 sankei 데이터 백필 보정 여부 결정. NCP 워커 재배포 필요
+3. **(검토) 해외 사설 `edition_date` 시차 UX** — 시차로 같은 날 아침 수집분이 06-09/06-10에 흩어지는 이슈. B안(수집 기준일 KST 통일) 할지 판단. 41차엔 A(sankei 버그)만 다룸
+
+---
 
 ## 재개 지점 (2026-06-10, 40차 세션 종료)
 

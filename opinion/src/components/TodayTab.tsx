@@ -262,7 +262,8 @@ export default function TodayTab({
       const sorted = [...items].sort((a, b) =>
         (b.media_company?.is_our_company ? 1 : 0) - (a.media_company?.is_our_company ? 1 : 0)
       )
-      if (sorted.length === 1) {
+      // 1건짜리는 "기타"로 통합. 단 편집자가 수동 지정한 주제(issue_manual)는 1건이어도 독립 그룹 유지
+      if (sorted.length === 1 && !sorted[0].issue_manual) {
         singleItems.push(...sorted)
       } else {
         mainGroups.push([issue, sorted])
@@ -274,14 +275,18 @@ export default function TodayTab({
 
   const FILTERS: FilterType[] = ['전체', '종합일간지', '경제지', '매체별']
 
-  // 주제 변경 후보: 오늘 존재하는 멀티-매체 그룹(2건 이상) 키 목록 (필터 무관)
+  // 주제 변경 후보: 2건 이상 그룹 + 편집자가 수동 지정한 주제(1건이어도 — 두 번째 사설 합치기용). 필터 무관
   const groupOptions = (() => {
     const counts = new Map<string, number>()
+    const manualKeys = new Set<string>()
     for (const e of editorials) {
       const k = groupKey(e)
       counts.set(k, (counts.get(k) ?? 0) + 1)
+      if (e.issue_manual) manualKeys.add(k)
     }
-    return Array.from(counts.entries()).filter(([, n]) => n >= 2).map(([k]) => k)
+    return Array.from(counts.entries())
+      .filter(([k, n]) => n >= 2 || manualKeys.has(k))
+      .map(([k]) => k)
   })()
 
   return (

@@ -58,21 +58,37 @@ export async function getComparison(
   return (data ?? null) as EditorialComparison | null
 }
 
-/** 특정 (edition_date, issue) 그룹의 사설 본문 일괄 조회 — 생성 액션에서 사용 */
+/**
+ * 특정 (edition_date, issue) 그룹의 사설 본문 일괄 조회 — 생성 액션에서 사용.
+ * issue 인자는 TodayTab 그룹 키(= issue_canonical ?? issue). canonical 우선 조회하고,
+ * 병합 전/과거 데이터(issue_canonical NULL)는 issue 기준으로 fallback 조회.
+ */
 export async function getGroupEditorialsForCompare(
   date: string,
   issue: string,
 ): Promise<CompareEditorial[]> {
-  const { data, error } = await supabase
-    .from('editorial')
-    .select(`
+  const SELECT = `
       editorial_id, title, body, summary, url,
       media_company!inner (name, is_our_company)
-    `)
+    `
+  let { data, error } = await supabase
+    .from('editorial')
+    .select(SELECT)
     .eq('edition_date', date)
-    .eq('issue', issue)
+    .eq('issue_canonical', issue)
     .order('published_at', { ascending: true })
   if (error) throw error
+
+  // canonical 미배정(과거/병합 전) 그룹: issue 로 fallback
+  if (!data || data.length === 0) {
+    ;({ data, error } = await supabase
+      .from('editorial')
+      .select(SELECT)
+      .eq('edition_date', date)
+      .eq('issue', issue)
+      .order('published_at', { ascending: true }))
+    if (error) throw error
+  }
 
   return (data ?? []).map((row) => {
     const mc = (row as unknown as {

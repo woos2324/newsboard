@@ -143,10 +143,10 @@ export default function TodayTab({
       mainGroups.push([name, items])
     }
   } else {
-    // issue 기준 그룹화, 1건짜리는 "기타" 통합
+    // canonical issue 기준 그룹화 (사후 LLM 병합으로 파편화 해소, 없으면 issue fallback), 1건짜리는 "기타" 통합
     const issueMap = new Map<string, Editorial[]>()
     for (const e of filtered) {
-      const key = e.issue ?? '기타'
+      const key = e.issue_canonical ?? e.issue ?? '기타'
       const arr = issueMap.get(key) ?? []
       arr.push(e)
       issueMap.set(key, arr)

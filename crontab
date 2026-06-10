@@ -23,9 +23,10 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 0 2,8,14,20 * * * root cd /app && python -m scripts.collect_section_ranking >> /var/log/cron.log 2>&1
 
 # editorials — KST 06:00/14:00/22:00 = UTC 21:00/05:00/13:00
-0 21 * * * root cd /app && python -m scripts.collect_editorials >> /var/log/cron.log 2>&1
-0 5 * * * root cd /app && python -m scripts.collect_editorials >> /var/log/cron.log 2>&1
-0 13 * * * root cd /app && python -m scripts.collect_editorials >> /var/log/cron.log 2>&1
+# 수집 직후 merge_editorial_issues 체이닝: 그날 전체 사설을 사건 단위 canonical issue 로 재배정 (오늘의 사설 그룹 파편화 해소)
+0 21 * * * root cd /app && python -m scripts.collect_editorials >> /var/log/cron.log 2>&1 && python -m scripts.merge_editorial_issues >> /var/log/cron.log 2>&1
+0 5 * * * root cd /app && python -m scripts.collect_editorials >> /var/log/cron.log 2>&1 && python -m scripts.merge_editorial_issues >> /var/log/cron.log 2>&1
+0 13 * * * root cd /app && python -m scripts.collect_editorials >> /var/log/cron.log 2>&1 && python -m scripts.merge_editorial_issues >> /var/log/cron.log 2>&1
 
 # daily-briefing — UTC 15:00 (KST 00:00)
 0 15 * * * root cd /app && python -m scripts.generate_daily_briefing >> /var/log/cron.log 2>&1

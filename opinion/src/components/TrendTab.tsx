@@ -75,9 +75,8 @@ function getTopTopic(items: Editorial[]) {
   return sorted.length > 0 ? { topic: sorted[0][0], count: sorted[0][1], total: items.length } : null
 }
 
-export default function TrendTab({ editorials }: { editorials: Editorial[] }) {
+export default function TrendTab({ editorials, selectedDate }: { editorials: Editorial[]; selectedDate: string }) {
   const [period, setPeriod] = useState<Period>('week')
-  const [showAll, setShowAll] = useState(false)
   const [selected, setSelected] = useState<Editorial | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
 
@@ -198,7 +197,8 @@ export default function TrendTab({ editorials }: { editorials: Editorial[] }) {
   const topTopic = getTopTopic(currentItems)
   const diff = currentItems.length - prevItems.length
   const maxChartTotal = Math.max(...chartData.map(d => d.total), 1)
-  const listItems = showAll ? editorials : editorials.slice(0, 10)
+  // 사설 목록은 선택한 날짜만 필터 (통계/차트는 위에서 90일 전체 기준 그대로 유지)
+  const listItems = editorials.filter(e => e.edition_date === selectedDate)
 
   return (
     <div>
@@ -345,43 +345,44 @@ export default function TrendTab({ editorials }: { editorials: Editorial[] }) {
         </div>
       </div>
 
-      {/* 사설 목록 */}
+      {/* 사설 목록 — 선택한 날짜 */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 flex justify-between items-center">
-          <h3 className="text-sm font-semibold text-gray-700">세계일보 사설 목록</h3>
-          <span className="text-xs text-gray-400">90일 기준 {editorials.length}건</span>
+          <h3 className="text-sm font-semibold text-gray-700">
+            {formatEditionDate(selectedDate)} 세계일보 사설
+          </h3>
+          <span className="text-xs text-gray-400">{listItems.length}건</span>
         </div>
-        <div className="divide-y divide-gray-100">
-          {listItems.map((e) => (
-            <div
-              key={e.editorial_id}
-              role="button"
-              tabIndex={0}
-              onClick={() => openModal(e)}
-              onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') openModal(e) }}
-              className="flex items-center gap-4 px-5 py-3.5 hover:bg-gray-50 cursor-pointer group"
-            >
-              <span className="text-xs text-gray-400 w-20 flex-shrink-0">{formatEditionDate(e.edition_date)}</span>
-              <span className="flex-1 text-sm text-gray-800 truncate group-hover:text-blue-700">{e.title}</span>
-              {e.stance_label && (
-                <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${STANCE_COLORS[e.stance_label] ?? 'bg-gray-100 text-gray-600'}`}>
-                  {e.stance_label}
-                </span>
-              )}
-              {e.topic && (
-                <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full flex-shrink-0">{e.topic}</span>
-              )}
-            </div>
-          ))}
-          {!showAll && editorials.length > 10 && (
-            <button
-              onClick={() => setShowAll(true)}
-              className="w-full px-5 py-3.5 text-xs text-blue-600 hover:bg-blue-50 text-left"
-            >
-              더보기 +{editorials.length - 10}건
-            </button>
-          )}
-        </div>
+        {listItems.length === 0 ? (
+          <div className="px-5 py-12 text-center text-gray-400">
+            <p className="text-sm">이 날짜의 세계일보 사설이 없습니다.</p>
+            <p className="text-xs mt-1">날짜를 이동해 다른 날의 사설을 확인하세요.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {listItems.map((e) => (
+              <div
+                key={e.editorial_id}
+                role="button"
+                tabIndex={0}
+                onClick={() => openModal(e)}
+                onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') openModal(e) }}
+                className="flex items-center gap-4 px-5 py-3.5 hover:bg-gray-50 cursor-pointer group"
+              >
+                <span className="text-xs text-gray-400 w-20 flex-shrink-0">{formatEditionDate(e.edition_date)}</span>
+                <span className="flex-1 text-sm text-gray-800 truncate group-hover:text-blue-700">{e.title}</span>
+                {e.stance_label && (
+                  <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${STANCE_COLORS[e.stance_label] ?? 'bg-gray-100 text-gray-600'}`}>
+                    {e.stance_label}
+                  </span>
+                )}
+                {e.topic && (
+                  <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full flex-shrink-0">{e.topic}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {selected && (

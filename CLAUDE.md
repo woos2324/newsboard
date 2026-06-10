@@ -128,6 +128,7 @@
 4. **로컬 dev 캐시 함정** — `unstable_cache` 가 `.next/cache` 디스크에 24h 영구 저장돼 서버 재시작으로도 안 비워짐. 로컬 검증 시 `curl localhost:3000/api/revalidate?tag=traffic` 또는 `.next/cache` 삭제 필요. **프로덕션은 수집기 `revalidate("traffic")` 로 매번 무효화되어 무관.**
 
 **미완료 / 다음 세션 이어받을 것**:
+- ⚠ **opinion 오늘의 사설 그룹화 개선 (issue 파편화 해결)** — 그룹화가 `issue` **문자열 정확 일치**([TodayTab.tsx](opinion/src/components/TodayTab.tsx) 146~167)인데, `issue`는 사설마다 gpt-4o가 독립 생성 → **같은 사건도 매체 논조(진보/보수)에 따라 라벨이 갈려 파편화**. 예: 북중 정상회담이 보수 8개사 "북중 회담 비핵화 언급 부재" vs 경향 "북·중 전략적 협력 강화"로 분리, 투표용지도 7+4 분리. **채택안 = ② 사후 LLM 병합 패스**: 수집 후 그날 전체 (제목+issue)를 gpt-4o 1회 호출로 **사건 단위 canonical issue 재배정**(중립 라벨로 재명명, 예 "북·중 정상회담"). 설계 결정 3개: (a) `issue` 덮어쓰기 vs `issue_canonical` 신설(후자가 `editorial_comparison` 정합에 안전), (b) 병합 트리거(매 수집 후 vs 22시 1회), (c) 병합으로 키 바뀐 비교 캐시 재생성. (③ 임베딩 클러스터는 더 결정적이나 무겁고, ①프롬프트 강화 단독은 불충분)
 - ⚠ **`realtime_pv_tick` 7일 cleanup 추가** — `cleanup_old_data` 에 미반영(현재 ~432행/일 누적, 급하진 않음)
 - ⚠ **기사×시간대 양방향 점프** — 실시간 도입으로 가능해진 신기능(39차 "구현 불가" 재개방). 기사별 누적 PV 시계열(`article_pv_tick` 류) 저장 → 차분 → "N시에 많이 읽힌 기사" 점프. 별도 설계 필요(저장량·오늘 한정·근사치)
 - ⏸ **작업 A (다음 Daum 실시간 트렌드)** — 보류. 설계 명세는 plan 파일에 보존 (`/trending` 소스 토글 + 우리-DB 제목 문맥 AI요약)

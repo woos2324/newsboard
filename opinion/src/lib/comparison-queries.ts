@@ -60,37 +60,30 @@ export async function getComparison(
 
 /**
  * 특정 (edition_date, issue) 그룹의 사설 본문 일괄 조회 — 생성 액션에서 사용.
- * issue 인자는 TodayTab 그룹 키(= issue_canonical ?? issue). canonical 우선 조회하고,
- * 병합 전/과거 데이터(issue_canonical NULL)는 issue 기준으로 fallback 조회.
+ * issue 인자는 TodayTab 그룹 키(= issue_manual ?? issue_canonical ?? issue).
+ * 그날 전체 사설을 가져와 동일 그룹 키 기준으로 JS 필터 → 수동 보정(issue_manual)까지 정확히 반영.
  */
 export async function getGroupEditorialsForCompare(
   date: string,
   issue: string,
 ): Promise<CompareEditorial[]> {
-  const SELECT = `
-      editorial_id, title, body, summary, url,
-      media_company!inner (name, is_our_company)
-    `
-  let { data, error } = await supabase
+  const { data, error } = await supabase
     .from('editorial')
-    .select(SELECT)
+    .select(`
+      editorial_id, title, body, summary, url, issue, issue_canonical, issue_manual,
+      media_company!inner (name, is_our_company)
+    `)
     .eq('edition_date', date)
-    .eq('issue_canonical', issue)
     .order('published_at', { ascending: true })
   if (error) throw error
 
-  // canonical 미배정(과거/병합 전) 그룹: issue 로 fallback
-  if (!data || data.length === 0) {
-    ;({ data, error } = await supabase
-      .from('editorial')
-      .select(SELECT)
-      .eq('edition_date', date)
-      .eq('issue', issue)
-      .order('published_at', { ascending: true }))
-    if (error) throw error
-  }
+  const matched = (data ?? []).filter((row) => {
+    const r = row as unknown as { issue: string | null; issue_canonical: string | null; issue_manual: string | null }
+    const key = r.issue_manual ?? r.issue_canonical ?? r.issue ?? '기타'
+    return key === issue
+  })
 
-  return (data ?? []).map((row) => {
+  return matched.map((row) => {
     const mc = (row as unknown as {
       media_company: { name: string; is_our_company: boolean }
     }).media_company

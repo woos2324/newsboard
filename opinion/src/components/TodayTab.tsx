@@ -1,9 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useTransition, Fragment } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { GitCompare, Check, RefreshCw } from 'lucide-react'
-import { Editorial, getEditorialById } from '@/lib/queries'
+import { GitCompare, Check, RefreshCw, FolderInput, RotateCcw, X } from 'lucide-react'
+import { Editorial, getEditorialById, groupKey } from '@/lib/queries'
+import { setEditorialIssue } from '@/app/editorial-actions'
 import EditorialModal from './EditorialModal'
 
 const STANCE_COLORS: Record<string, string> = {
@@ -51,7 +53,7 @@ function formatTime(iso: string | null) {
   })
 }
 
-function EditorialRow({ item, onClick }: { item: Editorial; onClick: () => void }) {
+function EditorialRow({ item, onClick, onEdit }: { item: Editorial; onClick: () => void; onEdit: () => void }) {
   const isOurs = item.media_company?.is_our_company
   return (
     <div
@@ -59,18 +61,120 @@ function EditorialRow({ item, onClick }: { item: Editorial; onClick: () => void 
       tabIndex={0}
       onClick={onClick}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick() }}
-      className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors"
+      className="group flex items-center gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors"
     >
       <span className={`w-20 flex-shrink-0 truncate text-xs font-semibold ${isOurs ? 'text-blue-800' : 'text-gray-500'}`}>
         {item.media_company?.name ?? '알 수 없음'}{isOurs ? ' ★' : ''}
       </span>
       <span className="flex-1 text-sm text-gray-800 truncate">{item.title}</span>
+      {item.issue_manual && (
+        <span className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-medium" title="수동 보정된 주제">보정</span>
+      )}
+      <button
+        onClick={(e) => { e.stopPropagation(); onEdit() }}
+        className="flex-shrink-0 flex items-center gap-1 text-xs text-gray-400 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity"
+        title="주제 변경"
+      >
+        <FolderInput className="w-3.5 h-3.5" /> 주제 변경
+      </button>
       {item.stance_label && (
         <span className={`flex-shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${STANCE_COLORS[item.stance_label] ?? 'bg-gray-100 text-gray-600'}`}>
           {item.stance_label}
         </span>
       )}
       <span className="w-14 flex-shrink-0 text-right text-xs text-gray-400">{formatTime(item.published_at)}</span>
+    </div>
+  )
+}
+
+/** 행 아래 인라인으로 펼쳐지는 주제 변경 패널 */
+function IssueEditPanel({
+  item,
+  groupOptions,
+  onClose,
+  onSaved,
+}: {
+  item: Editorial
+  groupOptions: string[]
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [pending, startTransition] = useTransition()
+  const [showNew, setShowNew] = useState(false)
+  const [newIssue, setNewIssue] = useState('')
+  const current = groupKey(item)
+
+  function save(value: string | null) {
+    startTransition(async () => {
+      const res = await setEditorialIssue(item.editorial_id, value)
+      if (res.ok) onSaved()
+    })
+  }
+
+  const targets = groupOptions.filter((g) => g !== current && g !== '기타')
+
+  return (
+    <div className="px-4 py-3 bg-blue-50/60 border-t border-blue-100">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs font-semibold text-gray-600">
+          현재 주제: <span className="text-gray-800">{current}</span> → 어디로 옮길까요?
+        </span>
+        <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="닫기">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {targets.map((g) => (
+          <button
+            key={g}
+            disabled={pending}
+            onClick={() => save(g)}
+            className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 bg-white text-gray-700 hover:border-blue-300 hover:bg-blue-50 disabled:opacity-50 transition-colors"
+          >
+            {g}
+          </button>
+        ))}
+        {!showNew ? (
+          <button
+            disabled={pending}
+            onClick={() => setShowNew(true)}
+            className="text-xs px-2.5 py-1 rounded-lg border border-dashed border-gray-300 text-gray-500 hover:border-blue-300 hover:text-blue-600 disabled:opacity-50"
+          >
+            + 새 주제
+          </button>
+        ) : (
+          <form
+            onSubmit={(e) => { e.preventDefault(); if (newIssue.trim()) save(newIssue) }}
+            className="flex items-center gap-1"
+          >
+            <input
+              autoFocus
+              value={newIssue}
+              onChange={(e) => setNewIssue(e.target.value)}
+              placeholder="새 주제명"
+              maxLength={40}
+              className="text-xs px-2 py-1 rounded-lg border border-blue-300 focus:outline-none focus:ring-1 focus:ring-blue-400 w-40"
+            />
+            <button
+              type="submit"
+              disabled={pending || !newIssue.trim()}
+              className="text-xs px-2 py-1 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              저장
+            </button>
+          </form>
+        )}
+        {item.issue_manual && (
+          <button
+            disabled={pending}
+            onClick={() => save(null)}
+            className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 bg-white text-gray-500 hover:text-gray-700 disabled:opacity-50 flex items-center gap-1"
+            title="수동 보정 해제 — AI 자동 분류로 복원"
+          >
+            <RotateCcw className="w-3 h-3" /> 자동으로 되돌리기
+          </button>
+        )}
+      </div>
     </div>
   )
 }
@@ -88,11 +192,13 @@ export default function TodayTab({
   initialOpenId?: number | null
   comparedIssues?: string[]
 }) {
+  const router = useRouter()
   const comparedSet = new Set(comparedIssues)
   const [filter, setFilter] = useState<FilterType>('전체')
   const [selected, setSelected] = useState<Editorial | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+  const [editTarget, setEditTarget] = useState<number | null>(null)
 
   async function openModal(item: Editorial) {
     setSelected(item)
@@ -143,10 +249,10 @@ export default function TodayTab({
       mainGroups.push([name, items])
     }
   } else {
-    // canonical issue 기준 그룹화 (사후 LLM 병합으로 파편화 해소, 없으면 issue fallback), 1건짜리는 "기타" 통합
+    // 그룹 키: 수동 보정(issue_manual) > AI 병합(issue_canonical) > 원본 issue. 1건짜리는 "기타" 통합
     const issueMap = new Map<string, Editorial[]>()
     for (const e of filtered) {
-      const key = e.issue_canonical ?? e.issue ?? '기타'
+      const key = groupKey(e)
       const arr = issueMap.get(key) ?? []
       arr.push(e)
       issueMap.set(key, arr)
@@ -167,6 +273,16 @@ export default function TodayTab({
   }
 
   const FILTERS: FilterType[] = ['전체', '종합일간지', '경제지', '매체별']
+
+  // 주제 변경 후보: 오늘 존재하는 멀티-매체 그룹(2건 이상) 키 목록 (필터 무관)
+  const groupOptions = (() => {
+    const counts = new Map<string, number>()
+    for (const e of editorials) {
+      const k = groupKey(e)
+      counts.set(k, (counts.get(k) ?? 0) + 1)
+    }
+    return Array.from(counts.entries()).filter(([, n]) => n >= 2).map(([k]) => k)
+  })()
 
   return (
     <div>
@@ -251,7 +367,21 @@ export default function TodayTab({
                 </div>
                 <div className="overflow-hidden rounded-xl border border-gray-200 bg-white divide-y divide-gray-100">
                   {visibleItems.map((e) => (
-                    <EditorialRow key={e.editorial_id} item={e} onClick={() => openModal(e)} />
+                    <Fragment key={e.editorial_id}>
+                      <EditorialRow
+                        item={e}
+                        onClick={() => openModal(e)}
+                        onEdit={() => setEditTarget(editTarget === e.editorial_id ? null : e.editorial_id)}
+                      />
+                      {editTarget === e.editorial_id && (
+                        <IssueEditPanel
+                          item={e}
+                          groupOptions={groupOptions}
+                          onClose={() => setEditTarget(null)}
+                          onSaved={() => { setEditTarget(null); router.refresh() }}
+                        />
+                      )}
+                    </Fragment>
                   ))}
                   {!isExpanded && hiddenCount > 0 && (
                     <button

@@ -13,6 +13,7 @@ export interface Editorial {
   topic: string | null
   issue: string | null
   issue_canonical: string | null
+  issue_manual: string | null
   stance_score: number | null
   stance_label: string | null
   ai_analysis?: Record<string, unknown> | null
@@ -37,9 +38,14 @@ export interface MediaStance {
 
 const EDITORIAL_LIST_COLS = `
   editorial_id, media_company_id, title, summary, url,
-  published_at, edition_date, topic, issue, issue_canonical, stance_score, stance_label, fetched_at,
+  published_at, edition_date, topic, issue, issue_canonical, issue_manual, stance_score, stance_label, fetched_at,
   media_company (media_company_id, name, normalized_name, is_our_company)
 `
+
+/** 그룹화·비교의 단일 진실 키: 수동 보정 > AI 병합 > 원본 issue */
+export function groupKey(e: Pick<Editorial, 'issue_manual' | 'issue_canonical' | 'issue'>): string {
+  return e.issue_manual ?? e.issue_canonical ?? e.issue ?? '기타'
+}
 
 export async function getEditorialById(id: number): Promise<Editorial | null> {
   const { data, error } = await supabase
@@ -75,18 +81,18 @@ const fetchEditorialsByDate = async (date: string): Promise<Editorial[]> => {
   return (data ?? []) as unknown as Editorial[]
 }
 
-// 오늘: 5분 캐시 (하루 3회 수집 반영)
+// 오늘: 5분 캐시 (하루 3회 수집 반영). 수동 보정 시 revalidateTag('editorials')로 즉시 무효화
 export const getTodayEditorials = unstable_cache(
   fetchEditorialsByDate,
   ['editorial-today'],
-  { revalidate: 300 }
+  { revalidate: 300, tags: ['editorials'] }
 )
 
-// 과거 날짜: 영구 캐시 (데이터 변경 없음)
+// 과거 날짜: 영구 캐시 (데이터 변경 없음). 수동 보정 시 revalidateTag('editorials')로 무효화
 export const getPastEditorials = unstable_cache(
   fetchEditorialsByDate,
   ['editorial-past'],
-  { revalidate: false }
+  { revalidate: false, tags: ['editorials'] }
 )
 
 export async function getRecentEditorials(days = 30): Promise<Editorial[]> {

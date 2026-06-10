@@ -1,7 +1,7 @@
 'use client'
 
 import { X, ExternalLink } from 'lucide-react'
-import { Editorial } from '@/lib/queries'
+import { Editorial, groupKey } from '@/lib/queries'
 
 const STANCE_COLORS: Record<string, string> = {
   진보: 'bg-blue-100 text-blue-700',
@@ -37,9 +37,10 @@ export default function EditorialModal({
   const score = item.stance_score ?? 0
   const leftPercent = Math.min(100, Math.max(0, ((score + 2) / 4) * 100))
 
-  const others = item.issue
+  const itemKey = groupKey(item)
+  const others = itemKey !== '기타'
     ? relatedEditorials
-        .filter((e) => e.editorial_id !== item.editorial_id && e.issue === item.issue)
+        .filter((e) => e.editorial_id !== item.editorial_id && groupKey(e) === itemKey)
         .slice(0, 5)
     : []
 

@@ -1,5 +1,4 @@
 import { getSegyeEditorials } from '@/lib/queries'
-import DateNav from '@/components/DateNav'
 import TrendTab from '@/components/TrendTab'
 
 export const dynamic = 'force-dynamic'
@@ -20,8 +19,7 @@ export default async function TrendPage({
 
   return (
     <div className="page-wrapper">
-      <DateNav date={date} today={today} basePath="/trend" />
-      <TrendTab editorials={segyeEditorials} selectedDate={date} />
+      <TrendTab editorials={segyeEditorials} selectedDate={date} today={today} />
     </div>
   )
 }

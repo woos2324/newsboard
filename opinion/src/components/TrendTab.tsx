@@ -2,8 +2,8 @@
 
 import { useState, useMemo } from 'react'
 import { Editorial, getEditorialById } from '@/lib/queries'
-import { ExternalLink } from 'lucide-react'
 import EditorialModal from './EditorialModal'
+import DateNav from './DateNav'
 
 type Period = 'week' | 'month'
 
@@ -75,7 +75,7 @@ function getTopTopic(items: Editorial[]) {
   return sorted.length > 0 ? { topic: sorted[0][0], count: sorted[0][1], total: items.length } : null
 }
 
-export default function TrendTab({ editorials, selectedDate }: { editorials: Editorial[]; selectedDate: string }) {
+export default function TrendTab({ editorials, selectedDate, today }: { editorials: Editorial[]; selectedDate: string; today: string }) {
   const [period, setPeriod] = useState<Period>('week')
   const [selected, setSelected] = useState<Editorial | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
@@ -344,6 +344,9 @@ export default function TrendTab({ editorials, selectedDate }: { editorials: Edi
           )}
         </div>
       </div>
+
+      {/* 날짜 선택 — 아래 사설 목록에만 적용 */}
+      <DateNav date={selectedDate} today={today} basePath="/trend" />
 
       {/* 사설 목록 — 선택한 날짜 */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">

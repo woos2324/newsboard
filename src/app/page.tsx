@@ -30,6 +30,11 @@ function weekdayKr(dateStr: string): string {
   return WEEKDAY_KR[d.getUTCDay()];
 }
 
+function todayKST(): string {
+  const kst = new Date(Date.now() + 9 * 60 * 60_000);
+  return kst.toISOString().slice(0, 10);
+}
+
 function formatDateTimeKr(iso: string): string {
   const d = new Date(iso);
   const y = d.getFullYear();
@@ -46,7 +51,7 @@ export default async function DashboardPage() {
 
   const [dashboard, pvHistory, trending] = await Promise.all([
     getDashboardData(),
-    getDailyCvHistory(2),
+    getDailyCvHistory(3),
     getTrendingKeywords(),
   ]);
   const { stats, issues, rankingNews, alerts, sub, topComments, aiSummary } = dashboard;
@@ -60,11 +65,19 @@ export default async function DashboardPage() {
       .map((t) => [t.matched_cluster_id!, t.approx_traffic])
   );
 
-  const yesterdayPv = pvHistory[0]?.total ?? 0;
-  const dayBeforePv = pvHistory[1]?.total ?? 0;
-  const pvDeltaPct = dayBeforePv > 0
-    ? Number((((yesterdayPv - dayBeforePv) / dayBeforePv) * 100).toFixed(1))
+  // 조회수 카드: 오늘 실시간 데이터가 있으면 오늘 누적 PV(전일 종일 대비),
+  // 없으면(자정 직후 등) 전일 확정값(전전일 대비)으로 fallback
+  const pvTodayStr = todayKST();
+  const pvRealtimeRow = pvHistory.find((p) => p.data_date === pvTodayStr && p.total > 0);
+  const pvPastRows = pvHistory.filter((p) => p.data_date !== pvTodayStr);
+  const pvIsRealtime = !!pvRealtimeRow;
+  const pvValue = pvIsRealtime ? pvRealtimeRow!.total : (pvPastRows[0]?.total ?? 0);
+  const pvBase = pvIsRealtime ? (pvPastRows[0]?.total ?? 0) : (pvPastRows[1]?.total ?? 0);
+  const pvDeltaPct = pvBase > 0
+    ? Number((((pvValue - pvBase) / pvBase) * 100).toFixed(1))
     : 0;
+  const pvSublabel = pvIsRealtime ? "오늘 실시간" : "전일 기준";
+  const pvDeltaLabel = pvIsRealtime ? "전일 종일 대비" : "전일 대비";
 
   const statCards = [
     {
@@ -77,10 +90,10 @@ export default async function DashboardPage() {
     },
     {
       label: "조회수",
-      sublabel: "전일기준",
-      value: yesterdayPv > 0 ? yesterdayPv.toLocaleString() : "—",
+      sublabel: pvSublabel,
+      value: pvValue > 0 ? pvValue.toLocaleString() : "—",
       delta: pvDeltaPct,
-      deltaLabel: "전일 대비",
+      deltaLabel: pvDeltaLabel,
       icon: Eye,
       href: linkIfAllowed("/traffic"),
     },

@@ -20,7 +20,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from scripts.lib.db import get_client
@@ -32,6 +32,8 @@ from scripts.lib.foreign_translator import translate_article
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+KST = timezone(timedelta(hours=9))
 
 
 async def _dispatch(source_code: str, limit: int, supabase=None) -> list[ForeignEditorialItem]:
@@ -62,23 +64,6 @@ async def _dispatch(source_code: str, limit: int, supabase=None) -> list[Foreign
     raise NotImplementedError(f"Collector not implemented yet for: {source_code}")
 
 
-def _to_edition_date(published_at: Optional[str]) -> Optional[str]:
-    """ISO8601 → YYYY-MM-DD (현지 시각 기준).
-    Python 3.10 fromisoformat은 +HHMM(콜론 없는 오프셋)을 미지원 — 정규화 처리.
-    """
-    if not published_at:
-        return None
-    try:
-        # +0900 → +09:00 변환 (Python 3.10 호환)
-        import re as _re
-        s = published_at.replace("Z", "+00:00")
-        s = _re.sub(r"([+-])(\d{2})(\d{2})$", r"\1\2:\3", s)
-        dt = datetime.fromisoformat(s)
-        return dt.strftime("%Y-%m-%d")
-    except Exception:
-        return None
-
-
 async def collect_and_save(
     source_code: str,
     limit: int,
@@ -87,6 +72,11 @@ async def collect_and_save(
 ) -> int:
     source = get_source(source_code)
     print(f"\n[{source_code}] {source['name_ko']} ({source['name_en']}) 수집 시작")
+
+    # edition_date = 수집 시점 KST 날짜로 통일 (B안).
+    # 매체별 시차 때문에 published_at 기준이면 같은 날 아침 수집분이 여러 날짜로 흩어진다.
+    # 실제 발행시각은 published_at에 원문 그대로 보존 → 표시·정렬에 사용.
+    collected_edition_date = datetime.now(KST).strftime("%Y-%m-%d")
 
     supabase = get_client()
     items = await _dispatch(source_code, limit, supabase=supabase)
@@ -102,9 +92,11 @@ async def collect_and_save(
     for it in items:
         # 기존 레코드는 다시 번역 호출하지 않도록 url 중복 확인
         existing = supabase.table("foreign_editorial") \
-            .select("foreign_editorial_id,title_ko,body_ko") \
+            .select("foreign_editorial_id,title_ko,body_ko,edition_date") \
             .eq("url", it["url"]).limit(1).execute()
         already_translated = bool(existing.data and existing.data[0].get("body_ko"))
+        # 기존 URL 재수집 시 최초 수집일 보존 (과거 데이터 '그대로 두기' 결정과 일관)
+        existing_edition_date = existing.data[0].get("edition_date") if existing.data else None
 
         title_ko: Optional[str] = None
         body_ko: Optional[str] = None
@@ -127,7 +119,7 @@ async def collect_and_save(
             "body_original": it.get("body_original"),
             "url": it["url"],
             "published_at": it.get("published_at"),
-            "edition_date": _to_edition_date(it.get("published_at")),
+            "edition_date": existing_edition_date or collected_edition_date,
             "author": it.get("author"),
         }
         if title_ko or body_ko:

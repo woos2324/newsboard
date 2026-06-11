@@ -44,5 +44,8 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # subscribers — UTC 23:00 (KST 08:00)
 0 23 * * * root cd /app && python -m scripts.collect_subscribers >> /var/log/cron.log 2>&1
 
-# foreign-editorials — UTC 22:00 (KST 07:00)
-0 22 * * * root cd /app && python -m scripts.collect_foreign_editorials --all >> /var/log/cron.log 2>&1
+# foreign-editorials — KST 06:00/14:00/22:00 = UTC 21:00/05:00/13:00 (한국 사설과 동일)
+# 하루 3회 수집(시차로 늦게 올라오는 매체 누락 방지). 기존 URL은 재번역 안 함 → 비용 영향 미미
+0 21 * * * root cd /app && python -m scripts.collect_foreign_editorials --all >> /var/log/cron.log 2>&1
+0 5 * * * root cd /app && python -m scripts.collect_foreign_editorials --all >> /var/log/cron.log 2>&1
+0 13 * * * root cd /app && python -m scripts.collect_foreign_editorials --all >> /var/log/cron.log 2>&1

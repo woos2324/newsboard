@@ -1,8 +1,9 @@
 'use client'
 
-import { Calendar, Menu } from 'lucide-react'
+import { Calendar, Menu, LogOut } from 'lucide-react'
 import { useEffect, useState, Suspense } from 'react'
 import SearchBar from './SearchBar'
+import { logoutAction } from '@/app/login/actions'
 
 function formatDateTime(date: Date): string {
   const month = date.getMonth() + 1
@@ -36,10 +37,20 @@ export default function OpinionTopbar({ onMenuOpen }: { onMenuOpen?: () => void 
         <Calendar className="h-4 w-4" />
         <span>{datetime ?? ''}</span>
       </div>
-      <div className="ml-auto">
+      <div className="ml-auto flex items-center gap-3">
         <Suspense fallback={<div className="h-9 w-80" />}>
           <SearchBar />
         </Suspense>
+        <form action={logoutAction}>
+          <button
+            type="submit"
+            aria-label="로그아웃"
+            title="로그아웃"
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
+        </form>
       </div>
     </header>
   )

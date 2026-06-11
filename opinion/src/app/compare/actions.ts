@@ -1,6 +1,7 @@
 'use server'
 
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { assertAuthed } from '@/lib/auth-server'
 import { chatJson } from '@/lib/ai'
 import {
   getGroupEditorialsForCompare,
@@ -44,6 +45,7 @@ export async function generateComparison(
   date: string,
   issue: string,
 ): Promise<EditorialComparison> {
+  await assertAuthed()
   const group = await getGroupEditorialsForCompare(date, issue)
   const segye = group.filter((e) => e.is_our_company)
   const others = group.filter((e) => !e.is_our_company)

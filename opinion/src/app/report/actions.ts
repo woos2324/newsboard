@@ -1,6 +1,7 @@
 'use server'
 
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { assertAuthed } from '@/lib/auth-server'
 
 // fire-and-forget: 응답 안 기다림. 실패해도 무시 (updated_at 갱신은 비핵심)
 function touchReportAsync(reportId: number) {
@@ -12,6 +13,7 @@ function touchReportAsync(reportId: number) {
 }
 
 export async function ensureReport(date: string): Promise<number> {
+  await assertAuthed()
   const { data: existing } = await supabaseAdmin
     .from('daily_report')
     .select('report_id')
@@ -30,6 +32,7 @@ export async function ensureReport(date: string): Promise<number> {
 }
 
 export async function addSection(reportId: number, sortOrder: number): Promise<number> {
+  await assertAuthed()
   const { data, error } = await supabaseAdmin
     .from('daily_report_section')
     .insert({ report_id: reportId, sort_order: sortOrder })
@@ -45,6 +48,7 @@ export async function updateSection(
   sectionId: number,
   patch: { title?: string; comment?: string },
 ): Promise<void> {
+  await assertAuthed()
   const { data: sec, error } = await supabaseAdmin
     .from('daily_report_section')
     .update({ ...patch, updated_at: new Date().toISOString() })
@@ -56,6 +60,7 @@ export async function updateSection(
 }
 
 export async function deleteSection(sectionId: number): Promise<void> {
+  await assertAuthed()
   const { error } = await supabaseAdmin
     .from('daily_report_section')
     .delete()
@@ -75,6 +80,7 @@ export async function addArticle(
     published_at: string | null
   },
 ): Promise<number> {
+  await assertAuthed()
   const { data, error } = await supabaseAdmin
     .from('daily_report_article')
     .insert({
@@ -100,6 +106,7 @@ export async function addArticle(
 }
 
 export async function deleteArticle(articleRefId: number): Promise<void> {
+  await assertAuthed()
   const { error } = await supabaseAdmin
     .from('daily_report_article')
     .delete()
@@ -116,6 +123,7 @@ export async function searchArticlesAction(
   source: 'segye' | 'other',
   days = 7,
 ) {
+  await assertAuthed()
   const since = new Date()
   since.setDate(since.getDate() - days)
 

@@ -2,6 +2,7 @@
 
 import { updateTag } from 'next/cache'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { assertAuthed } from '@/lib/auth-server'
 
 /**
  * 사설 그룹(주제) 수동 보정.
@@ -13,6 +14,7 @@ export async function setEditorialIssue(
   editorialId: number,
   issueManual: string | null,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  await assertAuthed()
   const value = issueManual?.trim() || null
 
   const { error } = await supabaseAdmin

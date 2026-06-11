@@ -94,48 +94,63 @@
 - Email Template "Confirm signup" → `{{ .Token }}` 으로 OTP 6자리 발송 (10분 만료)
 - 비밀번호 정책: 8자 이상, 대소문자 + 숫자 + 특수문자
 
-## 재개 지점 (2026-06-11, 42차 세션 진행 중)
+## 재개 지점 (2026-06-11, 42차 세션 종료)
 
-**이번 세션 (42차) = 해외 사설 시간 처리 정리(완료·배포) + opinion 공용 로그인 설계 확정(구현 착수 직전, 집에서 이어서).**
+**이번 세션 (42차) = 해외 사설 시간 처리 정리(회사 PC, 완료·배포) + opinion 공용 계정 로그인 구현·배포(집) + infra-mcp 복구. 전부 완료.**
 
-### 완료·배포 (2건)
-
-**1. 해외 사설 `edition_date`를 수집 KST일로 통일** (커밋 `15ec477`, NCP 배포 완료)
+### 1. 해외 사설 `edition_date`를 수집 KST일로 통일 (커밋 `15ec477`, NCP 배포 완료)
 - 문제: [_to_edition_date](scripts/collect_foreign_editorials.py)가 `published_at` 표기 오프셋 날짜를 그대로 사용 → 매체 시차로 같은 날 아침 수집분이 여러 날짜로 흩어짐. 특히 **sankei는 발행시각을 UTC(Z) 표기** → 일본 아침 사설이 전날(예 06-09)로 오적재 (mainichi는 JST 표기라 정상)
 - **채택 = B안 (수집 KST일 통일)**: `edition_date` = 수집 시점 KST 날짜. 실제 발행시각은 `published_at`에 원문 그대로 보존(표시·정렬용). 기존 URL 재수집 시 최초 수집일 보존(`existing_edition_date or collected_edition_date`). `_to_edition_date` 제거
 - 이 한 번으로 sankei 버그 + 시차 흩어짐(42차 할일 3번) **동시 해결**
 - 검증: sankei 1건(오늘 발행분) 삭제 후 재수집 → `edition_date`=2026-06-11(KST), `published_at`=원문 UTC 보존, 기존 3건 날짜 보존 확인. 검증 중 비운 산케이 2건 번역 백필 완료
 - **판단**: 기존 잘못 적재된 과거 데이터는 **그대로 둠**(양 적고 곧 cleanup, 사용자 결정)
 
-**2. 해외 사설 cron 하루 1회 → 3회** (커밋 `3b643ad`, NCP 배포 완료)
+### 2. 해외 사설 cron 하루 1회 → 3회 (커밋 `3b643ad`, NCP 배포 완료)
 - UTC 22:00 1회 → **KST 06:00/14:00/22:00**(한국 사설과 동일, [crontab](crontab)). 시차로 늦게 올라오는 매체 누락 방지
 - 기존 URL은 `already_translated` 체크로 재번역 안 함 → 비용 영향 미미. (해외는 `merge_editorial_issues` 병합 없음, 수집만 3회)
 
-### 다음 작업 — opinion 공용 로그인 (설계 확정, 구현 착수 직전)
+### 3. opinion 공용 계정 로그인 (커밋 `6fdd619e`, opinion 수동 배포 완료)
 
-**결정 사항 (사용자 확정)**:
-1. **방식 = 공용 ID/PW 환경변수** (Supabase Auth 단일계정 아님 — opinion엔 auth 인프라 없어 환경변수가 가장 단순)
-2. **범위 = 앱 전체 로그인** (proxy 하나로 모든 페이지+쓰기 보호, gpt-4o 비용 완전 차단)
-3. **세션 = 브라우저 세션** (maxAge 없음, 브라우저 종료 시 로그아웃)
+> 설계는 회사 PC에서 확정, 구현·배포는 집에서. 실제 구현이 계획과 다른 점: ① env 이름 `OPINION_AUTH_USER`/`OPINION_AUTH_PASS`/`OPINION_AUTH_SECRET`(계획의 ID/PW/SESSION_SECRET 대체, Vercel에도 이 이름으로 등록), ② 쿠키는 SECRET 직접 비교 대신 **HMAC 서명**(`crypto.subtle`, edge OK)으로 강화, ③ `submitLabel`은 anon+RLS라 proxy 게이트로만 보호(supabaseAdmin 액션 3종에만 `assertAuthed` 2중 방어)
 
-**보호 대상 쓰기 표면 4개**: `setEditorialIssue`([editorial-actions.ts](opinion/src/app/editorial-actions.ts)), `generateComparison`(gpt-4o 비용, [compare/actions.ts](opinion/src/app/compare/actions.ts)), report 편집 7종([report/actions.ts](opinion/src/app/report/actions.ts), 사이드바 주석상태), `submitLabel`(label)
+opinion 앱은 그동안 인증 없이 공개돼 쓰기 Server Action(수동 보정·gpt-4o 비교 생성·보고서 편집)이 무인증 노출 상태였음. **공용 계정 1개**로 전체 앱을 막음.
 
-**⚠ Next 16.2.6 핵심 (구현 시 필수)**:
-- **`middleware` → `proxy`로 파일 규칙 변경**. `opinion/src/proxy.ts`, `export function proxy(request: NextRequest)`, `export const config = { matcher }`. (node_modules/next/dist/docs 확인함)
-- `cookies()`는 **async** (`const store = await cookies()`) — Server Action에서 set/delete. proxy 내 읽기는 `request.cookies.get(name)?.value` 동기
-- 41차 교훈: Server Action 즉시 무효화는 `updateTag`(1인자) — 단 로그인엔 revalidate 불필요
+**설계 결정 (사용자 확정)**:
+1. **로그인 방식 = 환경변수 ID/PW + HMAC 서명 세션 쿠키** (Supabase Auth 아님). 공용 계정 1개에 newsboard 수준 인증은 과함
+2. **보호 범위 = 전체 앱 로그인** (proxy가 전 경로 차단. 비로그인 열람도 불가 — 기존 공개 앱과 성격 바뀜)
+3. **세션 유지 = 브라우저 종료 시 만료** (세션 쿠키, maxAge 없음)
 
-**구현 계획 (파일)**:
-- `opinion/src/proxy.ts` (신규) — `opinion_session` 쿠키 != `OPINION_SESSION_SECRET` → `/login` redirect. `/login`·정적리소스 통과. 로그인 상태로 `/login` 오면 `/`로. matcher: `['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|svg|ico|webp)$).*)']`
-- `opinion/src/app/login/page.tsx` (신규) — ID/PW 폼 (Client, `useActionState`), "세계일보 논설실" 브랜딩
-- `opinion/src/app/login/actions.ts` (신규) — `login(prev, formData)`: env 검증 → 브라우저 세션 httpOnly 쿠키 set → `redirect("/")`. `logout()`: 쿠키 delete → `/login`
-- `opinion/src/components/OpinionShell.tsx` (수정) — `usePathname()==='/login'`이면 사이드바/탑바 없이 children만
-- `opinion/src/components/OpinionTopbar.tsx` (수정) — 로그아웃 버튼(`form action={logout}`)
-- **환경변수 3개** — `.env.local` + **Vercel opinion 프로젝트**: `OPINION_AUTH_ID`, `OPINION_AUTH_PW`(사용자가 값 결정), `OPINION_SESSION_SECRET`(랜덤 생성)
+**구현 파일**:
+- [opinion/src/lib/auth.ts](opinion/src/lib/auth.ts) (신규) — edge-safe HMAC 토큰 유틸 (Web Crypto, Buffer 미사용). `expectedToken`/`verifyToken`/`checkCredentials`. 토큰 = `HMAC(OPINION_AUTH_SECRET, 고정메시지)` (단일 계정이라 payload 불필요)
+- [opinion/src/lib/auth-server.ts](opinion/src/lib/auth-server.ts) (신규) — `assertAuthed` (next/headers 사용 → proxy에서 import 금지). 쓰기 액션 2중 방어
+- [opinion/src/proxy.ts](opinion/src/proxy.ts) (신규) — 전 경로 차단 → 비로그인 `/login` 307. **⚠ Next 16.2.6에서 `middleware.ts` 규칙 deprecated → `proxy.ts` + `export function proxy()` 로 작성** (middleware로 만들면 빌드 시 deprecation 경고). matcher는 정적자원(`_next`/이미지/css/js)만 화이트리스트 예외 → 새 메뉴 자동 보호
+- [opinion/src/app/login/page.tsx](opinion/src/app/login/page.tsx) + [actions.ts](opinion/src/app/login/actions.ts) (신규) — `useActionState` 폼 + `loginAction`(쿠키 set + `redirect('/')`)·`logoutAction`(쿠키 delete)
+- [OpinionShell.tsx](opinion/src/components/OpinionShell.tsx) — `usePathname()==='/login'` 이면 사이드바·탑바 없이 단독 렌더
+- [OpinionTopbar.tsx](opinion/src/components/OpinionTopbar.tsx) — 우상단 로그아웃 버튼(`logoutAction` form)
+- 쓰기 액션 3종에 `assertAuthed()` 추가: [editorial-actions.ts](opinion/src/app/editorial-actions.ts)(`setEditorialIssue`)·[compare/actions.ts](opinion/src/app/compare/actions.ts)(`generateComparison`)·[report/actions.ts](opinion/src/app/report/actions.ts)(전 편집 액션)
 
-**세션 토큰**: 쿠키값 = `OPINION_SESSION_SECRET`(긴 랜덤). `httpOnly`+`secure`(prod)+`sameSite=lax`+maxAge 없음. proxy는 Edge라 crypto 없이 문자열 일치 비교만.
+**환경변수 (opinion Vercel Production + Preview, 사용자 등록 완료)**:
+- `OPINION_AUTH_USER` / `OPINION_AUTH_PASS` — 공용 ID/PW (로그인 시 대조)
+- `OPINION_AUTH_SECRET` — 쿠키 HMAC 서명 키(랜덤 hex). 변경 시 전원 강제 재로그인. **newsboard엔 이 변수 없음 — newsboard는 Supabase Auth라 서명 키를 Supabase가 관리. opinion은 자체 발급이라 직접 보유**
 
-**착수 전 확인**: ID/PW 실제 값(사용자 결정), 구현 후 Vercel 환경변수 등록(opinion 수동 배포 `cd opinion && vercel --prod --yes`)
+**배포·검증**: `cd opinion && vercel --prod --yes` 수동 배포 완료. 프로덕션 curl 검증 — 전 메뉴(`/`,`/stance`,`/trend`,`/label`,`/foreign`,`/report`,`/compare`) + 쿼리스트링 + 존재하지 않는 경로까지 **전부 307→/login**, `/login`만 200. (실제 ID/PW 로그인 흐름은 자격증명 필요로 미검증 — 사용자 브라우저 확인 대기)
+
+**판단 사항 (42차)**:
+1. `middleware.ts` → `proxy.ts` 전환 — Next 16.2.6 deprecation. CLAUDE.md "프로덕션 버전 정합" 교훈 적용(41차 revalidateTag 사건과 동류)
+2. 2중 방어(proxy + assertAuthed) — Server Action은 직접 POST 가능하므로 proxy만으론 부족
+3. tsc만으론 부족 → `next build`로 컴파일 검증(`✓ Compiled successfully`). 단 로컬 `SUPABASE_SERVICE_ROLE_KEY` 부재로 `/foreign`·`/trend` prerender charCodeAt 에러는 환경 문제(Vercel 무관, 41차와 동일)
+
+### 4. infra-mcp 복구 ([D:\mcp\infra-mcp](D:\mcp\infra-mcp))
+
+- **문제 2건**: (a) `.mcp.json`에 infra-mcp 미등록(supabase만 있었음 — CLAUDE.md "등록 완료" 기록과 실제 불일치), (b) venv가 깨짐(Python 3.12로 생성됐으나 시스템에서 3.12 삭제, 3.13만 잔존 → `No Python at ...Python312`)
+- **해결**: venv를 Python 3.13으로 재생성 + 의존성(mcp/paramiko/PyYAML) 재설치, [.mcp.json](.mcp.json)에 infra-mcp stdio 등록(`.venv\Scripts\python.exe` + `mcp_server.py`)
+- **검증**: 세션 재시작 후 `check_status worker` → NCP worker-worker-1 `Up 12 hours` 정상 응답(SSH 연결 OK). 실제 등록된 툴은 `check_status`/`deploy_worker`/`tail_logs` **3종**(README의 `deploy_web`은 mcp_server.py 미구현)
+
+### 미완료 / 다음 세션(43차) 할 일
+
+- ~~sankei `edition_date` tz 버그 + 해외 사설 시차 UX~~ → **위 1번(edition_date 수집 KST일 통일, B안)으로 해결 완료** (41차 이월 항목 종결)
+- opinion 로그인: 실제 ID/PW 로그인 흐름 사용자 브라우저 최종 확인만 남음. `submitLabel`(label)은 anon+RLS라 proxy 게이트로만 보호 중(상기 ③)
+- (기존 미완료 유지: 사설 과거 백필, `realtime_pv_tick` 7일 cleanup 미반영 등)
 
 ---
 

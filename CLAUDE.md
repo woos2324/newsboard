@@ -45,7 +45,7 @@
 | cron-cleanup | UTC 15:00 (KST 00:00) | 7일 이전 스냅샷 삭제 |
 | cron-naver-pv | UTC 20:00 (KST 05:00) 1차 + 22:00 fallback | 전일 확정 PV 수집 → 4개 테이블 |
 | **cron-naver-pv 실시간** | **10분마다 (`*/10`)** | **오늘 지표 실시간 수집 `--realtime` (/api/today: 총조회수·기사순위·유입경로 device별 + 검색키워드 + realtime_pv_tick) (40차)** |
-| **cron-foreign-editorials** | **UTC 22:00 (KST 07:00)** | **해외 매체 사설 수집 + gpt-4o-mini 한국어 번역 → foreign_editorial** |
+| **cron-foreign-editorials** | **KST 06:00/14:00/22:00 = UTC 21:00/05:00/13:00 (42차, 한국 사설과 동일)** | **해외 매체 사설 수집 + gpt-4o-mini 한국어 번역 → foreign_editorial** |
 
 **cron chain**: `ranking → cluster → gap` (매시 자동 연쇄)
 
@@ -93,6 +93,51 @@
 - Sender email: `noreply@segye.com`
 - Email Template "Confirm signup" → `{{ .Token }}` 으로 OTP 6자리 발송 (10분 만료)
 - 비밀번호 정책: 8자 이상, 대소문자 + 숫자 + 특수문자
+
+## 재개 지점 (2026-06-11, 42차 세션 진행 중)
+
+**이번 세션 (42차) = 해외 사설 시간 처리 정리(완료·배포) + opinion 공용 로그인 설계 확정(구현 착수 직전, 집에서 이어서).**
+
+### 완료·배포 (2건)
+
+**1. 해외 사설 `edition_date`를 수집 KST일로 통일** (커밋 `15ec477`, NCP 배포 완료)
+- 문제: [_to_edition_date](scripts/collect_foreign_editorials.py)가 `published_at` 표기 오프셋 날짜를 그대로 사용 → 매체 시차로 같은 날 아침 수집분이 여러 날짜로 흩어짐. 특히 **sankei는 발행시각을 UTC(Z) 표기** → 일본 아침 사설이 전날(예 06-09)로 오적재 (mainichi는 JST 표기라 정상)
+- **채택 = B안 (수집 KST일 통일)**: `edition_date` = 수집 시점 KST 날짜. 실제 발행시각은 `published_at`에 원문 그대로 보존(표시·정렬용). 기존 URL 재수집 시 최초 수집일 보존(`existing_edition_date or collected_edition_date`). `_to_edition_date` 제거
+- 이 한 번으로 sankei 버그 + 시차 흩어짐(42차 할일 3번) **동시 해결**
+- 검증: sankei 1건(오늘 발행분) 삭제 후 재수집 → `edition_date`=2026-06-11(KST), `published_at`=원문 UTC 보존, 기존 3건 날짜 보존 확인. 검증 중 비운 산케이 2건 번역 백필 완료
+- **판단**: 기존 잘못 적재된 과거 데이터는 **그대로 둠**(양 적고 곧 cleanup, 사용자 결정)
+
+**2. 해외 사설 cron 하루 1회 → 3회** (커밋 `3b643ad`, NCP 배포 완료)
+- UTC 22:00 1회 → **KST 06:00/14:00/22:00**(한국 사설과 동일, [crontab](crontab)). 시차로 늦게 올라오는 매체 누락 방지
+- 기존 URL은 `already_translated` 체크로 재번역 안 함 → 비용 영향 미미. (해외는 `merge_editorial_issues` 병합 없음, 수집만 3회)
+
+### 다음 작업 — opinion 공용 로그인 (설계 확정, 구현 착수 직전)
+
+**결정 사항 (사용자 확정)**:
+1. **방식 = 공용 ID/PW 환경변수** (Supabase Auth 단일계정 아님 — opinion엔 auth 인프라 없어 환경변수가 가장 단순)
+2. **범위 = 앱 전체 로그인** (proxy 하나로 모든 페이지+쓰기 보호, gpt-4o 비용 완전 차단)
+3. **세션 = 브라우저 세션** (maxAge 없음, 브라우저 종료 시 로그아웃)
+
+**보호 대상 쓰기 표면 4개**: `setEditorialIssue`([editorial-actions.ts](opinion/src/app/editorial-actions.ts)), `generateComparison`(gpt-4o 비용, [compare/actions.ts](opinion/src/app/compare/actions.ts)), report 편집 7종([report/actions.ts](opinion/src/app/report/actions.ts), 사이드바 주석상태), `submitLabel`(label)
+
+**⚠ Next 16.2.6 핵심 (구현 시 필수)**:
+- **`middleware` → `proxy`로 파일 규칙 변경**. `opinion/src/proxy.ts`, `export function proxy(request: NextRequest)`, `export const config = { matcher }`. (node_modules/next/dist/docs 확인함)
+- `cookies()`는 **async** (`const store = await cookies()`) — Server Action에서 set/delete. proxy 내 읽기는 `request.cookies.get(name)?.value` 동기
+- 41차 교훈: Server Action 즉시 무효화는 `updateTag`(1인자) — 단 로그인엔 revalidate 불필요
+
+**구현 계획 (파일)**:
+- `opinion/src/proxy.ts` (신규) — `opinion_session` 쿠키 != `OPINION_SESSION_SECRET` → `/login` redirect. `/login`·정적리소스 통과. 로그인 상태로 `/login` 오면 `/`로. matcher: `['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|svg|ico|webp)$).*)']`
+- `opinion/src/app/login/page.tsx` (신규) — ID/PW 폼 (Client, `useActionState`), "세계일보 논설실" 브랜딩
+- `opinion/src/app/login/actions.ts` (신규) — `login(prev, formData)`: env 검증 → 브라우저 세션 httpOnly 쿠키 set → `redirect("/")`. `logout()`: 쿠키 delete → `/login`
+- `opinion/src/components/OpinionShell.tsx` (수정) — `usePathname()==='/login'`이면 사이드바/탑바 없이 children만
+- `opinion/src/components/OpinionTopbar.tsx` (수정) — 로그아웃 버튼(`form action={logout}`)
+- **환경변수 3개** — `.env.local` + **Vercel opinion 프로젝트**: `OPINION_AUTH_ID`, `OPINION_AUTH_PW`(사용자가 값 결정), `OPINION_SESSION_SECRET`(랜덤 생성)
+
+**세션 토큰**: 쿠키값 = `OPINION_SESSION_SECRET`(긴 랜덤). `httpOnly`+`secure`(prod)+`sameSite=lax`+maxAge 없음. proxy는 Edge라 crypto 없이 문자열 일치 비교만.
+
+**착수 전 확인**: ID/PW 실제 값(사용자 결정), 구현 후 Vercel 환경변수 등록(opinion 수동 배포 `cd opinion && vercel --prod --yes`)
+
+---
 
 ## 재개 지점 (2026-06-10, 41차 세션 종료)
 

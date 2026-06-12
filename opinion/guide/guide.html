@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>사설 분석(opinion) 사용자 가이드</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --navy:#1E3A8A; --blue:#1E40AF; --blue2:#2563eb; --blue-soft:#eff6ff;
+    --green:#059669; --red:#dc2626; --amber:#b45309;
+    --fg:#0f172a; --muted:#475569; --faint:#94a3b8;
+    --bg:#f8fafc; --line:#e2e8f0;
+  }
+  html { scroll-behavior:smooth; }
+  body { font-family:'Pretendard','Apple SD Gothic Neo',sans-serif; background:var(--bg); color:var(--fg); line-height:1.6; }
+
+  /* ── 레이아웃 ── */
+  .layout { display:flex; align-items:flex-start; }
+  .toc {
+    position:sticky; top:0; align-self:flex-start;
+    width:264px; height:100vh; flex-shrink:0;
+    background:#fff; border-right:1px solid var(--line);
+    padding:26px 18px; overflow-y:auto;
+  }
+  .toc .brand { display:flex; align-items:center; gap:9px; margin-bottom:22px; }
+  .toc .brand .logo { width:30px; height:30px; border-radius:9px; background:var(--blue); color:#fff; display:flex; align-items:center; justify-content:center; font-size:15px; }
+  .toc .brand .t { font-size:14px; font-weight:700; }
+  .toc .brand .s { font-size:11px; color:var(--faint); }
+  .toc a { display:block; padding:7px 11px; border-radius:8px; font-size:13px; color:var(--muted); text-decoration:none; transition:all .12s; }
+  .toc a:hover { background:#f1f5f9; color:var(--fg); }
+  .toc a.active { background:var(--blue-soft); color:var(--blue); font-weight:600; }
+  .toc a.sub { padding-left:24px; font-size:12px; color:var(--faint); }
+
+  .main { flex:1; min-width:0; max-width:1320px; margin:0 auto; padding:0 64px 120px; }
+
+  /* ── 표지 ── */
+  .cover { background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%); color:#f8fafc; border-radius:0 0 24px 24px; padding:72px 56px 60px; margin:0 -56px 56px; }
+  .cover .badge { display:inline-block; background:var(--blue2); color:#fff; padding:6px 16px; border-radius:20px; font-size:12px; letter-spacing:1px; margin-bottom:22px; }
+  .cover h1 { font-size:48px; font-weight:800; letter-spacing:-1.5px; }
+  .cover h1 span { color:#60a5fa; }
+  .cover .subtitle { font-size:19px; color:#cbd5e1; margin-top:12px; }
+  .cover .link { margin-top:26px; }
+  .cover .link a { display:inline-flex; align-items:center; gap:7px; padding:9px 20px; background:rgba(59,130,246,.18); border:1px solid rgba(96,165,250,.4); border-radius:10px; color:#93c5fd; font-size:14px; text-decoration:none; }
+  .cover .meta { margin-top:22px; font-size:13px; color:#64748b; }
+
+  /* ── 섹션 ── */
+  section { padding-top:42px; margin-top:14px; scroll-margin-top:12px; }
+  section > h2 { font-size:28px; font-weight:700; padding-bottom:12px; border-bottom:2px solid var(--blue); margin-bottom:8px; }
+  section > h2 .em { color:var(--blue2); }
+  .lead { font-size:15px; color:var(--muted); margin:10px 0 24px; }
+  h3.step { font-size:18px; font-weight:700; margin:30px 0 12px; display:flex; align-items:center; gap:8px; }
+  h3.step .dot { width:7px; height:7px; border-radius:50%; background:var(--blue2); }
+
+  /* ── 카드 ── */
+  .cards { display:grid; gap:16px; margin:8px 0; }
+  .cards.col2 { grid-template-columns:1fr 1fr; }
+  .cards.col3 { grid-template-columns:repeat(3,1fr); }
+  .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:18px 20px; }
+  .card .icon { font-size:22px; margin-bottom:8px; }
+  .card h4 { font-size:15px; font-weight:600; margin-bottom:6px; }
+  .card p, .card li { font-size:13.5px; color:var(--muted); }
+  .card ul { padding-left:17px; }
+  .tag { display:inline-block; background:var(--blue-soft); color:var(--blue2); padding:3px 9px; border-radius:6px; font-size:11.5px; margin:6px 4px 0 0; }
+
+  /* ── 스크린샷 + 마커 + 콜아웃 ── */
+  .shot-row { display:grid; grid-template-columns:1.9fr 1fr; gap:28px; align-items:start; margin:14px 0 8px; }
+  .shot-row.wide { grid-template-columns:1fr; }
+  .shot { position:relative; display:inline-block; width:100%; border:1px solid var(--line); border-radius:12px; overflow:hidden; box-shadow:0 4px 18px rgba(15,23,42,.06); background:#fff; }
+  .shot img { display:block; width:100%; height:auto; }
+  .shot .placeholder { display:flex; align-items:center; justify-content:center; min-height:230px; background:repeating-linear-gradient(45deg,#f1f5f9,#f1f5f9 10px,#e9eef5 10px,#e9eef5 20px); color:var(--faint); font-size:13px; }
+  /* 번호 마커 (좌표는 실제 스크린샷 후 미세조정) */
+  .marker { position:absolute; width:26px; height:26px; border-radius:50%; background:var(--blue2); color:#fff; font-size:13px; font-weight:700; display:flex; align-items:center; justify-content:center; box-shadow:0 0 0 3px rgba(37,99,235,.25); transform:translate(-50%,-50%); }
+
+  .callouts { list-style:none; }
+  .callouts li { display:flex; gap:10px; padding:9px 0; border-bottom:1px dashed var(--line); font-size:14px; color:var(--muted); }
+  .callouts li:last-child { border-bottom:0; }
+  .callouts .cnum { flex-shrink:0; width:22px; height:22px; border-radius:50%; background:var(--blue2); color:#fff; font-size:12px; font-weight:700; display:flex; align-items:center; justify-content:center; margin-top:1px; }
+  .callouts b { color:var(--fg); }
+
+  /* ── 표 ── */
+  .tbl { width:100%; border-collapse:collapse; margin:10px 0; }
+  .tbl th { background:#f1f5f9; color:var(--muted); font-size:12.5px; padding:9px 12px; text-align:left; border-bottom:1px solid var(--line); }
+  .tbl td { padding:9px 12px; font-size:13.5px; border-bottom:1px solid #f1f5f9; }
+  .pill { display:inline-block; padding:2px 9px; border-radius:11px; font-size:11.5px; font-weight:600; }
+  .pill.b { background:var(--blue-soft); color:var(--blue2); }
+  .pill.g { background:#dcfce7; color:var(--green); }
+  .pill.r { background:#fee2e2; color:var(--red); }
+  .pill.m { background:#f1f5f9; color:var(--faint); }
+
+  /* ── 노트/팁 박스 ── */
+  .note { display:flex; gap:10px; padding:13px 16px; border-radius:10px; font-size:13.5px; margin:14px 0; }
+  .note.tip { background:#f0fdf4; border:1px solid #bbf7d0; color:#15803d; }
+  .note.warn { background:#fffbeb; border:1px solid #fde68a; color:var(--amber); }
+  .note .ic { font-size:16px; }
+
+  /* ── FAQ ── */
+  .faq { background:#fff; border:1px solid var(--line); border-radius:12px; padding:16px 20px; margin-bottom:12px; }
+  .faq .q { font-weight:700; font-size:15px; margin-bottom:5px; }
+  .faq .q::before { content:"Q. "; color:var(--blue2); }
+  .faq .a { font-size:13.5px; color:var(--muted); }
+  .faq .a::before { content:"A. "; color:var(--green); font-weight:700; }
+
+  .ending { background:linear-gradient(135deg,#0f172a 0%,#1a2744 100%); color:#f8fafc; border-radius:18px; padding:48px; text-align:center; margin-top:56px; }
+  .ending h2 { border:0; font-size:30px; }
+  .ending p { color:#94a3b8; margin-top:8px; }
+
+  @media (max-width:900px){
+    .toc { display:none; }
+    .main { padding:0 22px 80px; }
+    .cover { margin:0 -22px 40px; padding:48px 22px; }
+    .shot-row, .cards.col2, .cards.col3 { grid-template-columns:1fr; }
+  }
+  @media print {
+    .toc { display:none; }
+    section { page-break-inside:avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- ───────────── 좌측 목차 ───────────── -->
+  <nav class="toc">
+    <div class="brand">
+      <div class="logo">✎</div>
+      <div><div class="t">사설 분석 가이드</div><div class="s">세계일보 논설실</div></div>
+    </div>
+    <a href="#start">시작하기</a>
+    <a href="#today">오늘의 사설</a>
+    <a href="#compare">today 사설 분석</a>
+    <a href="#foreign">해외 논조</a>
+    <a href="#trend">세계일보 트렌드</a>
+    <a href="#label">성향 레이블링</a>
+    <a href="#faq">자주 묻는 질문 · 팁</a>
+  </nav>
+
+  <!-- ───────────── 본문 ───────────── -->
+  <div class="main">
+
+    <!-- 표지 -->
+    <div class="cover">
+      <span class="badge">세계일보 논설실 내부 도구</span>
+      <h1><span>사설 분석</span> 사용자 가이드</h1>
+      <p class="subtitle">국내·해외 사설을 한곳에서 — 수집 · 비교 · 분석</p>
+      <div class="link">
+        <a href="https://opinion-eta.vercel.app" target="_blank">🔗 opinion-eta.vercel.app</a>
+      </div>
+      <p class="meta">세계일보 논설실 · 2026</p>
+    </div>
+
+    <!-- ① 시작하기 -->
+    <section id="start">
+      <h2>시작하기 <span class="em">— 이 앱은 무엇인가요?</span></h2>
+      <p class="lead">
+        <b>사설 분석(opinion)</b>은 매일 수집되는 국내·해외 주요 언론사 <b>사설</b>을 주제별로 모아 보고,
+        AI로 논조를 비교·분석하는 논설실 전용 도구입니다. 사설 수집·번역·성향 분석은 자동으로 매일 갱신됩니다.
+      </p>
+
+      <div class="cards col3">
+        <div class="card"><div class="icon">🗞️</div><h4>모아 보기</h4><p>국내·해외 사설을 같은 주제끼리 묶어 한 화면에서 비교</p></div>
+        <div class="card"><div class="icon">🤖</div><h4>AI 비교 분석</h4><p>세계일보 vs 타사 논조를 AI가 회의 보고용으로 정리</p></div>
+        <div class="card"><div class="icon">📈</div><h4>추이 분석</h4><p>세계일보 사설의 성향·주제 흐름을 차트로 확인</p></div>
+      </div>
+
+      <h3 class="step"><span class="dot"></span>로그인</h3>
+      <p class="lead">논설실 <b>공용 계정 1개</b>로 로그인합니다. 브라우저를 닫으면 자동 로그아웃됩니다.</p>
+      <div class="shot-row">
+        <div class="shot">
+          <img src="images/00_login.png" alt="로그인 화면" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+          <div class="placeholder" style="display:none">images/00_login.png (캡처 예정)</div>
+          <span class="marker" style="top:50%; left:50%">1</span>
+          <span class="marker" style="top:58.5%; left:50%">2</span>
+          <span class="marker" style="top:64.5%; left:50%">3</span>
+        </div>
+        <ol class="callouts">
+          <li><span class="cnum">1</span><span><b>아이디</b> — 논설실 공용 아이디 입력</span></li>
+          <li><span class="cnum">2</span><span><b>비밀번호</b> 입력</span></li>
+          <li><span class="cnum">3</span><span><b>로그인</b> 버튼 클릭 → 오늘의 사설 화면으로 이동</span></li>
+        </ol>
+      </div>
+
+      <h3 class="step"><span class="dot"></span>화면 구성</h3>
+      <div class="shot-row">
+        <div class="shot">
+          <img src="images/01_shell.png" alt="전체 화면 구성" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+          <div class="placeholder" style="display:none">images/01_shell.png (캡처 예정)</div>
+          <span class="marker" style="top:22%; left:7%">1</span>
+          <span class="marker" style="top:4.5%; left:80%">2</span>
+          <span class="marker" style="top:4.5%; left:97%">3</span>
+        </div>
+        <ol class="callouts">
+          <li><span class="cnum">1</span><span><b>왼쪽 메뉴</b> — 오늘의 사설 · today 사설 분석 · 해외 논조 · 세계일보 트렌드 · 성향 레이블링</span></li>
+          <li><span class="cnum">2</span><span><b>상단 검색창</b> — 사설 제목·요약 검색, 결과 클릭 시 해당 사설이 바로 열림</span></li>
+          <li><span class="cnum">3</span><span><b>로그아웃</b> 버튼 (오른쪽 위)</span></li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ② 오늘의 사설 -->
+    <section id="today">
+      <h2>오늘의 사설</h2>
+      <p class="lead">당일 수집된 국내 주요 언론사 사설을 <b>같은 주제끼리 묶어</b> 보여줍니다. 매체 간 주장을 한눈에 비교할 수 있습니다.</p>
+
+      <div class="shot-row">
+        <div class="shot">
+          <img src="images/10_today_list.png" alt="오늘의 사설 목록" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+          <div class="placeholder" style="display:none">images/10_today_list.png (캡처 예정)</div>
+          <span class="marker" style="top:9%; left:52%">1</span>
+          <span class="marker" style="top:14.5%; left:88%">2</span>
+          <span class="marker" style="top:18.5%; left:91%">3</span>
+          <span class="marker" style="top:27%; left:30%">4</span>
+        </div>
+        <ol class="callouts">
+          <li><span class="cnum">1</span><span><b>날짜 이동</b> — 화살표 또는 달력으로 다른 날짜 사설 보기 (‘오늘’ 버튼으로 복귀)</span></li>
+          <li><span class="cnum">2</span><span><b>필터</b> — 전체 / 종합일간지 / 경제지 / <b>매체별</b>(신문사 단위로 묶기)</span></li>
+          <li><span class="cnum">3</span><span><b>언론사 비교</b> 버튼 — 그 주제를 AI 비교 분석으로 이동 (이미 만든 주제는 ‘생성됨’ 표시)</span></li>
+          <li><span class="cnum">4</span><span>사설 행을 <b>클릭</b>하면 상세 모달이 열립니다 · <b>더보기 +N건</b>으로 그룹 내 전체 보기</span></li>
+        </ol>
+      </div>
+
+      <h3 class="step"><span class="dot"></span>사설 상세 모달</h3>
+      <div class="shot-row">
+        <div class="shot">
+          <img src="images/11_today_modal.png" alt="사설 상세 모달" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+          <div class="placeholder" style="display:none">images/11_today_modal.png (캡처 예정)</div>
+          <span class="marker" style="top:15%; left:50%">1</span>
+          <span class="marker" style="top:33%; left:50%">2</span>
+          <span class="marker" style="top:62%; left:50%">3</span>
+        </div>
+        <ol class="callouts">
+          <li><span class="cnum">1</span><span><b>제목 · AI 요약</b></span></li>
+          <li><span class="cnum">2</span><span><b>성향 분석 · 판단 근거</b> (성향 게이지)</span></li>
+          <li><span class="cnum">3</span><span><b>본문</b> + 같은 주제 타사 사설. 맨 아래 <b>원문 보기(네이버)</b>로 출처 이동</span></li>
+        </ol>
+      </div>
+
+      <h3 class="step"><span class="dot"></span>주제 수동 보정 — AI가 잘못 묶었을 때</h3>
+      <p class="lead">AI가 묶은 주제가 어색하면, 편집자가 직접 올바른 주제로 옮길 수 있습니다.</p>
+      <div class="shot-row">
+        <div class="shot">
+          <img src="images/12_today_topic.png" alt="주제 변경 패널" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+          <div class="placeholder" style="display:none">images/12_today_topic.png (캡처 예정)</div>
+          <span class="marker" style="top:21%; left:88%">1</span>
+          <span class="marker" style="top:28%; left:38%">2</span>
+        </div>
+        <ol class="callouts">
+          <li><span class="cnum">1</span><span>사설 행에 마우스를 올리면 나타나는 <b>주제 변경</b> 클릭</span></li>
+          <li><span class="cnum">2</span><span>펼쳐진 패널에서 기존 주제 후보를 클릭해 옮기거나 <b>+ 새 주제</b>로 직접 입력</span></li>
+        </ol>
+      </div>
+      <div class="note tip"><span class="ic">💡</span><span>수동 보정한 주제는 이후 AI 재분류에도 <b>덮어쓰이지 않고 보존</b>됩니다. 이미 보정한 사설은 같은 패널의 <b>자동으로 되돌리기</b>로 AI 분류로 되돌릴 수 있고, ‘보정’ 배지가 표시됩니다.</span></div>
+    </section>
+
+    <!-- ③ today 사설 분석 -->
+    <section id="compare">
+      <h2>today 사설 분석 <span class="em">— 언론사 비교 보고서</span></h2>
+      <p class="lead">같은 주제의 세계일보·타사 사설을 AI가 비교해 <b>논설위원 회의 보고용</b> 구조화 리포트로 만들어 줍니다.</p>
+
+      <div class="shot-row">
+        <div class="shot">
+          <img src="images/20_compare_list.png" alt="비교 분석 카드 목록" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+          <div class="placeholder" style="display:none">images/20_compare_list.png (캡처 예정)</div>
+          <span class="marker" style="top:9%; left:52%">1</span>
+          <span class="marker" style="top:16%; left:28%">2</span>
+          <span class="marker" style="top:16%; left:96%">3</span>
+        </div>
+        <ol class="callouts">
+          <li><span class="cnum">1</span><span><b>날짜 선택</b> — 그날 생성된 비교 보고서만 표시</span></li>
+          <li><span class="cnum">2</span><span><b>카드 클릭</b> → 상세 보고서 열기 (자사 포함 / 매체 비교 배지)</span></li>
+          <li><span class="cnum">3</span><span>카드 우측 호버 시 <b>삭제</b>(휴지통)</span></li>
+        </ol>
+      </div>
+      <div class="note tip"><span class="ic">💡</span><span>새 비교는 <b>오늘의 사설</b> 화면의 ‘언론사 비교’ 버튼에서 만듭니다. 여기선 만들어진 보고서를 조회·관리합니다.</span></div>
+
+      <h3 class="step"><span class="dot"></span>비교 보고서 상세</h3>
+      <div class="shot-row">
+        <div class="shot">
+          <img src="images/21_compare_detail.png" alt="비교 보고서 상세" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+          <div class="placeholder" style="display:none">images/21_compare_detail.png (캡처 예정)</div>
+          <span class="marker" style="top:16.7%; left:80%">1</span>
+          <span class="marker" style="top:16.7%; left:86%">2</span>
+          <span class="marker" style="top:16.7%; left:91%">3</span>
+          <span class="marker" style="top:20.5%; left:19%">4</span>
+        </div>
+        <ol class="callouts">
+          <li><span class="cnum">1</span><span><b>재생성</b> — 사설이 추가됐거나 내용이 짧을 때 다시 분석 (덮어쓰기)</span></li>
+          <li><span class="cnum">2</span><span><b>복사</b> — 마크다운 형식으로 복사 (메신저·회의자료 붙여넣기)</span></li>
+          <li><span class="cnum">3</span><span><b>인쇄</b> — 브라우저 인쇄/PDF</span></li>
+          <li><span class="cnum">4</span><span>각 섹션 우측 <b>연필 아이콘</b>으로 인라인 수정 → 저장/취소</span></li>
+        </ol>
+      </div>
+      <p class="lead">보고서는 다음 5개 섹션으로 구성됩니다:</p>
+      <div class="cards col3">
+        <div class="card"><h4>핵심 쟁점</h4><p>이 주제의 논점 요약</p></div>
+        <div class="card"><h4>세계일보 논조</h4><p>자사 핵심 주장</p></div>
+        <div class="card"><h4>타사 논조</h4><p>매체별 주장 서술</p></div>
+        <div class="card"><h4>공통점 · 차이점</h4><p>매체 간 대비</p></div>
+        <div class="card"><h4>시사점 · 논의 포인트</h4><p>회의 안건용 bullet</p></div>
+      </div>
+    </section>
+
+    <!-- ④ 해외 논조 -->
+    <section id="foreign">
+      <h2>해외 논조</h2>
+      <p class="lead">주요 해외 언론(워싱턴포스트·가디언·요미우리 등)의 사설을 <b>매체별</b>로 모아, 한국어 번역과 원문을 함께 봅니다.</p>
+
+      <div class="shot-row">
+        <div class="shot">
+          <img src="images/30_foreign_list.png" alt="해외 논조 목록" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+          <div class="placeholder" style="display:none">images/30_foreign_list.png (캡처 예정)</div>
+          <span class="marker" style="top:9%; left:52%">1</span>
+          <span class="marker" style="top:17%; left:20%">2</span>
+          <span class="marker" style="top:20%; left:88%">3</span>
+        </div>
+        <ol class="callouts">
+          <li><span class="cnum">1</span><span><b>날짜 이동</b></span></li>
+          <li><span class="cnum">2</span><span><b>매체별 그룹</b> — 국기 + 매체명으로 구분</span></li>
+          <li><span class="cnum">3</span><span><b>번역</b> 배지가 붙은 사설은 한국어 번역 제공</span></li>
+        </ol>
+      </div>
+
+      <h3 class="step"><span class="dot"></span>번역 / 원문 토글</h3>
+      <div class="shot-row">
+        <div class="shot">
+          <img src="images/31_foreign_modal.png" alt="해외 사설 모달" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+          <div class="placeholder" style="display:none">images/31_foreign_modal.png (캡처 예정)</div>
+          <span class="marker" style="top:31%; left:40%">1</span>
+          <span class="marker" style="top:31%; left:52%">2</span>
+          <span class="marker" style="top:82%; left:85%">3</span>
+        </div>
+        <ol class="callouts">
+          <li><span class="cnum">1</span><span><b>한국어 번역</b> 탭</span></li>
+          <li><span class="cnum">2</span><span><b>원문</b> 탭 (日本語 / English) — 번역과 원문을 나란히 대조</span></li>
+          <li><span class="cnum">3</span><span><b>매체 사이트에서 보기</b> 버튼</span></li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ⑤ 세계일보 트렌드 -->
+    <section id="trend">
+      <h2>세계일보 트렌드</h2>
+      <p class="lead">세계일보 사설의 지난 90일 <b>성향·주제 추이</b>를 차트로 분석합니다.</p>
+
+      <div class="shot-row wide">
+        <div class="shot">
+          <img src="images/40_trend.png" alt="세계일보 트렌드" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+          <div class="placeholder" style="display:none">images/40_trend.png (캡처 예정)</div>
+          <span class="marker" style="top:10.5%; left:18%">1</span>
+          <span class="marker" style="top:19%; left:25%">2</span>
+          <span class="marker" style="top:38%; left:28%">3</span>
+          <span class="marker" style="top:75%; left:30%">4</span>
+        </div>
+      </div>
+      <ol class="callouts" style="max-width:760px">
+        <li><span class="cnum">1</span><span><b>주간 / 월간</b> 토글 — 집계 기간 전환</span></li>
+        <li><span class="cnum">2</span><span><b>통계 카드</b> — 사설 건수 · 주요 성향 · 최다 주제 (이전 기간 대비 증감)</span></li>
+        <li><span class="cnum">3</span><span><b>성향 분포 추이</b> 차트 (좌) · <b>주제 분포</b> (우)</span></li>
+        <li><span class="cnum">4</span><span>아래에서 <b>날짜별 세계일보 사설 목록</b> 확인 (행 클릭 시 상세 모달)</span></li>
+      </ol>
+      <div class="note warn"><span class="ic">ℹ️</span><span>통계·차트는 항상 <b>최근 90일 전체</b> 기준이고, 날짜 선택은 <b>아래 사설 목록</b>에만 적용됩니다.</span></div>
+    </section>
+
+    <!-- ⑥ 성향 레이블링 -->
+    <section id="label">
+      <h2>성향 레이블링</h2>
+      <p class="lead">편집자가 사설의 성향을 직접 평가해 <b>AI 판단을 검증</b>합니다. 쌓인 평가는 향후 분석 정확도 개선에 쓰입니다.</p>
+
+      <div class="shot-row">
+        <div class="shot">
+          <img src="images/50_label_grid.png" alt="성향 레이블링 그리드" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+          <div class="placeholder" style="display:none">images/50_label_grid.png (캡처 예정)</div>
+          <span class="marker" style="top:32%; left:50%">1</span>
+          <span class="marker" style="top:20%; left:28%">2</span>
+          <span class="marker" style="top:6.5%; left:17%">3</span>
+        </div>
+        <ol class="callouts">
+          <li><span class="cnum">1</span><span>사설 카드 — 언론사·제목·요약·AI 성향 배지 (세계일보는 <b>파란 테두리 + ★</b> 강조)</span></li>
+          <li><span class="cnum">2</span><span>카드의 <b>평가</b> 버튼 클릭 → 평가 모달</span></li>
+          <li><span class="cnum">3</span><span><b>총 건수 · 현재 페이지</b> 표시 (페이지 이동 버튼은 목록 맨 아래)</span></li>
+        </ol>
+      </div>
+
+      <h3 class="step"><span class="dot"></span>평가 모달</h3>
+      <div class="shot-row">
+        <div class="shot">
+          <img src="images/51_label_modal.png" alt="성향 평가 모달" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+          <div class="placeholder" style="display:none">images/51_label_modal.png (캡처 예정)</div>
+          <span class="marker" style="top:59%; left:50%">1</span>
+          <span class="marker" style="top:68%; left:50%">2</span>
+          <span class="marker" style="top:90%; left:50%">3</span>
+        </div>
+        <ol class="callouts">
+          <li><span class="cnum">1</span><span><b>평가자 이름</b> 입력 (필수)</span></li>
+          <li><span class="cnum">2</span><span><b>성향 5단계</b> 선택 — 진보 · 중도진보 · 중립 · 중도보수 · 보수 (+ 메모 선택)</span></li>
+          <li><span class="cnum">3</span><span><b>평가 제출</b> → 내 판단 vs AI 판단(일치/불일치) + AI 근거 표시</span></li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ⑦ FAQ -->
+    <section id="faq">
+      <h2>자주 묻는 질문 · 팁</h2>
+
+      <div class="faq"><div class="q">오늘 사설이 안 보여요.</div><div class="a">수집은 하루 3회(아침·오후·밤) 자동 진행됩니다. 아직 안 올라왔다면 잠시 후 다시 보거나, 화면 안내의 <b>최근 수집일 링크</b>로 이동하세요.</div></div>
+      <div class="faq"><div class="q">비교 분석 내용이 너무 짧아요.</div><div class="a">상세 화면의 <b>재생성</b> 버튼을 누르면 최신 사설까지 반영해 다시 분석합니다(기존 내용 덮어쓰기).</div></div>
+      <div class="faq"><div class="q">사설이 엉뚱한 주제로 묶였어요.</div><div class="a">오늘의 사설에서 해당 행에 마우스를 올려 <b>주제 변경</b> → 올바른 주제로 이동하거나 새 주제를 입력하세요. 보정한 내용은 보존됩니다.</div></div>
+      <div class="faq"><div class="q">해외 사설 원문을 보고 싶어요.</div><div class="a">사설을 열고 <b>원문</b> 탭으로 전환하면 일본어/영어 원문을, <b>매체 사이트에서 보기</b>로 출처 페이지를 볼 수 있습니다.</div></div>
+      <div class="faq"><div class="q">로그인 계정은 개인 계정인가요?</div><div class="a">논설실 <b>공용 계정 1개</b>를 함께 사용합니다. 브라우저를 닫으면 자동 로그아웃됩니다.</div></div>
+      <div class="faq"><div class="q">비교 보고서를 회의 자료로 쓰려면?</div><div class="a">상세 화면에서 <b>복사</b>(마크다운) 또는 <b>인쇄</b>(PDF)를 사용하세요.</div></div>
+    </section>
+
+    <div class="ending">
+      <h2>사설 분석 — 논설실 업무 도구</h2>
+      <p>opinion-eta.vercel.app · 세계일보 논설실</p>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  // 스크롤 스파이 — 현재 보이는 섹션을 목차에서 하이라이트
+  const links = [...document.querySelectorAll('.toc a')];
+  const map = new Map(links.map(a => [a.getAttribute('href').slice(1), a]));
+  const obs = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        links.forEach(a => a.classList.remove('active'));
+        const a = map.get(e.target.id);
+        if (a) a.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+  document.querySelectorAll('section[id]').forEach(s => obs.observe(s));
+</script>
+</body>
+</html>

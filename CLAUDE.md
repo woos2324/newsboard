@@ -128,11 +128,28 @@
 - 새 Server Action `updateComparisonResult(date, issue, result)` (`assertAuthed` + `result` JSONB update + `updated_at`). 저장 시 list 갱신
 - 편집 UI는 전부 `no-print` → 인쇄물 미노출
 
+### 7. opinion 사용자 가이드(HTML) 제작 — [opinion/guide/](opinion/guide/)
+
+opinion 5개 메뉴 사용법을 **실제 서비스 스크린샷 기반** HTML 가이드로 작성. 참고 형식은 바탕화면 `slides-v2.html`(카드/표/pill 디자인)이지만 **슬라이드 덱이 아니라 스크롤 단일 문서 + 좌측 고정 목차(scroll-spy)** — 사용자가 특정 기능을 혼자 찾아보기 좋게.
+
+- **파일 구성**:
+  - [guide.html](opinion/guide/guide.html) — 편집용 본체 (`images/` 폴더 동반 필요, 상대경로 참조)
+  - [guide_standalone.html](opinion/guide/guide_standalone.html) — **공유용 단일파일**(이미지 12장 전부 base64 임베드, ~5.6MB). 메신저/메일로 이 파일 1개만 보내면 어디서든 열림
+  - `images/` — 스크린샷 12장 (`00_login`~`51_label_modal`)
+  - [capture.py](opinion/guide/capture.py) — Playwright 자동 캡처 스크립트
+- **8섹션(워크플로순)**: 표지 → 시작하기(로그인·화면구성) → 오늘의 사설 → today 사설 분석 → 해외 논조 → 세계일보 트렌드 → 성향 레이블링 → FAQ
+- **스크린샷 캡처 방법**: `capture.py`가 프로덕션(opinion-eta.vercel.app) 로그인 후 5메뉴+모달을 `images/`에 저장. ⚠ **공용 ID/PW(`OPINION_AUTH_USER/PASS`)는 Vercel에서 Sensitive로 등록돼 `vercel env pull`로 못 가져옴**(빈 문자열로 내려옴) → **사용자가 로컬에서 `$env:OPINION_AUTH_USER/PASS` 넣고 직접 실행**. 모달·호버 샷은 try/except로 감싸 실패해도 중단 없이 끝에 "수동 캡처 필요" 목록 출력. 51 평가모달은 본문이 폼을 가려 **모달 내부를 끝까지 스크롤**(JS로 최대 스크롤 컨테이너 탐색) 후 캡처
+- **번호 마커 방식**: 스크린샷 위 ①②③ = **CSS 절대배치 오버레이(`.marker`, top/left % 좌표)** + 옆 콜아웃 목록. **%기준이라 이미지 크기를 바꿔도 정합 유지**(원본 이미지는 안 건드림). 좌표는 `guide.html`을 Chromium으로 렌더링→`.shot` 요소 캡처→육안 검증으로 보정(버튼 행처럼 어긋나면 원본 crop으로 y% 재측정)
+- **단일파일 재생성**: `guide.html`의 `src="images/*.png"`를 base64 data URI로 치환(`python re.sub` + `base64`). **UI 변경 시 흐름**: capture.py 재실행 → 마커 좌표 Chromium 렌더링 재확인 → standalone 재빌드
+- **레이아웃**: 본문 `max-width:1320px`, 스크린샷:콜아웃 = `1.9:1`
+
 **판단 사항 (43차)**:
 1. **인쇄 격리 = `@media print` + visibility 토글** — `.print-area`만 visible, position:absolute로 좌상단. 큰 섹션엔 break-inside avoid 금지(여백 폭발).
 2. **세계일보 없는 그룹도 같은 `ComparisonResult` 스키마 재사용** — `segye_stance:''`를 신호로. 별도 컬럼/마이그레이션 회피, 기존 캐시 호환.
 3. **삭제·수정 캐시 무효화 불필요** — `/compare`는 `force-dynamic`, `getComparisonsByDate`는 비캐시. 클라 state 갱신만으로 충분(새로고침 시 자동 재조회). 메인 `/`의 "비교 분석됨" 배지도 동일(비캐시 fetch).
 4. **수정 범위 = 본문 텍스트 전부** — issue_summary/segye_stance/others[].stance/common/differences/implications. 매체명은 편집 대상 제외.
+5. **가이드 = 스크롤 단일문서(슬라이드 아님)** — 발표용 slides-v2 형식을 참고만 하고, 사용자 가이드는 찾아보기 좋은 스크롤+목차로. 공유는 base64 단일파일 1개.
+6. **캡처 자격증명은 Sensitive env라 자동 불가** — `vercel env pull`이 빈 값 반환. 사용자 로컬 직접 실행으로 통일(자격증명 채팅 미노출).
 
 ### 미완료 / 다음 세션(44차) 할 일
 - opinion 로그인: 실제 ID/PW 로그인 흐름 사용자 브라우저 최종 확인(42차 이월)

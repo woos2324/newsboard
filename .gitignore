@@ -41,3 +41,6 @@ _design-preview.html
 # 네이버 파트너센터 다운로드 샘플 (자사 PV 데이터 — 절대 git 노출 금지)
 samples/
 
+# 해외 매체 로그인 쿠키 export (세션 토큰 — 절대 git 노출 금지)
+*_cookies.json
+

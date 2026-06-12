@@ -94,6 +94,53 @@
 - Email Template "Confirm signup" → `{{ .Token }}` 으로 OTP 6자리 발송 (10분 만료)
 - 비밀번호 정책: 8자 이상, 대소문자 + 숫자 + 특수문자
 
+## 재개 지점 (2026-06-12, 43차 세션 종료)
+
+**이번 세션 (43차) = opinion `/compare`(today 사설 분석) 기능 확장. 구현·배포 전부 완료(opinion 수동 배포).**
+
+> DB 마이그레이션 없음 — 기존 `editorial_comparison` 테이블 그대로. 변경 4파일: [CompareClient.tsx](opinion/src/app/compare/CompareClient.tsx) / [actions.ts](opinion/src/app/compare/actions.ts) / [globals.css](opinion/src/app/globals.css) / [TodayTab.tsx](opinion/src/components/TodayTab.tsx)
+
+### 1. 비교 보고서 상세 인쇄 기능
+- 상세보기 버튼 행에 "인쇄" 버튼(`Printer`) → `window.print()`
+- [globals.css](opinion/src/app/globals.css) `@media print`: `.print-area`만 출력(나머지 `body *` visibility:hidden), `.no-print` 숨김, `.print-only` 인쇄 시만 표시, 색·배경 그대로(`print-color-adjust:exact`)
+- 인쇄 전용 헤더("세계일보 논설실 · today 사설 분석 · 날짜" + 이슈 제목)
+- **페이지 나눔 처리(사용자 피드백 반복 조정)**: 제목 고아 방지 = `h2,h3 { break-after: avoid }`. 개별 매체 카드·시사점 항목 안 잘림 = `.print-keep { break-inside: avoid }`. ⚠ **큰 섹션 컨테이너엔 `break-inside:avoid` 걸지 말 것** — 한 페이지 넘는 "타사 논조"에 걸면 통째 다음 페이지로 밀려 앞 페이지에 큰 여백 생김(시행착오로 `.report-section`의 avoid 제거함)
+
+### 2. 상세 버튼 색 통일
+- 복사 버튼이 파란 강조였는데 재생성·인쇄·복사 **전부 회색 아웃라인**으로 통일(사용자 결정)
+
+### 3. "언론사 비교" 버튼 노출 확대 + 세계일보 없는 그룹 비교 양식
+- [TodayTab.tsx](opinion/src/components/TodayTab.tsx): 버튼 조건 "세계일보 포함 멀티-매체" → **서로 다른 매체 2개 이상인 모든 주제 그룹**(`new Set(items.map(media name)).size >= 2`)
+- [actions.ts](opinion/src/app/compare/actions.ts): 세계일보 없으면 throw 하던 코드 제거 → `distinctMedia < 2`만 차단. `hasSegye` 분기로 프롬프트 2종(`SYSTEM`/`SCHEMA_GUIDE` vs `SYSTEM_MULTI`/`SCHEMA_GUIDE_MULTI`). 세계일보 없으면 `segye_stance=''` 강제, `others`에 전 매체, `implications`는 중립 종합
+- **스키마(`ComparisonResult`) 불변** — `segye_stance` 빈 문자열이 "세계일보 없음" 신호. [CompareClient.tsx](opinion/src/app/compare/CompareClient.tsx) `hasSegyeStance()`로 판정 → "세계일보 논조" 섹션 숨김(5→4섹션), 제목 전환("타사 논조"→"매체별 논조", "세계일보 시사점"→"종합 시사점"). 복사 마크다운도 동일 분기
+
+### 4. 카드 구분 배지
+- 세계일보 포함: 파란 "자사 포함" 배지 + "세계일보 외 N개 매체" / 미포함: 회색 "매체 비교" 배지 + "N개 매체"
+- `totalMedia()` = `others.length + (hasSegye ? 1 : 0)`
+
+### 5. 비교 보고서 삭제
+- 카드 우측 휴지통(hover 노출, `e.stopPropagation`) + 상세보기 인쇄 우측 빨간 "삭제" 버튼. 둘 다 `confirm()` 후 삭제
+- 새 Server Action `deleteComparison(date, issue)` (`assertAuthed` + `supabaseAdmin.delete`). 삭제 후 클라 list 갱신
+- 카드를 `<button>` → `<div role="button">`로 변경(중첩 버튼 불가 회피)
+
+### 6. 섹션 인라인 수정
+- 각 섹션 제목 우측 연필(`Pencil`) → `EditBox`(textarea + 저장/취소) 인라인 편집. 타사 논조는 **매체별 카드마다** 연필(stance 개별 편집), 시사점은 "한 줄에 하나씩" 멀티라인(split/trim/filter)
+- 새 Server Action `updateComparisonResult(date, issue, result)` (`assertAuthed` + `result` JSONB update + `updated_at`). 저장 시 list 갱신
+- 편집 UI는 전부 `no-print` → 인쇄물 미노출
+
+**판단 사항 (43차)**:
+1. **인쇄 격리 = `@media print` + visibility 토글** — `.print-area`만 visible, position:absolute로 좌상단. 큰 섹션엔 break-inside avoid 금지(여백 폭발).
+2. **세계일보 없는 그룹도 같은 `ComparisonResult` 스키마 재사용** — `segye_stance:''`를 신호로. 별도 컬럼/마이그레이션 회피, 기존 캐시 호환.
+3. **삭제·수정 캐시 무효화 불필요** — `/compare`는 `force-dynamic`, `getComparisonsByDate`는 비캐시. 클라 state 갱신만으로 충분(새로고침 시 자동 재조회). 메인 `/`의 "비교 분석됨" 배지도 동일(비캐시 fetch).
+4. **수정 범위 = 본문 텍스트 전부** — issue_summary/segye_stance/others[].stance/common/differences/implications. 매체명은 편집 대상 제외.
+
+### 미완료 / 다음 세션(44차) 할 일
+- opinion 로그인: 실제 ID/PW 로그인 흐름 사용자 브라우저 최종 확인(42차 이월)
+- `submitLabel`(label)은 anon+RLS라 proxy 게이트로만 보호 중
+- (기존 미완료 유지: 사설 과거 백필, `realtime_pv_tick` 7일 cleanup 미반영 등)
+
+---
+
 ## 재개 지점 (2026-06-11, 42차 세션 종료)
 
 **이번 세션 (42차) = 해외 사설 시간 처리 정리(회사 PC, 완료·배포) + opinion 공용 계정 로그인 구현·배포(집) + infra-mcp 복구. 전부 완료.**

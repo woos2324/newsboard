@@ -342,8 +342,7 @@ export default function TodayTab({
                   )}
                   {!isSingle &&
                     filter !== '매체별' &&
-                    items.some((e) => e.media_company?.is_our_company) &&
-                    items.some((e) => !e.media_company?.is_our_company) &&
+                    new Set(items.map((e) => e.media_company?.name).filter(Boolean)).size >= 2 &&
                     (comparedSet.has(issue) ? (
                       <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
                         <Link

@@ -482,7 +482,7 @@ def collect_daily(
                 items = parse_hourly_pv_json(payload, data_date)
                 total += upsert_hourly_pv(items, DEVICE_LABEL[dev], dry_run)
             except httpx.HTTPStatusError as e:
-                if e.response.status_code in (401, 403):
+                if e.response.status_code in (302, 401, 403):
                     cookies = _playwright_login(); _save_cookies(cookies)
                     payload = _call_one(client, cookies, ENDPOINTS["hourly_pv"],
                                         data_date, device=dev, section="total", time_dim="DATE")
@@ -504,7 +504,7 @@ def collect_daily(
                     sec_label = SECTION_LABEL.get(sec, sec)
                     total += upsert_article_pv(items_a, aid_map, DEVICE_LABEL[dev], sec_label, time_dimension, dry_run)
                 except httpx.HTTPStatusError as e:
-                    if e.response.status_code in (401, 403):
+                    if e.response.status_code in (302, 401, 403):
                         cookies = _playwright_login(); _save_cookies(cookies)
                     print(f"    [WARN] article_pv {dev}/{sec}: {e}")
                 except Exception as e:
@@ -520,7 +520,7 @@ def collect_daily(
                 for dev_label, pv in cv_map.items():
                     total += upsert_daily_cv(pv, data_date, dev_label, sec_label, time_dimension, dry_run)
             except httpx.HTTPStatusError as e:
-                if e.response.status_code in (401, 403):
+                if e.response.status_code in (302, 401, 403):
                     cookies = _playwright_login(); _save_cookies(cookies)
                 print(f"    [WARN] daily_cv {sec}: {e}")
             except Exception as e:
@@ -572,7 +572,7 @@ def collect_realtime(
                 try:
                     payload = _call_today(client, cookies, data_date, device=dev, section=sec)
                 except httpx.HTTPStatusError as e:
-                    if e.response.status_code in (401, 403):
+                    if e.response.status_code in (302, 401, 403):
                         cookies = _playwright_login(); _save_cookies(cookies)
                         _misauth_today(client, cookies)
                         try:
@@ -641,7 +641,7 @@ def collect_period(
                     sec_label = SECTION_LABEL.get(sec, sec)
                     total += upsert_article_pv(items_a, aid_map, DEVICE_LABEL[dev], sec_label, time_dimension, dry_run)
                 except httpx.HTTPStatusError as e:
-                    if e.response.status_code in (401, 403):
+                    if e.response.status_code in (302, 401, 403):
                         cookies = _playwright_login(); _save_cookies(cookies)
                     print(f"    [WARN] article_pv {dev}/{sec}: {e}")
                 except Exception as e:
@@ -656,7 +656,7 @@ def collect_period(
                 for dev_label, pv in cv_map.items():
                     total += upsert_daily_cv(pv, start_date, dev_label, sec_label, time_dimension, dry_run)
             except httpx.HTTPStatusError as e:
-                if e.response.status_code in (401, 403):
+                if e.response.status_code in (302, 401, 403):
                     cookies = _playwright_login(); _save_cookies(cookies)
                 print(f"    [WARN] daily_cv {sec}: {e}")
             except Exception as e:

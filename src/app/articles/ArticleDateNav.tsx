@@ -1,6 +1,8 @@
 "use client";
 
+import { useRef } from "react";
 import { useRouter } from "next/navigation";
+import { Calendar } from "lucide-react";
 
 const WEEKDAY_KR = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -31,12 +33,23 @@ export function ArticleDateNav({ date }: Props) {
   const router = useRouter();
   const today = todayKST();
   const minDate = addDays(today, -6);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const canPrev = date > minDate;
   const canNext = date < today;
 
   function go(target: string) {
     router.push(`/articles?date=${target}&page=1`);
+  }
+
+  // 달력 선택 — 최근 7일 범위 내에서만 이동
+  function goDate(newDate: string) {
+    if (!newDate || newDate > today || newDate < minDate) return;
+    go(newDate);
+  }
+
+  function openCalendar() {
+    try { inputRef.current?.showPicker(); } catch { inputRef.current?.click(); }
   }
 
   return (
@@ -50,8 +63,29 @@ export function ArticleDateNav({ date }: Props) {
           ‹
         </button>
         <div className="text-center">
-          <p className="text-lg font-bold tracking-tight text-foreground">{formatDisplay(date)}</p>
+          <div className="flex items-center justify-center gap-1.5">
+            <p className="text-lg font-bold tracking-tight text-foreground">{formatDisplay(date)}</p>
+            <button
+              type="button"
+              onClick={openCalendar}
+              className="flex items-center text-blue-500 hover:text-blue-700"
+              aria-label="날짜 선택"
+            >
+              <Calendar size={15} />
+            </button>
+          </div>
           {date === today && <p className="text-[11px] text-muted">오늘 · 최근 7일 탐색 가능</p>}
+          <input
+            ref={inputRef}
+            type="date"
+            value={date}
+            min={minDate}
+            max={today}
+            onChange={(e) => goDate(e.target.value)}
+            className="sr-only"
+            tabIndex={-1}
+            aria-hidden="true"
+          />
         </div>
         <button
           onClick={() => canNext && go(addDays(date, 1))}

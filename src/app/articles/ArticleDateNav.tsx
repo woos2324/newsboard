@@ -27,12 +27,13 @@ function addDays(date: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-type Props = { date: string };
+type Props = { date: string; minDate?: string };
 
-export function ArticleDateNav({ date }: Props) {
+export function ArticleDateNav({ date, minDate: minDateProp }: Props) {
   const router = useRouter();
   const today = todayKST();
-  const minDate = addDays(today, -6);
+  // 실제 데이터가 있는 가장 오래된 날짜까지 선택 가능 (없으면 최근 7일 fallback)
+  const minDate = minDateProp ?? addDays(today, -6);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const canPrev = date > minDate;
@@ -42,7 +43,7 @@ export function ArticleDateNav({ date }: Props) {
     router.push(`/articles?date=${target}&page=1`);
   }
 
-  // 달력 선택 — 최근 7일 범위 내에서만 이동
+  // 달력 선택 — 데이터 보유 범위 내에서만 이동
   function goDate(newDate: string) {
     if (!newDate || newDate > today || newDate < minDate) return;
     go(newDate);
@@ -74,7 +75,9 @@ export function ArticleDateNav({ date }: Props) {
               <Calendar size={15} />
             </button>
           </div>
-          {date === today && <p className="text-[11px] text-muted">오늘 · 최근 7일 탐색 가능</p>}
+          {date === today && (
+            <p className="text-[11px] text-muted">오늘 · {formatDisplay(minDate)}부터 탐색 가능</p>
+          )}
           <input
             ref={inputRef}
             type="date"

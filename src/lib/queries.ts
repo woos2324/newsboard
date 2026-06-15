@@ -1476,6 +1476,38 @@ export const getOurArticlesPage = unstable_cache(
   { revalidate: 600, tags: ["articles"] }
 );
 
+/** 자사 기사 중 가장 오래된 발행일(KST, YYYY-MM-DD). 날짜 선택 하한용. */
+async function _getOldestArticleDate(): Promise<string | null> {
+  const sb = getSupabase();
+  const ourCompany = await sb
+    .from("media_company")
+    .select("media_company_id")
+    .eq("is_our_company", true)
+    .maybeSingle();
+  const mediaId = ourCompany.data?.media_company_id;
+  if (!mediaId) return null;
+
+  const res = await sb
+    .from("article")
+    .select("published_at")
+    .eq("media_company_id", mediaId)
+    .order("published_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  const ts = res.data?.published_at;
+  if (!ts) return null;
+
+  // published_at(timestamptz) → KST 날짜
+  const kst = new Date(new Date(ts).getTime() + 9 * 60 * 60_000);
+  return kst.toISOString().slice(0, 10);
+}
+
+export const getOldestArticleDate = unstable_cache(
+  _getOldestArticleDate,
+  ["oldest-article-date"],
+  { revalidate: 3600, tags: ["articles"] }
+);
+
 export async function getArticleList(
   date: string,
   page: number,

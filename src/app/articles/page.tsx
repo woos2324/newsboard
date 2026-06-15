@@ -1,5 +1,5 @@
 import { PageShell } from "@/components/PageShell";
-import { getOurArticlesPage, sectionLabel } from "@/lib/queries";
+import { getOurArticlesPage, getOldestArticleDate, sectionLabel } from "@/lib/queries";
 import { ArticleDateNav } from "./ArticleDateNav";
 import { ArticleListClient } from "./ArticleListClient";
 
@@ -31,7 +31,10 @@ export default async function ArticlesPage({ searchParams }: Props) {
   const params = await searchParams;
   const date = params.date ?? todayKST();
 
-  const data = await getOurArticlesPage(date, 1, PER_PAGE);
+  const [data, oldestDate] = await Promise.all([
+    getOurArticlesPage(date, 1, PER_PAGE),
+    getOldestArticleDate(),
+  ]);
   const totalPages = Math.ceil(data.total / PER_PAGE);
   const maxSection = data.sectionCounts[0]?.count ?? 1;
 
@@ -49,7 +52,7 @@ export default async function ArticlesPage({ searchParams }: Props) {
           <p className="mt-1 text-sm text-muted">세계일보가 네이버에 발행한 기사 목록과 섹션별 현황</p>
         </div>
         <div className="shrink-0">
-          <ArticleDateNav date={date} />
+          <ArticleDateNav date={date} minDate={oldestDate ?? undefined} />
         </div>
       </div>
 

@@ -94,6 +94,40 @@
 - Email Template "Confirm signup" → `{{ .Token }}` 으로 OTP 6자리 발송 (10분 만료)
 - 비밀번호 정책: 8자 이상, 대소문자 + 숫자 + 특수문자
 
+## 재개 지점 (2026-06-15, 44차 세션 종료)
+
+**이번 세션 (44차) = ① 트래픽 수집 복구(네이버 세션 302 자동복구), ② 자사 기사 날짜 달력 + 선택범위 확대, ③ 공모전용 차기 기능 후보 로드맵화. 코드 3건 구현·배포·검증 전부 완료.**
+
+### 1. 트래픽 수집 복구 — 네이버 세션 만료(302) 자동복구 + 백필 (커밋 `bd75925`, NCP 배포 완료)
+
+- **증상**: 트래픽 분석이 6/10까지만 표시. `collect_naver_pv.py` 가 6/11부터 전부 `0건 적재`. 랭킹·트렌드·사설 등 로그인 불필요 수집은 정상.
+- **근본 원인 2가지(겹침)**: ① `naver_session.expires_at` 이 14일 고정이라 서버측 조기 만료된 쿠키를 [_load_cookies()](scripts/collect_naver_pv.py#L102-L126)가 "유효"로 오판해 죽은 쿠키 계속 재사용. ② **세션 만료 신호가 401/403이 아니라 302 리다이렉트**(`dplError.nhn ... Not logined.(empty session)`)인데, 재로그인 트리거가 `(401,403)` 뿐이라 302는 skip → 매 cron `0건 적재` 무한 반복(자동복구 불가).
+- **수정**: [collect_naver_pv.py](scripts/collect_naver_pv.py) 재로그인 분기 6곳을 `(401,403)` → **`(302,401,403)`** 으로 확장. `httpx.Client`(follow_redirects=False)는 302에 대해 `raise_for_status()`가 `HTTPStatusError`를 던져 `status_code==302`로 잡힘.
+- **배포·복구**: GitHub Actions 이미지 빌드 → infra-mcp `deploy_worker` → `naver_session.expires_at` 과거로 UPDATE(강제 만료) → NCP worker에서 6/11~6/14 일간 백필 + 오늘 실시간 1회. DB 검증: daily_cv/article_pv/traffic_source/search_keyword 6/15까지, hourly 6/14까지(오늘분은 네이버 미제공 → 내일 KST 05:00 일간 cron이 확정 채움), `naver_session` 새 쿠키+expires_at 6/29 갱신.
+- **재발 방지**: 302 자동 재로그인이 안전망(14일 고정 expires_at의 조기 만료를 커버). 메모리에 진단·복구 절차 기록(`project_naver_pv_session_302`).
+
+### 2. 자사 기사 현황 날짜 달력 + 선택범위 확대 (커밋 `c056bdb`, `9244f4c`, Vercel 자동배포)
+
+- **달력 추가** ([ArticleDateNav.tsx](src/app/articles/ArticleDateNav.tsx)): 트래픽 [DateDeviceSelector](src/app/traffic/DateDeviceSelector.tsx)와 동일 패턴 — 숨김 `<input type="date" className="sr-only">` + `showPicker()` + 날짜 옆 파란 `Calendar` 아이콘. 화살표/달력/`input min·max` 공통 하한 사용.
+- **선택범위 확대**: `article` 테이블은 [cleanup_old_data.py](scripts/cleanup_old_data.py) 삭제 대상이 **아님**(스냅샷 5종만 7일 정리) → 무기한 누적(현재 4/25~, 약 1.1만건). 기존 7일 하드코딩 제약(`addDays(today,-6)`)을 제거하고 [queries.ts](src/lib/queries.ts) `getOldestArticleDate()`(신규, `articles` 태그 캐시)로 **가장 오래된 발행일을 하한**으로. [page.tsx](src/app/articles/page.tsx)에서 병렬 조회 후 `minDate` prop 주입. 안내 문구도 "최근 7일" → 실제 범위로.
+
+### 3. 공모전 차기 기능 후보 로드맵화 (이 문서 갱신)
+
+사내 아이디어 공모전 출품작. "기자가 빠르게 알아차리고 → 바로 기사 작성"을 화면 워크플로로 완결시키는 차기 기능 4종을 아래 "다음 작업 로드맵"에 정리. **알림 기능은 향후 카카오톡 알림으로 별도 추진 예정이라 후보에서 제외**(기존 web-push 인프라는 보류).
+
+**판단 사항 (44차)**:
+1. **세션 만료 = 302 신호** — 네이버 파트너센터는 401/403이 아니라 302로 로그인 페이지 리다이렉트. 재로그인 트리거에 302 필수 포함. (메모리 `project_naver_pv_session_302`)
+2. **날짜 달력은 트래픽 컴포넌트 패턴 재사용** — 신규 라이브러리 없이 네이티브 `input[type=date]` + `showPicker()`.
+3. **날짜 하한은 데이터 기반(고정값 X)** — `getOldestArticleDate()`로 실제 보유분만큼 동적으로. 데이터 쌓이면 자동 확장.
+
+### 미완료 / 다음 세션(45차) 할 일
+
+- 공모전 기능 착수 시 방향 확정 필요(아래 로드맵 "공모전 후보" 4종 중 선택 — 추천: "지금 대응" 통합 워크보드)
+- (43차 이월) opinion 실제 ID/PW 로그인 흐름 사용자 브라우저 최종 확인
+- (기존 미완료 유지: 사설 과거 백필, `realtime_pv_tick` 7일 cleanup 미반영 등)
+
+---
+
 ## 재개 지점 (2026-06-12, 43차 세션 종료)
 
 **이번 세션 (43차) = opinion `/compare`(today 사설 분석) 기능 확장. 구현·배포 전부 완료(opinion 수동 배포).**
@@ -1051,6 +1085,18 @@ NCP 한국 IP 로 GitHub Actions(Azure IP) 차단이 일부 해제됨을 확인�
 - **API 라우트 신규 3개** — /api/traffic/page-data, article-pv, daily-cv
 
 ## 다음 작업 로드맵
+
+### ⭐ (공모전 후보) 기자 대응·작성 지원 기능 (44차 추가)
+
+> 사내 아이디어 공모전 출품작. "기자가 빠르게 알아차리고 → 바로 기사 작성"을 **화면 워크플로로 완결**시키는 게 핵심. 기존 자산(미보도 탐지 `missed_issue_alert`, 실시간 트렌드 `trending_keyword`, 실시간 PV `realtime_pv_tick`, autowrite M1~M4)을 연결해 신규 수집 없이 구현 가능.
+> **알림 전달은 향후 카카오톡 알림으로 별도 추진 예정 → 이 후보에서 제외**(기존 web-push 인프라는 보류).
+
+1. **"지금 대응" 통합 워크보드** (추천) — 미보도 급상승(트렌드는 뜨는데 자사 0건) / 경쟁사 일제보도인데 우리만 누락 / 자사 PV 급등을 **대시보드 한 곳에 우선순위로** 모으고, 각 항목에서 **바로 autowrite 초안 작성으로 연결**. 인지→작성이 한 화면에서 완결(데모 임팩트 큼).
+2. **PV 급등(이상) 기사 감지** — `realtime_pv_tick` 차분으로 "평소보다 빠르게 읽히는 자사 기사" 탐지 → 후속 기사·추가 취재 신호 카드.
+3. **autowrite 작성 보조 강화** — 기존 초안 생성에 과거 자사 기사 자동 링크 / 제목 후보 A·B / 사실 체크리스트 추가.
+4. **이슈 타임라인** — 한 이슈의 매체별 보도 전개(보도 순서·자사 진입 시점) 시각화 → 작성 시 맥락 파악.
+
+---
 
 - ~~**(당장) 해외 구독 매체 수집 — NCP 이전 후 재활성화**~~ 🔶 33차 부분 완료 — NCP 이전 후 재점검: wtimes/scmp/wapo ✅, mainichi/sankei/guardian ✅. **nyt(DataDome)·ft(hCaptcha)는 IP 레벨 차단으로 우회 불가**. wapo cron 실동작 확인 필요
 - ~~**(당장) 실시간 트렌드 RSS → Playwright DOM 전환**~~ ✅ **34차 완료** — DOM 파싱(hours=24, 25건), 3분 주기, 신호등 대시보드 UI + 우측 패널, InfoTip ⓘ 툴팁

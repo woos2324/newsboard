@@ -52,7 +52,7 @@ export default function EditorialModal({
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
 
         {/* 헤더 */}
-        <div className="flex items-start justify-between p-6 border-b border-gray-100">
+        <div className="flex items-start justify-between p-4 border-b border-gray-100 sm:p-6">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-2 flex-wrap">
               <span className={`text-xs font-bold px-2 py-0.5 rounded flex-shrink-0 ${isOurs ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-700'}`}>
@@ -70,7 +70,7 @@ export default function EditorialModal({
           </button>
         </div>
 
-        <div className="p-6 space-y-5">
+        <div className="p-4 space-y-5 sm:p-6">
 
           {/* AI 요약 */}
           {item.summary && (

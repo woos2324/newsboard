@@ -48,8 +48,14 @@ body {
 }
 
 .page-wrapper {
-  padding: 24px 24px 96px 24px;
+  padding: 20px 16px 80px 16px;
   width: 100%;
+}
+
+@media (min-width: 640px) {
+  .page-wrapper {
+    padding: 24px 24px 96px 24px;
+  }
 }
 
 /* 인쇄: 보고서 본문(.print-area)만 출력, 나머지 UI 숨김 */

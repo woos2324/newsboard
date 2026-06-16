@@ -61,9 +61,9 @@ function EditorialRow({ item, onClick, onEdit }: { item: Editorial; onClick: () 
       tabIndex={0}
       onClick={onClick}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick() }}
-      className="group flex items-center gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors"
+      className="group flex items-center gap-2 px-3 py-3 hover:bg-gray-50 cursor-pointer transition-colors sm:gap-3 sm:px-4"
     >
-      <span className={`w-20 flex-shrink-0 truncate text-xs font-semibold ${isOurs ? 'text-blue-800' : 'text-gray-500'}`}>
+      <span className={`w-16 flex-shrink-0 truncate text-xs font-semibold sm:w-20 ${isOurs ? 'text-blue-800' : 'text-gray-500'}`}>
         {item.media_company?.name ?? '알 수 없음'}{isOurs ? ' ★' : ''}
       </span>
       <span className="flex-1 text-sm text-gray-800 truncate">{item.title}</span>
@@ -72,7 +72,7 @@ function EditorialRow({ item, onClick, onEdit }: { item: Editorial; onClick: () 
       )}
       <button
         onClick={(e) => { e.stopPropagation(); onEdit() }}
-        className="flex-shrink-0 flex items-center gap-1 text-xs text-gray-400 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity"
+        className="hidden sm:flex flex-shrink-0 items-center gap-1 text-xs text-gray-400 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity"
         title="주제 변경"
       >
         <FolderInput className="w-3.5 h-3.5" /> 주제 변경
@@ -82,7 +82,7 @@ function EditorialRow({ item, onClick, onEdit }: { item: Editorial; onClick: () 
           {item.stance_label}
         </span>
       )}
-      <span className="w-14 flex-shrink-0 text-right text-xs text-gray-400">{formatTime(item.published_at)}</span>
+      <span className="w-12 flex-shrink-0 text-right text-xs text-gray-400 sm:w-14">{formatTime(item.published_at)}</span>
     </div>
   )
 }
@@ -291,13 +291,13 @@ export default function TodayTab({
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex flex-col gap-3 mb-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2 text-sm text-gray-500">
           <span>총 <strong className="text-gray-800">{mediaCount}개 언론사</strong></span>
           <span className="text-gray-300">·</span>
           <span><strong className="text-gray-800">{filtered.length}건</strong> 수집</span>
         </div>
-        <div className="flex gap-1">
+        <div className="flex flex-wrap gap-1">
           {FILTERS.map((f) => (
             <button
               key={f}
@@ -327,7 +327,7 @@ export default function TodayTab({
             const hiddenCount = items.length - GROUP_PREVIEW
             return (
               <div key={issue}>
-                <div className="flex items-center gap-3 mb-3 pb-2 border-b border-gray-200">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-3 pb-2 border-b border-gray-200">
                   <div className={`w-1 h-5 rounded flex-shrink-0 ${
                     filter === '매체별' && issue === '세계일보' ? 'bg-blue-800' : 'bg-blue-700'
                   }`} />

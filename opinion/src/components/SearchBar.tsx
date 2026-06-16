@@ -177,7 +177,7 @@ export default function SearchBar() {
         </button>
       </div>
 
-      <div className="relative w-72">
+      <div className="relative w-40 sm:w-56 md:w-72">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
         <input
           type="text"

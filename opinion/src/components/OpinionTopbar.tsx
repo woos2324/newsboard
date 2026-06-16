@@ -24,21 +24,21 @@ export default function OpinionTopbar({ onMenuOpen }: { onMenuOpen?: () => void 
   }, [])
 
   return (
-    <header className="sticky top-0 z-10 flex h-14 items-center gap-4 border-b border-gray-200 bg-white/80 px-6 backdrop-blur">
+    <header className="sticky top-0 z-10 flex h-14 items-center gap-2 border-b border-gray-200 bg-white/80 px-4 backdrop-blur sm:gap-4 sm:px-6">
       <button
         type="button"
         onClick={onMenuOpen}
         aria-label="메뉴 열기"
-        className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white hover:bg-gray-50 lg:hidden"
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white hover:bg-gray-50 lg:hidden"
       >
         <Menu className="h-4 w-4" />
       </button>
-      <div className="flex items-center gap-2 text-sm text-gray-500">
-        <Calendar className="h-4 w-4" />
-        <span>{datetime ?? ''}</span>
+      <div className="hidden items-center gap-2 text-sm text-gray-500 md:flex">
+        <Calendar className="h-4 w-4 shrink-0" />
+        <span className="whitespace-nowrap">{datetime ?? ''}</span>
       </div>
-      <div className="ml-auto flex items-center gap-3">
-        <Suspense fallback={<div className="h-9 w-80" />}>
+      <div className="ml-auto flex min-w-0 items-center gap-2 sm:gap-3">
+        <Suspense fallback={<div className="h-9 w-40 sm:w-72" />}>
           <SearchBar />
         </Suspense>
         <form action={logoutAction}>
@@ -46,7 +46,7 @@ export default function OpinionTopbar({ onMenuOpen }: { onMenuOpen?: () => void 
             type="submit"
             aria-label="로그아웃"
             title="로그아웃"
-            className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 hover:text-gray-700"
           >
             <LogOut className="h-4 w-4" />
           </button>

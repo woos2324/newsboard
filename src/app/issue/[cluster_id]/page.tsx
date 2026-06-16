@@ -18,13 +18,17 @@ function formatDateTime(iso: string | null): string {
 }
 
 type Params = Promise<{ cluster_id: string }>;
+type SearchParams = Promise<{ date?: string }>;
 
 export default async function IssueDetailPage({
   params,
+  searchParams,
 }: {
   params: Params;
+  searchParams: SearchParams;
 }) {
   const { cluster_id } = await params;
+  const { date } = await searchParams;
   const clusterId = Number(cluster_id);
   if (!Number.isFinite(clusterId)) notFound();
 
@@ -38,11 +42,10 @@ export default async function IssueDetailPage({
   return (
     <PageShell
       title={detail.title}
-      description={detail.cluster_date}
     >
       <div className="mb-4">
         <Link
-          href="/issue"
+          href={date ? `/issue?date=${date}` : "/issue"}
           className="inline-flex items-center gap-1 text-xs font-medium text-muted hover:text-foreground"
         >
           <ArrowLeft className="h-3.5 w-3.5" />

@@ -303,7 +303,7 @@ export default async function IssuePage({ searchParams }: Props) {
                         />
                       )}
                       <Link
-                        href={`/issue/${item.cluster_id}`}
+                        href={`/issue/${item.cluster_id}?date=${date}`}
                         className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-background"
                       >
                         상세보기

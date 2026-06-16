@@ -109,27 +109,23 @@ export function MediaSelector({
 
   return (
     <div className="mb-5">
-      {/* 헤더: 제목 좌측 + 매체 추가 버튼 우측 (버튼 위치 고정 — 칩 증가와 무관) */}
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div>
+      {/* 헤더: 제목 우측에 매체 추가 버튼 (버튼 위치 고정 — 칩 증가와 무관) */}
+      <div className="mb-4">
+        <div className="flex items-center gap-3">
           <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
-          {description ? (
-            <p className="mt-1 text-sm text-muted">{description}</p>
-          ) : null}
-        </div>
 
-        {/* 매체 추가 드롭다운 */}
-        <div className="relative shrink-0" ref={panelRef}>
-          <button
-            onClick={() => setOpen((v) => !v)}
-            className="inline-flex items-center gap-1 rounded-full border border-dashed border-border bg-white px-3 py-1.5 text-sm font-medium text-muted hover:bg-background"
-          >
-            <Plus className="h-4 w-4" />
-            매체 추가
-          </button>
+          {/* 매체 추가 드롭다운 */}
+          <div className="relative shrink-0" ref={panelRef}>
+            <button
+              onClick={() => setOpen((v) => !v)}
+              className="inline-flex items-center gap-1 rounded-full border border-dashed border-border bg-white px-3 py-1.5 text-sm font-medium text-muted hover:bg-background"
+            >
+              <Plus className="h-4 w-4" />
+              매체 추가
+            </button>
 
-          {open && (
-            <div className="absolute right-0 top-full z-20 mt-2 w-64 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-white shadow-lg">
+            {open && (
+              <div className="absolute left-0 top-full z-20 mt-2 w-64 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-white shadow-lg">
               <div className="flex items-center gap-2 border-b border-border px-3 py-2">
                 <Search className="h-4 w-4 text-muted" />
                 <input
@@ -175,7 +171,11 @@ export function MediaSelector({
               </ul>
             </div>
           )}
+          </div>
         </div>
+        {description ? (
+          <p className="mt-1 text-sm text-muted">{description}</p>
+        ) : null}
       </div>
 
       {/* 선택된 매체 칩 */}

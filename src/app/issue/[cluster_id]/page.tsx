@@ -38,7 +38,7 @@ export default async function IssueDetailPage({
   return (
     <PageShell
       title={detail.title}
-      description={`클러스터 키 ${detail.cluster_key} · ${detail.cluster_date}`}
+      description={detail.cluster_date}
     >
       <div className="mb-4">
         <Link

@@ -7,7 +7,6 @@ import {
   Layers,
   TrendingUp,
   GitCompare,
-  AlertTriangle,
   Users,
   FileText,
   Sparkles,
@@ -21,8 +20,7 @@ import type { CurrentProfile } from "@/lib/auth";
 
 const nav = [
   { href: "/", label: "대시보드", icon: LayoutDashboard },
-  { href: "/issue", label: "이슈 분석", icon: Layers },
-  { href: "/gap", label: "미보도 탐지", icon: AlertTriangle },
+  { href: "/issue", label: "이슈 모니터링", icon: Layers },
   { href: "/trending", label: "실시간 트렌드", icon: TrendingUp },
   { href: "/compare", label: "경쟁사 비교", icon: GitCompare },
   { href: "/articles", label: "자사 기사 현황", icon: Newspaper },

@@ -36,6 +36,29 @@ export type RankingArticleView = {
 
 export type CompetitorItem = { name: string; url: string | null };
 
+export type IssueBoardItem = {
+  cluster_id: number;
+  title: string;
+  summary: string | null;
+  keywords: string[];
+  confidence: number;
+  cluster_date: string;
+  articles: number;
+  mediaNames: string[];
+  mediaCount: number;
+  hasSegye: boolean;
+  // missed_issue_alert (없으면 null)
+  alert_id: number | null;
+  alert_status: string | null;
+  verdict: string | null;
+  priority: "high" | "medium" | "low" | null;
+  priority_score: number | null;
+  detected_at: string | null;
+  reason: string | null;
+  competitors: CompetitorItem[];
+  similar_article: { title: string; url: string } | null;
+};
+
 export type MissedAlertView = {
   alert_id: number;
   title: string;
@@ -372,6 +395,159 @@ export async function getIssues(
         rank: i + 1,
       };
     });
+}
+
+// ===================================================================
+// Issue board (이슈 모니터링 — issue_cluster + missed_issue_alert 통합)
+// ===================================================================
+
+export async function getIssueBoard(
+  date: string,
+  filter: "all" | "missed" | "reviewing" = "all"
+): Promise<IssueBoardItem[]> {
+  const sb = getSupabase();
+
+  const { data: clusters, error: cErr } = await sb
+    .from("issue_cluster")
+    .select(
+      "issue_cluster_id, representative_title, summary, keywords, confidence_score, cluster_date"
+    )
+    .eq("cluster_date", date)
+    .order("confidence_score", { ascending: false })
+    .limit(60);
+  if (cErr) throw cErr;
+  if (!clusters || clusters.length === 0) return [];
+
+  const clusterIds = clusters.map((c) => c.issue_cluster_id);
+
+  // 기사 + 매체 정보
+  const { data: artRows, error: artErr } = await sb
+    .from("issue_cluster_article")
+    .select(
+      "issue_cluster_id, article_id, article:article_id(url, media_company:media_company_id(name, normalized_name))"
+    )
+    .in("issue_cluster_id", clusterIds);
+  if (artErr) throw artErr;
+
+  // 활성 미보도 알림 (open/reviewing)
+  const { data: alertRows, error: alertErr } = await sb
+    .from("missed_issue_alert")
+    .select(
+      "missed_issue_alert_id, issue_cluster_id, alert_status, priority_score, verdict, detected_at, reason, " +
+        "similar_article:similar_article_id(article_id, title, url)"
+    )
+    .in("issue_cluster_id", clusterIds)
+    .in("alert_status", ["open", "reviewing"])
+    .order("priority_score", { ascending: false, nullsFirst: false });
+  if (alertErr) throw alertErr;
+
+  // 클러스터별 매체 정보 집계
+  type MediaEntry = {
+    names: string[];
+    hasSegye: boolean;
+    firstUrlByName: Map<string, string | null>;
+    count: number;
+  };
+  const mediaByCluster = new Map<number, MediaEntry>();
+  for (const row of artRows ?? []) {
+    const art = row.article as unknown as {
+      url: string;
+      media_company: { name: string; normalized_name: string } | null;
+    } | null;
+    const mc = art?.media_company;
+    if (!mc) continue;
+    if (!mediaByCluster.has(row.issue_cluster_id)) {
+      mediaByCluster.set(row.issue_cluster_id, {
+        names: [],
+        hasSegye: false,
+        firstUrlByName: new Map(),
+        count: 0,
+      });
+    }
+    const entry = mediaByCluster.get(row.issue_cluster_id)!;
+    entry.count += 1;
+    if (!entry.names.includes(mc.name)) entry.names.push(mc.name);
+    if (mc.normalized_name === "segye") entry.hasSegye = true;
+    if (!entry.firstUrlByName.has(mc.name))
+      entry.firstUrlByName.set(mc.name, art?.url ?? null);
+  }
+
+  // 클러스터별 첫 번째 알림 (우선순위 높은 것)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const alertByCluster = new Map<number, any>();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const alert of (alertRows ?? []) as any[]) {
+    if (!alertByCluster.has(alert.issue_cluster_id))
+      alertByCluster.set(alert.issue_cluster_id, alert);
+  }
+
+  const items: IssueBoardItem[] = clusters.map((c) => {
+    const media = mediaByCluster.get(c.issue_cluster_id) ?? {
+      names: [],
+      hasSegye: false,
+      firstUrlByName: new Map(),
+      count: 0,
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const alert = alertByCluster.get(c.issue_cluster_id) as any | undefined;
+    const simArt = alert
+      ? (alert.similar_article as {
+          article_id: number;
+          title: string;
+          url: string;
+        } | null)
+      : null;
+
+    const competitors: CompetitorItem[] = media.names
+      .filter((name) => name !== "세계일보")
+      .map((name) => ({ name, url: media.firstUrlByName.get(name) ?? null }));
+
+    return {
+      cluster_id: c.issue_cluster_id,
+      title: c.representative_title,
+      summary: c.summary,
+      keywords: c.keywords ?? [],
+      confidence: Number(c.confidence_score ?? 0),
+      cluster_date: c.cluster_date,
+      articles: media.count,
+      mediaNames: media.names,
+      mediaCount: media.names.length,
+      hasSegye: media.hasSegye,
+      alert_id: alert ? alert.missed_issue_alert_id : null,
+      alert_status: alert ? alert.alert_status : null,
+      verdict: alert ? (alert.verdict as string | null) : null,
+      priority: alert ? priorityFromScore(alert.priority_score) : null,
+      priority_score: alert ? alert.priority_score : null,
+      detected_at: alert ? alert.detected_at : null,
+      reason: alert ? alert.reason : null,
+      competitors,
+      similar_article: simArt
+        ? { title: simArt.title, url: simArt.url }
+        : null,
+    };
+  });
+
+  // 필터
+  const filtered = items.filter((item) => {
+    if (filter === "missed")
+      return (
+        item.alert_id !== null && item.verdict !== "유사보도있음"
+      );
+    if (filter === "reviewing") return item.alert_status === "reviewing";
+    return true;
+  });
+
+  // 정렬: 알림 있는 것(우선순위 높은 순) → 보도함 → 기타
+  return filtered.sort((a, b) => {
+    const aAlert = a.alert_id !== null;
+    const bAlert = b.alert_id !== null;
+    if (aAlert !== bAlert) return aAlert ? -1 : 1;
+    if (aAlert && bAlert) {
+      return (b.priority_score ?? 0) - (a.priority_score ?? 0);
+    }
+    if (a.hasSegye !== b.hasSegye) return a.hasSegye ? -1 : 1;
+    return b.confidence - a.confidence;
+  });
 }
 
 // ===================================================================

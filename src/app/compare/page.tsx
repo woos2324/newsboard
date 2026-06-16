@@ -2,6 +2,7 @@ import { PageShell } from "@/components/PageShell";
 import {
   getActiveCompareMedia,
   getCompareMatrix,
+  getCompareCommentRanking,
   getSectionRankings,
 } from "@/lib/queries";
 import { CompareTabView } from "./CompareTabView";
@@ -36,9 +37,10 @@ export default async function ComparePage({ searchParams }: Props) {
   // 세계일보 항상 첫 번째
   const mediaIds = ["segye", ...rawIds.filter((s) => s !== "segye")];
 
-  const [popularData, sectionRankings, mediaOptions] = await Promise.all([
+  const [popularData, sectionRankings, commentRanking, mediaOptions] = await Promise.all([
     getCompareMatrix(mediaIds, 5),
     getSectionRankings(mediaIds),
+    getCompareCommentRanking(mediaIds, 5),
     getActiveCompareMedia(),
   ]);
 
@@ -52,7 +54,11 @@ export default async function ComparePage({ searchParams }: Props) {
         options={mediaOptions}
         explicit={Boolean(mediaParam)}
       />
-      <CompareTabView popularData={popularData} sectionRankings={sectionRankings} />
+      <CompareTabView
+        popularData={popularData}
+        sectionRankings={sectionRankings}
+        commentRanking={commentRanking}
+      />
     </PageShell>
   );
 }

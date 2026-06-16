@@ -606,6 +606,89 @@ export const getCompareMatrix = unstable_cache(
   { tags: ["compare"], revalidate: 3600 }
 );
 
+// 댓글 랭킹 — 선택된 매체별 댓글 많은 기사 TOP N (경쟁사 비교 '댓글 랭킹' 탭)
+export type CommentRankArticle = {
+  article_id: number;
+  title: string;
+  url: string | null;
+  comments: number;
+};
+
+export type CompareCommentCard = {
+  mediaName: string;
+  normalizedName: string;
+  articles: CommentRankArticle[];
+};
+
+async function _getCompareCommentRanking(
+  normalizedNames: string[],
+  perMedia = 5
+): Promise<CompareCommentCard[]> {
+  const sb = getSupabase();
+
+  // 표시용 매체명 (댓글 데이터 없는 매체도 헤더는 보여야 함)
+  const { data: mediaList } = await sb
+    .from("media_company")
+    .select("name, normalized_name")
+    .in("normalized_name", normalizedNames);
+  const nameByNorm = new Map(
+    (mediaList ?? []).map((m) => [m.normalized_name, m.name])
+  );
+
+  const { data, error } = await sb
+    .from("comment_metric")
+    .select(
+      "comment_count, article:article_id!inner(article_id, title, url, media_company:media_company_id!inner(name, normalized_name))"
+    )
+    .in("article.media_company.normalized_name", normalizedNames)
+    .gte("measured_at", new Date(Date.now() - 25 * 60 * 60_000).toISOString())
+    .order("comment_count", { ascending: false })
+    .limit(perMedia * normalizedNames.length * 10);
+  if (error) throw error;
+
+  type RawArt = {
+    article_id: number;
+    title: string;
+    url: string | null;
+    media_company: { name: string; normalized_name: string } | null;
+  };
+
+  const seenByMedia = new Map<string, Set<number>>();
+  const articlesByNorm = new Map<string, CommentRankArticle[]>();
+  for (const r of data ?? []) {
+    const art = r.article as unknown as RawArt | null;
+    const norm = art?.media_company?.normalized_name;
+    if (!norm) continue;
+    const articleId = art?.article_id ?? 0;
+    if (!articlesByNorm.has(norm)) articlesByNorm.set(norm, []);
+    if (!seenByMedia.has(norm)) seenByMedia.set(norm, new Set());
+    const list = articlesByNorm.get(norm)!;
+    const seen = seenByMedia.get(norm)!;
+    if (list.length < perMedia && !seen.has(articleId)) {
+      seen.add(articleId);
+      list.push({
+        article_id: articleId,
+        title: art?.title ?? "(기사 없음)",
+        url: art?.url ?? null,
+        comments: r.comment_count,
+      });
+    }
+  }
+
+  // 요청 순서(세계일보 우선) 유지
+  return normalizedNames.map((norm) => ({
+    mediaName: nameByNorm.get(norm) ?? norm,
+    normalizedName: norm,
+    articles: articlesByNorm.get(norm) ?? [],
+  }));
+}
+
+export const getCompareCommentRanking = unstable_cache(
+  _getCompareCommentRanking,
+  ["compare-comment-ranking"],
+  { tags: ["compare", "dashboard"], revalidate: 600 }
+);
+
 export type CompareMediaOption = { normalizedName: string; name: string };
 
 const _getActiveCompareMedia = async (): Promise<CompareMediaOption[]> => {

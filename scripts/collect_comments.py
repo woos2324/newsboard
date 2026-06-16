@@ -1,6 +1,6 @@
 """네이버 기사별 댓글 수 수집 → comment_metric 적재.
 
-대상: 자사(세계일보) + 경쟁사 4개(조선, 중앙, 동아, 매경)
+대상: 활성 + naver_media_id 보유 매체 전체 (경쟁사 비교 선택 가능 매체와 동일).
 Naver 댓글 API(httpx) 직접 호출 — Playwright 불필요.
 
 사용:
@@ -31,7 +31,6 @@ if sys.platform == "win32":
 from scripts.lib.db import get_client
 from scripts.lib.revalidate import revalidate
 
-TARGET_MEDIA = ["segye", "chosun", "joongang", "donga", "mk"]
 ARTICLE_URL_RE = re.compile(r"n\.news\.naver\.com/(?:mnews/)?article/(\d+)/(\d+)")
 MAX_CONCURRENT = 10
 
@@ -102,11 +101,12 @@ async def main() -> None:
     sb = get_client()
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=args.hours)).isoformat()
 
+    # 대상 = 활성 + naver_media_id 보유 매체 전체 (경쟁사 비교 선택 가능 매체와 동일)
     media_rows = (
         sb.table("media_company")
         .select("media_company_id, name, normalized_name")
-        .in_("normalized_name", TARGET_MEDIA)
         .eq("is_active", True)
+        .not_.is_("naver_media_id", "null")
         .execute()
         .data
     )
@@ -183,6 +183,7 @@ async def main() -> None:
     for mid, cnt in media_cnt.most_common():
         print(f"  {media_map.get(mid, mid)}: {cnt}건")
     revalidate("dashboard")
+    revalidate("compare")
 
 
 if __name__ == "__main__":

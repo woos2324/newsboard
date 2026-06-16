@@ -9,7 +9,6 @@ import {
   GitCompare,
   AlertTriangle,
   Users,
-  MessageSquare,
   FileText,
   Sparkles,
   Newspaper,
@@ -29,7 +28,6 @@ const nav = [
   { href: "/articles", label: "자사 기사 현황", icon: Newspaper },
   { href: "/traffic", label: "트래픽 분석", icon: BarChart3 },
   { href: "/analytics/subscribers", label: "구독자 분석", icon: Users },
-  { href: "/analytics/comments", label: "독자 반응", icon: MessageSquare },
   { href: "/report", label: "AI 리포트", icon: FileText },
   { href: "/admin/users", label: "회원 관리", icon: ShieldCheck },
 ];

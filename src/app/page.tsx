@@ -110,7 +110,7 @@ export default async function DashboardPage() {
       value: stats.today_comments.toLocaleString(),
       delta: 0,
       icon: MessageSquare,
-      href: linkIfAllowed("/analytics/comments"),
+      href: linkIfAllowed("/compare"),
     },
   ];
 
@@ -240,7 +240,7 @@ export default async function DashboardPage() {
                   <p className="caption">댓글 반응이 가장 활발한 기사</p>
                 </div>
                 <a
-                  href="/analytics/comments"
+                  href="/compare"
                   className="text-xs font-medium text-primary-500 hover:underline"
                 >
                   더 보기 →

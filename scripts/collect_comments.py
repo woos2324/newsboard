@@ -117,14 +117,25 @@ async def main() -> None:
     media_map = {m["media_company_id"]: m["name"] for m in media_rows}
     media_ids = list(media_map.keys())
 
-    articles = (
-        sb.table("article")
-        .select("article_id, url, media_company_id")
-        .in_("media_company_id", media_ids)
-        .gte("published_at", cutoff)
-        .execute()
-        .data
-    )
+    # Supabase 기본 1000행 제한 회피 — 페이지네이션으로 전체 기사 수집
+    articles: list[dict] = []
+    page_size = 1000
+    start = 0
+    while True:
+        chunk = (
+            sb.table("article")
+            .select("article_id, url, media_company_id")
+            .in_("media_company_id", media_ids)
+            .gte("published_at", cutoff)
+            .order("article_id")
+            .range(start, start + page_size - 1)
+            .execute()
+            .data
+        ) or []
+        articles.extend(chunk)
+        if len(chunk) < page_size:
+            break
+        start += page_size
     print(f"대상 기사 {len(articles)}건 (최근 {args.hours}h, {len(media_rows)}개 매체)")
 
     targets: list[tuple[int, int, str, str]] = []

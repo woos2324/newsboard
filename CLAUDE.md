@@ -94,6 +94,66 @@
 - Email Template "Confirm signup" → `{{ .Token }}` 으로 OTP 6자리 발송 (10분 만료)
 - 비밀번호 정책: 8자 이상, 대소문자 + 숫자 + 특수문자
 
+## 재개 지점 (2026-06-16, 45차 세션 종료)
+
+**이번 세션 (45차) = ① 전 메뉴 모바일 반응형, ② autowrite superadmin 접근, ③ Vercel Seoul 리전, ④ 독자반응 → 댓글 랭킹 통합, ⑤ 댓글 수집 전 매체 확장, ⑥ opinion 모바일 반응형. DB 마이그레이션 없음.**
+
+### 1. 전 메뉴 모바일 반응형 (newsboard)
+
+- **Topbar** ([src/components/Topbar.tsx](src/components/Topbar.tsx)) — `px-4 sm:px-6`, 날짜 `whitespace-nowrap`, 역할 라벨 `hidden sm:inline`, `shrink-0`
+- **PageShell** ([src/components/PageShell.tsx](src/components/PageShell.tsx)) — `main px-4 py-5 sm:px-6 sm:py-6`
+- **대시보드** ([src/app/page.tsx](src/app/page.tsx)) — `px-4 py-5 sm:px-6`, 댓글 카드 링크 → `/compare`
+- **미보도 탐지** ([src/app/gap/page.tsx](src/app/gap/page.tsx)) — ReviewButton `flex-col sm:flex-row`, 버튼 mobile에서 하단 우측
+- **실시간 트렌드** ([src/components/trending/TrendingClient.tsx](src/components/trending/TrendingClient.tsx)) — 상세 패널 mobile=`fixed inset-0 z-40` / `lg:static lg:w-1/3`, 테이블 셀 `whitespace-nowrap`
+- **경쟁사 비교** ([src/app/compare/MediaSelector.tsx](src/app/compare/MediaSelector.tsx)) — 드롭다운 `max-w-[calc(100vw-2rem)]`
+- **자사 기사** ([src/app/articles/page.tsx](src/app/articles/page.tsx)) — 헤더 `flex-col sm:flex-row`
+- **트래픽** ([src/app/traffic/TrafficContent.tsx](src/app/traffic/TrafficContent.tsx), 3개 모달) — KPI `grid-cols-2 lg:grid-cols-4`, 행 `grid-cols-1 lg:grid-cols-[N]`, 모달 `p-3 sm:p-6`, 분포 컬럼 `hidden sm:table-cell`
+- **회원 관리** ([src/app/admin/users/page.tsx](src/app/admin/users/page.tsx)) — `px-4 py-5 sm:px-6`, 테이블 `min-w-[720px]`
+
+### 2. autowrite superadmin 접근
+
+- [src/app/trending/page.tsx](src/app/trending/page.tsx) — `canWrite = reporter || superadmin`; superadmin이면 `reporterId=""` (팩트 기반 초안, 문체 프로파일 미사용)
+- [src/components/trending/TrendingClient.tsx](src/components/trending/TrendingClient.tsx) — prop `isReporter` → `canWrite`로 교체
+- [src/app/autowrite/[draft_id]/page.tsx](src/app/autowrite/[draft_id]/page.tsx) — superadmin 허용 + `body flex-col lg:flex-row` 반응형, 팩트 패널 `w-full lg:w-[470px]`
+
+### 3. Vercel Seoul 리전 전환
+
+- [vercel.json](vercel.json) — `"regions": ["icn1"]` 추가 (icn1 = AWS 서울). Supabase DB(서울 리전)와 동일 리전 → 쿼리 레이턴시 개선
+
+### 4. 독자반응 → 경쟁사 비교 댓글 랭킹 통합
+
+- `/analytics/comments` 페이지·loading 삭제, 사이드바 "독자 반응" 메뉴 제거
+- [src/lib/queries.ts](src/lib/queries.ts) — `getCompareCommentRanking()` + `CompareCommentCard`/`CommentRankArticle` 타입 추가
+- [src/app/compare/page.tsx](src/app/compare/page.tsx) — `getCompareCommentRanking` fetch + prop 주입
+- [src/app/compare/CompareTabView.tsx](src/app/compare/CompareTabView.tsx) — "댓글 랭킹" 탭(`MessageSquare` 아이콘), 인기랭킹과 동일 카드 그리드, 참여도 배지(🔥 매우 활발 / 💬 활발 / 🤐 낮음)
+- ⚠ **댓글 랭킹 KBS/YTN "데이터 없음" 버그** (미수정) — 아래 "미완료" 참조
+
+### 5. 댓글 수집 전 매체 확장
+
+- [scripts/collect_comments.py](scripts/collect_comments.py) — `TARGET_MEDIA` 하드코딩(4개) 제거 → `is_active=TRUE AND naver_media_id IS NOT NULL` 전체 동적 조회(48개), 기사 조회에 `range()` 페이지네이션(1000건씩) 추가. 수집 완료 시 `revalidate("compare")` 호출
+
+### 6. opinion 모바일 반응형
+
+- [opinion/src/components/OpinionTopbar.tsx](opinion/src/components/OpinionTopbar.tsx) — `px-4 sm:px-6`, 날짜 `hidden md:flex`, `shrink-0`
+- [opinion/src/components/SearchBar.tsx](opinion/src/components/SearchBar.tsx) — input `w-40 sm:w-56 md:w-72`
+- [opinion/src/app/globals.css](opinion/src/app/globals.css) — `.page-wrapper` padding 16px mobile / 24px sm+
+- [opinion/src/components/TodayTab.tsx](opinion/src/components/TodayTab.tsx) — 헤더 `flex-col sm:flex-row`, 필터 `flex-wrap`, 주제변경 버튼 `hidden sm:flex`, 그룹 헤더 `flex-wrap`
+- [opinion/src/components/EditorialModal.tsx](opinion/src/components/EditorialModal.tsx) — `p-4 sm:p-6`
+
+**판단 사항 (45차)**:
+1. **트렌딩 상세 패널 mobile=fixed** — `lg:static` absolute 레이아웃 대신, 모바일에서 `fixed inset-0 z-40`으로 풀스크린 오버레이 처리(테이블 옆에 붙이면 스크롤 충돌)
+2. **superadmin 팩트 기반 초안** — `reporterId=""` → API가 문체 프로파일 조회 없이 팩트만으로 초안 생성. 별도 API 수정 없이 기존 로직 재사용
+3. **독자반응 → 경쟁사 비교 통합** — 메뉴 하나 줄이고 이미 매체 선택이 된 경쟁사 비교 컨텍스트에 자연스럽게 배치
+
+### 미완료 / 다음 세션(46차) 할 일
+
+- ⚠ **댓글 랭킹 KBS/YTN 데이터 없음 버그 수정** — `getCompareCommentRanking`이 `comment_metric JOIN article JOIN media_company`를 `.limit(perMedia * names.length * 10)` 전체 limit으로 가져온 후 JS에서 그룹핑 → 댓글 많은 매체(조선일보 등)가 전체 한도를 채워 KBS/YTN 등 댓글 적은 매체가 잘림. **수정 방법**: 매체별 독립 쿼리로 교체 — `Promise.all(names.map(name => sb.query...limit(perMedia)))` 또는 `DISTINCT ON (media_company_id) ... ORDER BY media_company_id, comment_count DESC` window function 활용
+- ⚠ **opinion 배포 미완료** — opinion 모바일 반응형 변경 후 `cd opinion && vercel --prod --yes` 수동 배포 필요
+- (44차 이월) opinion 실제 ID/PW 로그인 흐름 사용자 브라우저 최종 확인
+- (기존 미완료 유지: 사설 과거 백필, `realtime_pv_tick` 7일 cleanup 미반영 등)
+
+---
+
 ## 재개 지점 (2026-06-15, 44차 세션 종료)
 
 **이번 세션 (44차) = ① 트래픽 수집 복구(네이버 세션 302 자동복구), ② 자사 기사 날짜 달력 + 선택범위 확대, ③ 공모전용 차기 기능 후보 로드맵화. 코드 3건 구현·배포·검증 전부 완료.**

@@ -184,13 +184,20 @@ def parse_search_keyword_json(payload: dict) -> list[SearchKeywordJsonRow]:
     data = _find_stat(payload, "searchKeywordTotal")
     rows = _to_rows(data)
     result: list[SearchKeywordJsonRow] = []
-    for rank, row in enumerate(rows, 1):
+    rank = 0
+    for row in rows:
+        keyword = (row.get("searchQuery") or "").strip()
+        if not keyword:
+            # 일시적 빈 응답이 빈 키워드 행을 만들고 (data_date, keyword="") 로
+            # upsert 되어 잔존하는 문제 방지 — 빈 키워드는 스킵하고 순번도 건너뜀
+            continue
+        rank += 1
         date_str = row.get("date", "")
         data_date = date.fromisoformat(date_str) if date_str else date.today()
         result.append(SearchKeywordJsonRow(
             data_date=data_date,
             rank=rank,
-            keyword=row.get("searchQuery", ""),
+            keyword=keyword,
             clicks=int(row.get("contentClick", 0)),
             click_ratio=float(row.get("contentClick_p", 0)),
         ))

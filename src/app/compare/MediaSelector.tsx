@@ -11,11 +11,15 @@ export function MediaSelector({
   selected,
   options,
   explicit,
+  title,
+  description,
 }: {
   selected: string[];
   options: CompareMediaOption[];
   /** URL 에 ?media= 가 명시됐는지 (false = 기본값으로 진입) */
   explicit: boolean;
+  title: string;
+  description?: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -104,90 +108,102 @@ export function MediaSelector({
   }, [options, query]);
 
   return (
-    <div className="mb-5 flex flex-wrap items-center gap-2">
-      {/* 선택된 매체 칩 */}
-      {selected.map((id) => {
-        const isPinned = id === "segye";
-        return (
-          <span
-            key={id}
-            className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-sm font-medium ${
-              isPinned
-                ? "border-primary-600 bg-primary-500 text-white"
-                : "border-primary-500 bg-primary-500/10 text-primary-500"
-            }`}
+    <div className="mb-5">
+      {/* 헤더: 제목 좌측 + 매체 추가 버튼 우측 (버튼 위치 고정 — 칩 증가와 무관) */}
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
+          {description ? (
+            <p className="mt-1 text-sm text-muted">{description}</p>
+          ) : null}
+        </div>
+
+        {/* 매체 추가 드롭다운 */}
+        <div className="relative shrink-0" ref={panelRef}>
+          <button
+            onClick={() => setOpen((v) => !v)}
+            className="inline-flex items-center gap-1 rounded-full border border-dashed border-border bg-white px-3 py-1.5 text-sm font-medium text-muted hover:bg-background"
           >
-            {labelOf(id)}
-            {!isPinned && (
-              <button
-                onClick={() => remove(id)}
-                className="rounded-full p-0.5 hover:bg-primary-500/20"
-                aria-label={`${labelOf(id)} 제거`}
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </span>
-        );
-      })}
+            <Plus className="h-4 w-4" />
+            매체 추가
+          </button>
 
-      {/* 매체 추가 드롭다운 */}
-      <div className="relative" ref={panelRef}>
-        <button
-          onClick={() => setOpen((v) => !v)}
-          className="inline-flex items-center gap-1 rounded-full border border-dashed border-border bg-white px-3 py-1.5 text-sm font-medium text-muted hover:bg-background"
-        >
-          <Plus className="h-4 w-4" />
-          매체 추가
-        </button>
-
-        {open && (
-          <div className="absolute left-0 top-full z-20 mt-2 w-64 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-white shadow-lg">
-            <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-              <Search className="h-4 w-4 text-muted" />
-              <input
-                autoFocus
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="매체 검색..."
-                className="w-full bg-transparent text-sm outline-none placeholder:text-muted"
-              />
-            </div>
-            <ul className="max-h-72 overflow-y-auto py-1">
-              {filtered.length === 0 ? (
-                <li className="px-3 py-2 text-sm text-muted">검색 결과 없음</li>
-              ) : (
-                filtered.map((o) => {
-                  const isSelected = selected.includes(o.normalizedName);
-                  return (
-                    <li key={o.normalizedName}>
-                      <button
-                        onClick={() => toggle(o.normalizedName)}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-background"
-                      >
-                        <input
-                          type="checkbox"
-                          readOnly
-                          checked={isSelected}
-                          className="pointer-events-none h-4 w-4 accent-primary-500"
-                        />
-                        <span
-                          className={
-                            isSelected
-                              ? "font-medium text-primary-500"
-                              : "text-foreground"
-                          }
+          {open && (
+            <div className="absolute right-0 top-full z-20 mt-2 w-64 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-white shadow-lg">
+              <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+                <Search className="h-4 w-4 text-muted" />
+                <input
+                  autoFocus
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="매체 검색..."
+                  className="w-full bg-transparent text-sm outline-none placeholder:text-muted"
+                />
+              </div>
+              <ul className="max-h-72 overflow-y-auto py-1">
+                {filtered.length === 0 ? (
+                  <li className="px-3 py-2 text-sm text-muted">검색 결과 없음</li>
+                ) : (
+                  filtered.map((o) => {
+                    const isSelected = selected.includes(o.normalizedName);
+                    return (
+                      <li key={o.normalizedName}>
+                        <button
+                          onClick={() => toggle(o.normalizedName)}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-background"
                         >
-                          {o.name}
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })
+                          <input
+                            type="checkbox"
+                            readOnly
+                            checked={isSelected}
+                            className="pointer-events-none h-4 w-4 accent-primary-500"
+                          />
+                          <span
+                            className={
+                              isSelected
+                                ? "font-medium text-primary-500"
+                                : "text-foreground"
+                            }
+                          >
+                            {o.name}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })
+                )}
+              </ul>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 선택된 매체 칩 */}
+      <div className="flex flex-wrap items-center gap-2">
+        {selected.map((id) => {
+          const isPinned = id === "segye";
+          return (
+            <span
+              key={id}
+              className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-sm font-medium ${
+                isPinned
+                  ? "border-primary-600 bg-primary-500 text-white"
+                  : "border-primary-500 bg-primary-500/10 text-primary-500"
+              }`}
+            >
+              {labelOf(id)}
+              {!isPinned && (
+                <button
+                  onClick={() => remove(id)}
+                  className="rounded-full p-0.5 hover:bg-primary-500/20"
+                  aria-label={`${labelOf(id)} 제거`}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
               )}
-            </ul>
-          </div>
-        )}
+            </span>
+          );
+        })}
       </div>
     </div>
   );

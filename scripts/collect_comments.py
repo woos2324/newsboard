@@ -187,7 +187,11 @@ async def main() -> None:
         return
 
     if metric_rows:
-        sb.table("comment_metric").insert(metric_rows).execute()
+        # 기사당 1행 유지 (upsert) — 매시간 INSERT 누적으로 인한 중복 폭증 방지.
+        # comment_metric_article_unique(article_id) 제약 기준 (마이그레이션 0033).
+        sb.table("comment_metric").upsert(
+            metric_rows, on_conflict="article_id"
+        ).execute()
 
     media_cnt = Counter(mid for _, mid, _, _ in targets)
     print(f"\n적재 완료: {len(metric_rows)}건")

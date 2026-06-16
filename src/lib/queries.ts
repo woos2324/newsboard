@@ -626,60 +626,64 @@ async function _getCompareCommentRanking(
 ): Promise<CompareCommentCard[]> {
   const sb = getSupabase();
 
-  // 표시용 매체명 (댓글 데이터 없는 매체도 헤더는 보여야 함)
+  // 표시용 매체명 + media_company_id (댓글 데이터 없는 매체도 헤더는 보여야 함)
   const { data: mediaList } = await sb
     .from("media_company")
-    .select("name, normalized_name")
+    .select("media_company_id, name, normalized_name")
     .in("normalized_name", normalizedNames);
-  const nameByNorm = new Map(
-    (mediaList ?? []).map((m) => [m.normalized_name, m.name])
+  const metaByNorm = new Map(
+    (mediaList ?? []).map((m) => [m.normalized_name, m])
   );
 
-  const { data, error } = await sb
-    .from("comment_metric")
-    .select(
-      "comment_count, article:article_id!inner(article_id, title, url, media_company:media_company_id!inner(name, normalized_name))"
-    )
-    .in("article.media_company.normalized_name", normalizedNames)
-    .gte("measured_at", new Date(Date.now() - 25 * 60 * 60_000).toISOString())
-    .order("comment_count", { ascending: false })
-    .limit(perMedia * normalizedNames.length * 10);
-  if (error) throw error;
+  const cutoff = new Date(Date.now() - 25 * 60 * 60_000).toISOString();
 
   type RawArt = {
     article_id: number;
     title: string;
     url: string | null;
-    media_company: { name: string; normalized_name: string } | null;
   };
 
-  const seenByMedia = new Map<string, Set<number>>();
-  const articlesByNorm = new Map<string, CommentRankArticle[]>();
-  for (const r of data ?? []) {
-    const art = r.article as unknown as RawArt | null;
-    const norm = art?.media_company?.normalized_name;
-    if (!norm) continue;
-    const articleId = art?.article_id ?? 0;
-    if (!articlesByNorm.has(norm)) articlesByNorm.set(norm, []);
-    if (!seenByMedia.has(norm)) seenByMedia.set(norm, new Set());
-    const list = articlesByNorm.get(norm)!;
-    const seen = seenByMedia.get(norm)!;
-    if (list.length < perMedia && !seen.has(articleId)) {
-      seen.add(articleId);
-      list.push({
-        article_id: articleId,
-        title: art?.title ?? "(기사 없음)",
-        url: art?.url ?? null,
-        comments: r.comment_count,
-      });
-    }
-  }
+  // 매체별 개별 조회 — 전역 LIMIT 고갈(고댓글 매체가 예산 독식 → 일부 매체 미표시) 방지.
+  // 매체마다 독립적으로 top N 을 보장한다.
+  const perMediaArticles = await Promise.all(
+    normalizedNames.map(async (norm) => {
+      const media = metaByNorm.get(norm);
+      if (!media) return [] as CommentRankArticle[];
+
+      const { data, error } = await sb
+        .from("comment_metric")
+        .select(
+          "comment_count, article:article_id!inner(article_id, title, url, media_company_id)"
+        )
+        .eq("article.media_company_id", media.media_company_id)
+        .gte("measured_at", cutoff)
+        .order("comment_count", { ascending: false })
+        .limit(perMedia * 30); // 0033 이전 잔존 중복행 대비 여유분
+      if (error) throw error;
+
+      const seen = new Set<number>();
+      const list: CommentRankArticle[] = [];
+      for (const r of data ?? []) {
+        if (list.length >= perMedia) break;
+        const art = r.article as unknown as RawArt | null;
+        if (!art || seen.has(art.article_id)) continue;
+        seen.add(art.article_id);
+        list.push({
+          article_id: art.article_id,
+          title: art.title ?? "(기사 없음)",
+          url: art.url ?? null,
+          comments: r.comment_count,
+        });
+      }
+      return list;
+    })
+  );
 
   // 요청 순서(세계일보 우선) 유지
-  return normalizedNames.map((norm) => ({
-    mediaName: nameByNorm.get(norm) ?? norm,
+  return normalizedNames.map((norm, i) => ({
+    mediaName: metaByNorm.get(norm)?.name ?? norm,
     normalizedName: norm,
-    articles: articlesByNorm.get(norm) ?? [],
+    articles: perMediaArticles[i],
   }));
 }
 
@@ -2010,6 +2014,7 @@ async function _getTrafficPageData(
       .from("search_keyword_daily")
       .select("rank, keyword, clicks, ratio")
       .eq("data_date", date)
+      .neq("keyword", "") // 일시적 빈 응답으로 적재된 빈 키워드 행 방어
       .order("rank", { ascending: true })
       .limit(keywordsLimit),
     sb

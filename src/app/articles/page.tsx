@@ -45,13 +45,13 @@ export default async function ArticlesPage({ searchParams }: Props) {
   return (
     <PageShell>
 
-      {/* 헤더: title + description 좌측, 날짜 네비 우측 */}
-      <div className="mb-6 flex items-start justify-between gap-4">
+      {/* 헤더: 모바일은 세로 스택, sm+ 는 title 좌측·날짜 네비 우측 */}
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">자사 기사 현황</h1>
           <p className="mt-1 text-sm text-muted">세계일보가 네이버에 발행한 기사 목록과 섹션별 현황</p>
         </div>
-        <div className="shrink-0">
+        <div className="sm:shrink-0">
           <ArticleDateNav date={date} minDate={oldestDate ?? undefined} />
         </div>
       </div>

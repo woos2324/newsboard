@@ -31,7 +31,8 @@ export default async function DraftDetailPage({ params, searchParams }: PageProp
 
   const profile = await getCurrentProfile();
   if (!profile) redirect("/login");
-  if (profile.role !== "reporter") redirect("/trending");
+  // 초안 상세는 기자 + 최고관리자만 접근
+  if (profile.role !== "reporter" && profile.role !== "superadmin") redirect("/trending");
 
   const draft = await getDraft(draftId, profile.user_id);
   if (!draft) notFound();
@@ -59,20 +60,20 @@ export default async function DraftDetailPage({ params, searchParams }: PageProp
   return (
     <div className="flex h-full flex-col">
       {/* 상단 네비 */}
-      <div className="flex items-center gap-3 border-b border-border px-6 py-3">
+      <div className="flex items-center gap-3 border-b border-border px-4 py-3 sm:px-6">
         <Link
           href={fromKeyword ? `/trending?keyword=${encodeURIComponent(fromKeyword)}` : "/trending"}
-          className="flex items-center gap-1.5 text-sm text-muted hover:text-foreground"
+          className="flex shrink-0 items-center gap-1.5 text-sm text-muted hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" />
           트렌드로 돌아가기
         </Link>
-        <span className="text-muted">/</span>
-        <span className="text-sm text-foreground">{draft.keyword}</span>
+        <span className="shrink-0 text-muted">/</span>
+        <span className="truncate text-sm text-foreground">{draft.keyword}</span>
       </div>
 
       {/* 경고 배지 */}
-      <div className="flex items-center gap-2 border-b border-warning/30 bg-amber-50/60 px-6 py-2.5">
+      <div className="flex items-center gap-2 border-b border-warning/30 bg-amber-50/60 px-4 py-2.5 sm:px-6">
         <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
         <p className="text-xs font-semibold text-amber-800">
           AI 생성 초안 · 사실관계 검증 필수 · 데스크 검수 후 발행하세요
@@ -80,11 +81,11 @@ export default async function DraftDetailPage({ params, searchParams }: PageProp
       </div>
 
       {/* 본문 영역 */}
-      <div className="flex min-h-0 flex-1 overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
         {/* 좌측: 초안 본문 */}
-        <div className="flex flex-1 flex-col overflow-y-auto px-8 py-6">
+        <div className="flex flex-1 flex-col px-4 py-5 sm:px-6 lg:overflow-y-auto lg:px-8 lg:py-6">
           <div className="mb-1 text-xs text-muted">{createdAt} · {draft.keyword}</div>
-          <h1 className="mb-6 text-2xl font-bold leading-snug tracking-tight">
+          <h1 className="mb-6 text-xl font-bold leading-snug tracking-tight sm:text-2xl">
             {draft.title || "(제목 없음)"}
           </h1>
           <div className="whitespace-pre-wrap text-base leading-loose text-foreground/90">
@@ -92,8 +93,8 @@ export default async function DraftDetailPage({ params, searchParams }: PageProp
           </div>
         </div>
 
-        {/* 우측: 팩트 패널 */}
-        <div className="w-[470px] shrink-0 overflow-y-auto border-l border-border bg-background px-5 py-6">
+        {/* 우측: 팩트 패널 — 모바일: 본문 아래 전체폭 / lg+: 우측 고정폭 */}
+        <div className="w-full shrink-0 border-t border-border bg-background px-4 py-5 sm:px-6 lg:w-[470px] lg:overflow-y-auto lg:border-l lg:border-t-0 lg:px-5 lg:py-6">
           <h2 className="mb-4 text-base font-bold text-foreground">근거 팩트</h2>
 
           {facts.length === 0 ? (

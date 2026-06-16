@@ -126,21 +126,21 @@ export function ArticleListModal({ articles: initialArticles, date }: Props) {
       </button>
 
       {open && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-6"
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-3 sm:p-6"
           onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}>
           <div className="bg-white rounded-2xl w-full max-w-[980px] max-h-[88vh] flex flex-col shadow-2xl overflow-hidden"
             role="dialog" aria-modal="true">
 
             {/* Head */}
-            <div className="px-6 pt-5 pb-4 border-b border-gray-100">
+            <div className="px-4 pt-5 pb-4 border-b border-gray-100 sm:px-6">
               <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
+                <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
                   <div>
                     <h2 className="text-lg font-bold">인기 기사 전체 {articles.length}건</h2>
                     <div className="text-xs text-gray-400 mt-0.5">{dateLabel} · 네이버 파트너센터 PV 기준</div>
                   </div>
                   {/* 디바이스 토글 */}
-                  <div className="flex border border-gray-200 rounded-lg overflow-hidden h-7">
+                  <div className="flex w-fit shrink-0 border border-gray-200 rounded-lg overflow-hidden h-7">
                     {DEVICES.map((d) => (
                       <button key={d.value} type="button" onClick={() => { setDevice(d.value); setSection("all"); }}
                         className={`px-3 text-xs font-medium transition-colors ${device === d.value ? "bg-primary-500 text-white" : "text-muted hover:bg-gray-50"}`}>
@@ -156,7 +156,7 @@ export function ArticleListModal({ articles: initialArticles, date }: Props) {
               </div>
 
               {/* 요약 */}
-              <div className="flex gap-5 mt-3 px-3.5 py-2.5 bg-gray-50 rounded-lg text-xs">
+              <div className="flex gap-3 mt-3 px-3.5 py-2.5 bg-gray-50 rounded-lg text-xs sm:gap-5">
                 <div className="flex-1"><strong className="block text-base font-bold text-gray-900">{totalPv.toLocaleString()}</strong><span className="text-gray-400">Top {articles.length} 총 PV</span></div>
                 <div className="flex-1"><strong className="block text-base font-bold text-gray-900">{avgPv.toLocaleString()}</strong><span className="text-gray-400">기사당 평균</span></div>
                 <div className="flex-1"><strong className="block text-base font-bold text-gray-900">{topPv.toLocaleString()}</strong><span className="text-gray-400">1위 PV</span></div>
@@ -175,7 +175,7 @@ export function ArticleListModal({ articles: initialArticles, date }: Props) {
             </div>
 
             {/* Controls */}
-            <div className="px-6 py-3 border-b border-gray-100 flex gap-2 items-center flex-wrap">
+            <div className="px-4 py-3 border-b border-gray-100 flex gap-2 items-center flex-wrap sm:px-6">
               <input type="search" placeholder="제목 / 기자명 검색" value={query}
                 onChange={(e) => { setQuery(e.target.value); setPage(1); }}
                 className="flex-1 min-w-[180px] h-[34px] px-3 border border-gray-200 rounded-lg text-sm outline-none focus:border-blue-500" />
@@ -202,10 +202,10 @@ export function ArticleListModal({ articles: initialArticles, date }: Props) {
                 <table className="w-full border-collapse text-sm">
                   <thead>
                     <tr>
-                      <th className="sticky top-0 bg-gray-50 z-10 text-center px-4 py-2.5 border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wide w-12">순위</th>
-                      <th className="sticky top-0 bg-gray-50 z-10 text-left px-4 py-2.5 border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wide">기사 / 기자 / 발행 시각</th>
-                      <th className="sticky top-0 bg-gray-50 z-10 text-right px-4 py-2.5 border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wide w-20">PV</th>
-                      <th className="sticky top-0 bg-gray-50 z-10 px-4 py-2.5 border-b border-gray-100 w-28">분포</th>
+                      <th className="sticky top-0 bg-gray-50 z-10 whitespace-nowrap text-center px-3 py-2.5 border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wide w-12 sm:px-4">순위</th>
+                      <th className="sticky top-0 bg-gray-50 z-10 text-left px-3 py-2.5 border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wide sm:px-4">기사 / 기자 / 발행 시각</th>
+                      <th className="sticky top-0 bg-gray-50 z-10 whitespace-nowrap text-right px-3 py-2.5 border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wide w-16 sm:px-4 sm:w-20">PV</th>
+                      <th className="sticky top-0 bg-gray-50 z-10 px-4 py-2.5 border-b border-gray-100 w-28 hidden sm:table-cell">분포</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -226,7 +226,7 @@ export function ArticleListModal({ articles: initialArticles, date }: Props) {
                           </div>
                         </td>
                         <td className="text-right px-4 py-3 border-b border-gray-50 tabular-nums font-semibold">{a.pv.toLocaleString()}</td>
-                        <td className="px-4 py-3 border-b border-gray-50">
+                        <td className="px-4 py-3 border-b border-gray-50 hidden sm:table-cell">
                           <div className="h-[5px] bg-gray-100 rounded-full overflow-hidden">
                             <div className="h-full bg-blue-700 rounded-full" style={{ width: `${topPv ? (a.pv / topPv) * 100 : 0}%` }} />
                           </div>
@@ -239,7 +239,7 @@ export function ArticleListModal({ articles: initialArticles, date }: Props) {
             </div>
 
             {/* Footer + Pager */}
-            <div className="px-6 py-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-400">
+            <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between gap-2 text-xs text-gray-400 sm:px-6">
               <span>
                 {filtered.length !== articles.length
                   ? `검색 결과 ${filtered.length}건 중 ${(page-1)*PAGE_SIZE+1}~${Math.min(page*PAGE_SIZE, filtered.length)} 표시`

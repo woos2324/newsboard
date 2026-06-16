@@ -94,7 +94,7 @@ function MiniChart({ history }: { history: { fetched_at: string; search_volume: 
 }
 
 // ---------------------------------------------------------------------------
-// 초안 작성 섹션 (reporter 전용)
+// 초안 작성 섹션 (기자 + 최고관리자). reporterId 없으면 팩트 기반(필력 없는 조건)으로 작성
 // ---------------------------------------------------------------------------
 
 type DraftStep =
@@ -307,12 +307,12 @@ interface DetailPanelProps {
   item: TrendingWithCoverage;
   history: { fetched_at: string; search_volume: number | null }[];
   onClose: () => void;
-  isReporter: boolean;
+  canWrite: boolean;
   userId: string;
   reporterId: string;
 }
 
-function DetailPanel({ item, history, onClose, isReporter, userId, reporterId }: DetailPanelProps) {
+function DetailPanel({ item, history, onClose, canWrite, userId, reporterId }: DetailPanelProps) {
   const freshness = freshnessSignal(item.started_at);
   const relatedNews = (item.related_news ?? []) as {
     title: string; url: string; source: string; published_ago?: string;
@@ -389,7 +389,7 @@ function DetailPanel({ item, history, onClose, isReporter, userId, reporterId }:
         </div>
 
         {/* 초안 작성 (reporter 전용) */}
-        {isReporter && (
+        {canWrite && (
           <DraftSection item={item} userId={userId} reporterId={reporterId} />
         )}
 
@@ -497,13 +497,13 @@ function DetailPanel({ item, history, onClose, isReporter, userId, reporterId }:
 interface TrendingClientProps {
   items: TrendingWithCoverage[];
   fetchedAt: string;
-  isReporter: boolean;
+  canWrite: boolean;
   userId: string;
   reporterId: string;
   initialKeyword?: string;
 }
 
-export function TrendingClient({ items, fetchedAt, isReporter, userId, reporterId, initialKeyword }: TrendingClientProps) {
+export function TrendingClient({ items, fetchedAt, canWrite, userId, reporterId, initialKeyword }: TrendingClientProps) {
   const [sortKey, setSortKey] = useState<SortKey>("rank");
   const [onlyMissed, setOnlyMissed] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -622,28 +622,28 @@ export function TrendingClient({ items, fetchedAt, isReporter, userId, reporterI
             <thead>
               <tr className="border-b border-border bg-background text-xs text-muted">
                 <th className="w-6 py-3" />
-                <th className="px-4 py-3 text-center font-semibold">
+                <th className="whitespace-nowrap px-3 py-3 text-center font-semibold sm:px-4">
                   <span className="flex items-center justify-center gap-1">
                     순위 <InfoTip text={TIPS.rank} />
                   </span>
                 </th>
-                <th className="px-4 py-3 text-left font-semibold">키워드</th>
-                <th className="px-4 py-3 text-right font-semibold">
+                <th className="whitespace-nowrap px-3 py-3 text-left font-semibold sm:px-4">키워드</th>
+                <th className="whitespace-nowrap px-3 py-3 text-right font-semibold sm:px-4">
                   <span className="flex items-center justify-end gap-1">
                     검색량 <InfoTip text={TIPS.volume} />
                   </span>
                 </th>
-                <th className="px-4 py-3 text-right font-semibold">
+                <th className="whitespace-nowrap px-3 py-3 text-right font-semibold sm:px-4">
                   <span className="flex items-center justify-end gap-1">
                     증가율 <InfoTip text={TIPS.growth} />
                   </span>
                 </th>
-                <th className="px-4 py-3 text-center font-semibold">
+                <th className="whitespace-nowrap px-3 py-3 text-center font-semibold sm:px-4">
                   <span className="flex items-center justify-center gap-1">
                     신선도 <InfoTip text={TIPS.freshness} />
                   </span>
                 </th>
-                <th className="px-4 py-3 text-center font-semibold">
+                <th className="whitespace-nowrap px-3 py-3 text-center font-semibold sm:px-4">
                   <span className="flex items-center justify-center gap-1">
                     보도 <InfoTip text={TIPS.coverage} />
                   </span>
@@ -664,22 +664,22 @@ export function TrendingClient({ items, fetchedAt, isReporter, userId, reporterI
                       isSelected ? "bg-blue-50" : ""
                     }`}
                   >
-                    <td className="w-6 py-4 pl-2 pr-0">
+                    <td className="w-6 py-3.5 pl-2 pr-0 sm:py-4">
                       <div className={`h-8 w-1 rounded-full ${isMissed ? "bg-error" : "bg-success"}`} />
                     </td>
-                    <td className="px-4 py-4 text-center text-sm font-bold text-muted">
+                    <td className="px-3 py-3.5 text-center text-sm font-bold text-muted sm:px-4 sm:py-4">
                       {item.traffic_rank}
                     </td>
-                    <td className="px-4 py-4 text-base font-semibold">{item.keyword}</td>
-                    <td className="px-4 py-4 text-right text-sm">{item.approx_traffic}</td>
-                    <td className={`px-4 py-4 text-right text-sm font-semibold ${isHigh ? "text-error" : ""}`}>
+                    <td className="whitespace-nowrap px-3 py-3.5 text-sm font-semibold sm:px-4 sm:py-4 sm:text-base">{item.keyword}</td>
+                    <td className="whitespace-nowrap px-3 py-3.5 text-right text-sm sm:px-4 sm:py-4">{item.approx_traffic}</td>
+                    <td className={`whitespace-nowrap px-3 py-3.5 text-right text-sm font-semibold sm:px-4 sm:py-4 ${isHigh ? "text-error" : ""}`}>
                       {formatGrowth(item.growth_rate)}
                     </td>
-                    <td className="px-4 py-4 text-center text-sm">
+                    <td className="whitespace-nowrap px-3 py-3.5 text-center text-sm sm:px-4 sm:py-4">
                       <span title={freshness.label}>{freshness.emoji}</span>{" "}
                       <span className="text-muted">{item.started_ago_text ?? "-"}</span>
                     </td>
-                    <td className="px-4 py-4 text-center">
+                    <td className="px-3 py-3.5 text-center sm:px-4 sm:py-4">
                       <span className={item.covered ? "badge badge-success" : "badge badge-error"}>
                         {item.covered ? "보도됨" : "미보도"}
                       </span>
@@ -698,14 +698,14 @@ export function TrendingClient({ items, fetchedAt, isReporter, userId, reporterI
           </table>
         </div>
 
-        {/* 우측 상세 패널 */}
+        {/* 우측 상세 패널 — 모바일: 전체화면 오버레이 / lg+: 우측 사이드 컬럼 */}
         {selectedItem && (
-          <div className="w-1/3 shrink-0 overflow-hidden rounded-xl border border-border bg-white shadow-md">
+          <div className="fixed inset-0 z-40 bg-white lg:static lg:z-auto lg:w-1/3 lg:shrink-0 lg:overflow-hidden lg:rounded-xl lg:border lg:border-border lg:shadow-md">
             <DetailPanel
               item={selectedItem}
               history={historyLoading ? [] : history}
               onClose={() => setSelectedId(null)}
-              isReporter={isReporter}
+              canWrite={canWrite}
               userId={userId}
               reporterId={reporterId}
             />

@@ -97,8 +97,8 @@ export function TrafficContent({ title, description, date, initialData, dailyCvH
 
   return (
     <div className={`transition-opacity duration-150 ${loading ? "opacity-60 pointer-events-none" : ""}`}>
-      {/* 헤더: title + description 좌측, 날짜·디바이스 우측 */}
-      <div className="mb-6 flex items-start justify-between gap-4">
+      {/* 헤더: 모바일 세로 스택, sm+ title 좌측·날짜/디바이스 우측 */}
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
@@ -114,7 +114,7 @@ export function TrafficContent({ title, description, date, initialData, dailyCvH
           </div>
           <p className="mt-1 text-sm text-muted">{description}</p>
         </div>
-        <div className="shrink-0">
+        <div className="sm:shrink-0">
           <DateDeviceSelector date={date} device={device} onDeviceChange={setDevice} />
         </div>
       </div>
@@ -126,7 +126,7 @@ export function TrafficContent({ title, description, date, initialData, dailyCvH
       ) : (
         <>
           {/* KPI Row */}
-          <div className="grid grid-cols-4 gap-4 mb-5">
+          <div className="grid grid-cols-2 gap-3 mb-5 sm:gap-4 lg:grid-cols-4">
             <div className="card">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs text-muted">총 조회수{isRealtime && <span className="text-[10px] text-red-500 ml-1">오늘 누적</span>}</p>
@@ -206,7 +206,7 @@ export function TrafficContent({ title, description, date, initialData, dailyCvH
           </div>
 
           {/* Row 1: Articles / Hourly */}
-          <div className="grid gap-4 mb-4" style={{ gridTemplateColumns: "7fr 5fr" }}>
+          <div className="grid grid-cols-1 gap-4 mb-4 lg:grid-cols-[7fr_5fr]">
             <div className="card">
               <div className="flex items-start justify-between gap-3 mb-3.5">
                 <div>
@@ -220,7 +220,7 @@ export function TrafficContent({ title, description, date, initialData, dailyCvH
                   <tr>
                     <th className="text-center text-[11px] text-muted uppercase tracking-wide font-medium pb-2 border-b border-border w-9">#</th>
                     <th className="text-left text-[11px] text-muted uppercase tracking-wide font-medium pb-2 border-b border-border px-2">기사</th>
-                    <th className="text-left text-[11px] text-muted uppercase tracking-wide font-medium pb-2 border-b border-border w-48">PV</th>
+                    <th className="text-left text-[11px] text-muted uppercase tracking-wide font-medium pb-2 border-b border-border w-28 sm:w-48">PV</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -255,7 +255,7 @@ export function TrafficContent({ title, description, date, initialData, dailyCvH
           </div>
 
           {/* Row 2: Source / Keywords */}
-          <div className="grid gap-4 mb-4" style={{ gridTemplateColumns: "5fr 7fr" }}>
+          <div className="grid grid-cols-1 gap-4 mb-4 lg:grid-cols-[5fr_7fr]">
             <div className="card">
               <div className="mb-3.5">
                 <h3 className="text-sm font-semibold">유입 경로</h3>

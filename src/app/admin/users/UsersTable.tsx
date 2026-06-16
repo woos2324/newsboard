@@ -92,7 +92,7 @@ export function UsersTable({ users }: { users: UserRow[] }) {
         </div>
       )}
       <div className="card overflow-x-auto p-0">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[720px] text-sm">
           <thead className="border-b border-border bg-background/50 text-xs text-muted">
             <tr>
               <th className="px-4 py-3 text-left font-medium">이름</th>

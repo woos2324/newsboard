@@ -142,7 +142,7 @@ export default async function DashboardPage() {
 
   return (
     <AppShell>
-      <main className="flex-1 px-6 py-6">
+      <main className="flex-1 px-4 py-5 sm:px-6 sm:py-6">
           <div className="mb-6">
             <h1 className="text-xl font-semibold tracking-tight">
               Overview Dashboard

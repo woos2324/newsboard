@@ -19,10 +19,14 @@ export default async function TrendingPage({ searchParams }: Props) {
         i.fetched_at > latest ? i.fetched_at : latest, items[0].fetched_at)
     : new Date().toISOString();
 
-  const isReporter = profile?.role === "reporter";
+  // 초안 작성 가능 역할: 기자 + 최고관리자
+  const canWrite = profile?.role === "reporter" || profile?.role === "superadmin";
   const userId = profile?.user_id ?? "";
-  // 이메일 local part = reporter_id (예: jh224@segye.com → jh224)
-  const reporterId = profile?.email?.split("@")[0] ?? "";
+  // 이메일 local part = reporter_id (예: jh224@segye.com → jh224).
+  // 기자만 문체 프로파일을 사용하고, 최고관리자는 프로파일이 없으므로
+  // 빈 값으로 넘겨 '필력 없는 조건'(팩트 기반)으로 작성한다.
+  const reporterId =
+    profile?.role === "reporter" ? profile?.email?.split("@")[0] ?? "" : "";
 
   return (
     <PageShell title="" description="">
@@ -35,7 +39,7 @@ export default async function TrendingPage({ searchParams }: Props) {
         <TrendingClient
           items={items}
           fetchedAt={fetchedAt}
-          isReporter={isReporter}
+          canWrite={canWrite}
           userId={userId}
           reporterId={reporterId}
           initialKeyword={initialKeyword}

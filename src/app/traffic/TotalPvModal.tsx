@@ -80,7 +80,7 @@ export function TotalPvModal({ initialHistory }: Props) {
 
       {open && (
         <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-6"
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-3 sm:p-6"
           onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}
         >
           <div
@@ -89,7 +89,7 @@ export function TotalPvModal({ initialHistory }: Props) {
             aria-modal="true"
           >
             {/* Head */}
-            <div className="px-6 pt-5 pb-4 border-b border-gray-100">
+            <div className="px-4 pt-5 pb-4 border-b border-gray-100 sm:px-6">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <h2 className="text-lg font-bold">조회수</h2>
@@ -122,7 +122,7 @@ export function TotalPvModal({ initialHistory }: Props) {
 
               {/* 최신 요약 */}
               {today && (
-                <div className="flex gap-4 mt-3 px-3.5 py-2.5 bg-gray-50 rounded-lg text-xs">
+                <div className="flex gap-3 mt-3 px-3.5 py-2.5 bg-gray-50 rounded-lg text-xs sm:gap-4">
                   <div className="flex-1">
                     <strong className={`block text-base font-bold ${today.total > 0 ? "text-green-600" : "text-gray-400"}`}>
                       {today.total > 0 ? today.total.toLocaleString() : "—"}
@@ -164,8 +164,8 @@ export function TotalPvModal({ initialHistory }: Props) {
             </div>
 
             {/* Body */}
-            <div className={`flex-1 overflow-y-auto px-4 transition-opacity ${loading ? "opacity-40" : ""}`}>
-              <table className="w-full border-collapse text-sm">
+            <div className={`flex-1 overflow-auto px-3 transition-opacity sm:px-4 ${loading ? "opacity-40" : ""}`}>
+              <table className="w-full min-w-[440px] border-collapse text-sm">
                 <thead>
                   <tr>
                     <th className="sticky top-0 bg-gray-50 z-10 text-center px-4 py-2.5 border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wide">
@@ -174,7 +174,7 @@ export function TotalPvModal({ initialHistory }: Props) {
                     <th className="sticky top-0 bg-gray-50 z-10 text-right px-4 py-2.5 border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wide">전체</th>
                     <th className="sticky top-0 bg-gray-50 z-10 text-right px-4 py-2.5 border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wide">PC</th>
                     <th className="sticky top-0 bg-gray-50 z-10 text-right px-4 py-2.5 border-b border-gray-100 text-[11px] font-medium text-gray-400 uppercase tracking-wide">모바일</th>
-                    <th className="sticky top-0 bg-gray-50 z-10 px-4 py-2.5 border-b border-gray-100 w-28 text-[11px] font-medium text-gray-400 uppercase tracking-wide text-left">분포</th>
+                    <th className="sticky top-0 bg-gray-50 z-10 px-4 py-2.5 border-b border-gray-100 w-28 text-[11px] font-medium text-gray-400 uppercase tracking-wide text-left hidden sm:table-cell">분포</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -186,7 +186,7 @@ export function TotalPvModal({ initialHistory }: Props) {
                     </tr>
                   ) : history.map((row, i) => (
                     <tr key={row.data_date} className={i === 0 ? "bg-green-50" : "hover:bg-gray-50"}>
-                      <td className={`text-center px-4 py-3 border-b border-gray-50 text-xs font-medium ${i === 0 ? "text-green-600" : "text-gray-500"}`}>
+                      <td className={`text-center px-4 py-3 border-b border-gray-50 text-xs font-medium whitespace-nowrap ${i === 0 ? "text-green-600" : "text-gray-500"}`}>
                         {formatRowDate(row.data_date, timeDim)}
                       </td>
                       <td className={`text-right px-4 py-3 border-b border-gray-50 tabular-nums font-semibold ${i === 0 ? "text-green-600" : "text-gray-700"}`}>
@@ -198,7 +198,7 @@ export function TotalPvModal({ initialHistory }: Props) {
                       <td className="text-right px-4 py-3 border-b border-gray-50 tabular-nums text-gray-500">
                         {fmtN(row.mobile)}
                       </td>
-                      <td className="px-4 py-3 border-b border-gray-50">
+                      <td className="px-4 py-3 border-b border-gray-50 hidden sm:table-cell">
                         <div className="h-[5px] bg-gray-100 rounded-full overflow-hidden">
                           <div
                             className="h-full rounded-full"
@@ -218,7 +218,7 @@ export function TotalPvModal({ initialHistory }: Props) {
             </div>
 
             {/* Footer */}
-            <div className="px-6 py-3 border-t border-gray-100 text-xs text-gray-400">
+            <div className="px-4 py-3 border-t border-gray-100 text-xs text-gray-400 sm:px-6">
               {history.length > 0 && (
                 <span>
                   {timeDim === "daily" ? `최근 ${history.length}일` : timeDim === "weekly" ? `최근 ${history.length}주` : `최근 ${history.length}개월`} 기준

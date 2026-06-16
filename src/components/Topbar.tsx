@@ -131,21 +131,21 @@ export function Topbar({
       : undefined;
 
   return (
-    <header className="sticky top-0 z-10 flex h-14 items-center gap-4 border-b border-border bg-white/80 px-6 backdrop-blur">
+    <header className="sticky top-0 z-10 flex h-14 items-center gap-2 border-b border-border bg-white/80 px-4 backdrop-blur sm:gap-4 sm:px-6">
       <button
         type="button"
         onClick={onMenuOpen}
         aria-label="메뉴 열기"
-        className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-white hover:bg-background lg:hidden"
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-white hover:bg-background lg:hidden"
       >
         <Menu className="h-4 w-4" />
       </button>
-      <div className="flex items-center gap-2 text-sm text-muted">
-        <Calendar className="h-4 w-4" />
-        <span>{datetime ?? ""}</span>
+      <div className="flex min-w-0 items-center gap-2 text-sm text-muted">
+        <Calendar className="h-4 w-4 shrink-0" />
+        <span className="truncate whitespace-nowrap">{datetime ?? ""}</span>
       </div>
 
-      <div className="ml-auto flex items-center gap-2">
+      <div className="ml-auto flex shrink-0 items-center gap-2">
         {isSuperadmin && pushState !== "unsupported" && (
           <button
             type="button"
@@ -167,14 +167,14 @@ export function Topbar({
             aria-expanded={menuOpen}
             className="flex h-9 items-center gap-2 rounded-lg border border-border bg-white pl-1.5 pr-2.5 hover:bg-background"
           >
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-500/10 text-[11px] font-semibold text-primary-500">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-500/10 text-[11px] font-semibold text-primary-500">
               {initials(profile.name)}
             </span>
             <span className="text-sm font-medium">{profile.name}</span>
-            <span className="text-[11px] text-muted">
+            <span className="hidden text-[11px] text-muted sm:inline">
               {ROLE_LABEL[profile.role as Role]}
             </span>
-            <ChevronDown className="h-3.5 w-3.5 text-muted" />
+            <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted" />
           </button>
 
           {menuOpen && (

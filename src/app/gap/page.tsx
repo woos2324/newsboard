@@ -70,69 +70,75 @@ export default async function GapPage() {
                   </span>
 
                   <div className="min-w-0 flex-1">
-                    {/* 제목 + 배지 */}
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-sm font-semibold">{a.title}</h3>
-                      {vConfig && (
-                        <span className={`badge ${vConfig.cls}`}>{vConfig.label}</span>
-                      )}
-                      <span className={`badge ${badge.cls}`}>{badge.label}</span>
-                    </div>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                      <div className="min-w-0 flex-1">
+                        {/* 제목 + 배지 */}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-sm font-semibold">{a.title}</h3>
+                          {vConfig && (
+                            <span className={`badge ${vConfig.cls}`}>{vConfig.label}</span>
+                          )}
+                          <span className={`badge ${badge.cls}`}>{badge.label}</span>
+                        </div>
 
-                    {/* reason */}
-                    <p className="mt-1 text-[13px] text-muted">
-                      {`경쟁사 ${a.competitors.length}개 매체 보도${isMissed ? ", 자사 미보도" : ""}`}
-                    </p>
+                        {/* reason */}
+                        <p className="mt-1 text-[13px] text-muted">
+                          {`경쟁사 ${a.competitors.length}개 매체 보도${isMissed ? ", 자사 미보도" : ""}`}
+                        </p>
 
-                    {/* 자사 유사 기사 링크 */}
-                    {a.similar_article && (
-                      <a
-                        href={a.similar_article.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-1.5 inline-flex items-center gap-1 text-[12px] font-medium text-primary-500 hover:underline"
-                      >
-                        <ExternalLink className="h-3 w-3 shrink-0" />
-                        자사 유사 기사: {a.similar_article.title.length > 35
-                          ? a.similar_article.title.slice(0, 35) + "…"
-                          : a.similar_article.title}
-                        {simPct && <span className="ml-1 font-normal">(유사도 {simPct})</span>}
-                      </a>
-                    )}
+                        {/* 자사 유사 기사 링크 */}
+                        {a.similar_article && (
+                          <a
+                            href={a.similar_article.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-1.5 inline-flex items-center gap-1 text-[12px] font-medium text-primary-500 hover:underline"
+                          >
+                            <ExternalLink className="h-3 w-3 shrink-0" />
+                            자사 유사 기사: {a.similar_article.title.length > 35
+                              ? a.similar_article.title.slice(0, 35) + "…"
+                              : a.similar_article.title}
+                            {simPct && <span className="ml-1 font-normal">(유사도 {simPct})</span>}
+                          </a>
+                        )}
 
-                    {/* 메타: 탐지 시간 + 경쟁사 링크 */}
-                    <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
-                      <span className="inline-flex items-center gap-1">
-                        <Clock className="h-3.5 w-3.5" />
-                        탐지 {a.gap_minutes}분 전
-                      </span>
-                      {a.competitors.length > 0 && (
-                        <span className="inline-flex flex-wrap items-center gap-1">
-                          <span>경쟁사:</span>
-                          {a.competitors.map((c, idx) => (
-                            <span key={c.name} className="inline-flex items-center gap-0.5">
-                              {c.url ? (
-                                <a
-                                  href={c.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-0.5 text-primary-500 hover:underline"
-                                >
-                                  {c.name}
-                                  <ExternalLink className="h-2.5 w-2.5" />
-                                </a>
-                              ) : (
-                                <span>{c.name}</span>
-                              )}
-                              {idx < a.competitors.length - 1 && <span className="text-border">,</span>}
+                        {/* 메타: 탐지 시간 + 경쟁사 링크 */}
+                        <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+                          <span className="inline-flex items-center gap-1">
+                            <Clock className="h-3.5 w-3.5" />
+                            탐지 {a.gap_minutes}분 전
+                          </span>
+                          {a.competitors.length > 0 && (
+                            <span className="inline-flex flex-wrap items-center gap-1">
+                              <span>경쟁사:</span>
+                              {a.competitors.map((c, idx) => (
+                                <span key={c.name} className="inline-flex items-center gap-0.5">
+                                  {c.url ? (
+                                    <a
+                                      href={c.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-0.5 text-primary-500 hover:underline"
+                                    >
+                                      {c.name}
+                                      <ExternalLink className="h-2.5 w-2.5" />
+                                    </a>
+                                  ) : (
+                                    <span>{c.name}</span>
+                                  )}
+                                  {idx < a.competitors.length - 1 && <span className="text-border">,</span>}
+                                </span>
+                              ))}
                             </span>
-                          ))}
-                        </span>
-                      )}
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex justify-end sm:shrink-0">
+                        <ReviewButton alertId={a.alert_id} status={a.status} />
+                      </div>
                     </div>
                   </div>
-
-                  <ReviewButton alertId={a.alert_id} status={a.status} />
                 </div>
               </article>
             );

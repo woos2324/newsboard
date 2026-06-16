@@ -118,7 +118,7 @@ export function MediaSelector({
           <div className="relative shrink-0" ref={panelRef}>
             <button
               onClick={() => setOpen((v) => !v)}
-              className="inline-flex items-center gap-1 rounded-full border border-dashed border-border bg-white px-3 py-1.5 text-sm font-medium text-muted hover:bg-background"
+              className="inline-flex items-center gap-1 rounded-full border border-primary-500 bg-primary-500 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary-600"
             >
               <Plus className="h-4 w-4" />
               매체 추가

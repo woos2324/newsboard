@@ -73,6 +73,7 @@
 - `0030` — traffic_source_daily.device 컬럼 (유입경로 device별 분리, 40차)
 - `0031` — editorial.issue_canonical (사후 LLM 병합 canonical 주제, 41차)
 - `0032` — editorial.issue_manual (편집자 수동 보정 주제, 최우선, 41차)
+- `0033` — comment_metric_article_unique UNIQUE 제약 (article_id 기준, 중복 누적 방지, 46차)
 - 마이그레이션 상세: [supabase/migrations/](supabase/migrations/)
 - 매체 51개 (naver_media_id 보유 47개) + 해외 8개 매체 코드 (foreign_sources.py: wapo/nyt/ft/scmp/guardian/wtimes/mainichi/sankei)
 
@@ -93,6 +94,56 @@
 - Sender email: `noreply@segye.com`
 - Email Template "Confirm signup" → `{{ .Token }}` 으로 OTP 6자리 발송 (10분 만료)
 - 비밀번호 정책: 8자 이상, 대소문자 + 숫자 + 특수문자
+
+## 재개 지점 (2026-06-16, 46차 세션 종료)
+
+**이번 세션 (46차) = ① 댓글 랭킹 버그 3종 수정, ② 경쟁사 비교 UI 개선, ③ 이슈 모니터링 통합. DB 마이그레이션 1건(0033).**
+
+### 1. comment_metric 중복 누적 → KBS/YTN 댓글 랭킹 데이터 없음 수정
+
+- **근본 원인**: `collect_comments.py`가 매시간 `INSERT`로 기사당 최대 ~168행 누적. `getCompareCommentRanking`이 전체 LIMIT 500으로 가져와 조선일보 등 댓글 많은 매체가 한도를 채워 KBS/YTN이 잘림(LIMIT starvation).
+- **`0033_comment_metric_dedup`** — 중복 행 삭제(125,335 → 9,337행) + `UNIQUE(article_id)` 제약 추가
+- [scripts/collect_comments.py](scripts/collect_comments.py) — `insert` → `upsert(on_conflict="article_id")` 전환
+- [src/lib/queries.ts](src/lib/queries.ts) — `_getCompareCommentRanking` 전체 LIMIT 쿼리 → `Promise.all(매체별 독립 쿼리)`로 교체
+- NCP worker `deploy_worker`로 upsert 코드 배포 완료
+
+### 2. 검색 키워드 1번 2개 표시 버그 수정
+
+- **원인**: 네이버 API가 간헐적으로 빈 키워드 행 반환 → `(data_date, keyword='')` upsert로 DB 잔존 → rank=1이 두 번 표시
+- [scripts/lib/naver_pv_json_parser.py](scripts/lib/naver_pv_json_parser.py) — `parse_search_keyword_json`: 빈 키워드 skip + rank 카운터 건너뜀
+- [src/lib/queries.ts](src/lib/queries.ts) — `search_keyword_daily` 조회 시 `.neq("keyword", "")` 필터 추가
+- 기존 빈 키워드 행 DB에서 직접 삭제 완료
+
+### 3. 경쟁사 비교 UI 개선
+
+- **매체 추가 버튼 위치 고정** ([src/app/compare/MediaSelector.tsx](src/app/compare/MediaSelector.tsx)) — 칩 행에서 제목(h1) 우측으로 이동. 칩이 늘어나도 버튼 위치 불변
+- **버튼 강조** — `bg-primary-500 text-white`(파란색) + `shadow-sm`
+- **낙관적 업데이트** — `useState<string[]>(optimistic)` + `useTransition` + `useEffect` 동기화. 체크박스/칩이 서버 왕복 없이 즉시 반영
+- **title/description** — `/compare/page.tsx`에서 PageShell 대신 MediaSelector에 직접 prop 전달
+
+### 4. 이슈 모니터링 — 이슈분석 + 미보도탐지 통합
+
+- **`getIssueBoard(date, filter)`** 신규 쿼리 ([src/lib/queries.ts](src/lib/queries.ts)): `issue_cluster` + `issue_cluster_article` + `missed_issue_alert` LEFT JOIN. 정렬: 알림 있는 것(우선순위 높은 순) → 보도함 → 기타
+- **[src/app/issue/IssueDateNav.tsx](src/app/issue/IssueDateNav.tsx)** — 7일 제한 날짜 네비게이터(`missed_issue_alert` cleanup 주기 기준)
+- **[src/app/issue/page.tsx](src/app/issue/page.tsx)** 전면 재작성 — 날짜 네비 + 필터탭(전체/미보도만/검토중) + 통합 카드. 커버리지 배지: 🔴미보도 / 🔵검토중 / ⚪유사보도있음 / 🟡확인필요 / 🟢보도함
+- **[src/app/issue/actions.ts](src/app/issue/actions.ts)** + **[IssueReviewButton.tsx](src/app/issue/IssueReviewButton.tsx)** — /gap에서 /issue로 이동, `revalidatePath('/issue')`
+- **[src/app/gap/page.tsx](src/app/gap/page.tsx)** → `/issue?filter=missed` redirect
+- **Sidebar** — "이슈 분석" + "미보도 탐지" 두 항목 → "이슈 모니터링" 하나로, `AlertTriangle` 아이콘 제거
+- **상세 페이지** — `?date=` 파라미터 전달 → 뒤로가기 시 원래 날짜 복원. 제목 하단 "클러스터 키·날짜" 표시 제거
+
+**판단 사항 (46차)**:
+1. **LIMIT starvation 해결 = 매체별 독립 쿼리** — 전체 LIMIT은 매체 간 공정성 보장 불가. `Promise.all`로 각 매체 독립 조회가 근본 해법
+2. **comment_metric UNIQUE(article_id)** — 기사당 최신 1행만 유지. 댓글 추이 분석이 필요해지면 구조 변경 필요(현재 불필요)
+3. **이슈 모니터링 날짜 7일 제한** — `cleanup_old_data.py`가 `missed_issue_alert` 7일 이전 삭제. 이슈 클러스터는 무기한이지만 알림 데이터가 없으면 커버리지 판단 불가 → 동일 7일
+4. **/gap redirect 대상 = `?filter=missed`** — 기존 미보도 탐지 목적으로 들어온 사용자가 바로 미보도 필터를 보도록
+
+### 미완료 / 다음 세션(47차) 할 일
+
+- ⚠ **opinion 배포 미완료** — opinion 모바일 반응형 변경(45차) 후 `cd opinion && vercel --prod --yes` 수동 배포 필요
+- (44차 이월) opinion 실제 ID/PW 로그인 흐름 사용자 브라우저 최종 확인
+- (기존 미완료 유지: 사설 과거 백필, `realtime_pv_tick` 7일 cleanup 미반영 등)
+
+---
 
 ## 재개 지점 (2026-06-16, 45차 세션 종료)
 

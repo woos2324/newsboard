@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Search, X } from "lucide-react";
 import type { CompareMediaOption } from "@/lib/queries";
@@ -25,6 +25,16 @@ export function MediaSelector({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const panelRef = useRef<HTMLDivElement>(null);
+
+  // 낙관적 선택 상태 — 체크/칩을 서버 왕복 없이 즉시 반영.
+  // 서버 데이터 조회(getCompareMatrix 등)는 transition 으로 백그라운드 처리.
+  const [optimistic, setOptimistic] = useState<string[]>(selected);
+  const [isPending, startTransition] = useTransition();
+
+  // 서버가 새 selected 를 내려주면 로컬 상태 동기화
+  useEffect(() => {
+    setOptimistic(selected);
+  }, [selected]);
 
   // URL 명시 선택을 localStorage 에 저장
   useEffect(() => {
@@ -77,20 +87,23 @@ export function MediaSelector({
 
   function navigate(next: string[]) {
     const ordered = ["segye", ...next.filter((s) => s !== "segye")];
-    router.push(`/compare?media=${ordered.join(",")}`);
+    setOptimistic(ordered); // 즉시 반영
+    startTransition(() => {
+      router.push(`/compare?media=${ordered.join(",")}`);
+    });
   }
 
   function remove(id: string) {
     if (id === "segye") return;
-    navigate(selected.filter((s) => s !== id));
+    navigate(optimistic.filter((s) => s !== id));
   }
 
   function toggle(id: string) {
     if (id === "segye") return;
     navigate(
-      selected.includes(id)
-        ? selected.filter((s) => s !== id)
-        : [...selected, id]
+      optimistic.includes(id)
+        ? optimistic.filter((s) => s !== id)
+        : [...optimistic, id]
     );
   }
 
@@ -141,7 +154,7 @@ export function MediaSelector({
                   <li className="px-3 py-2 text-sm text-muted">검색 결과 없음</li>
                 ) : (
                   filtered.map((o) => {
-                    const isSelected = selected.includes(o.normalizedName);
+                    const isSelected = optimistic.includes(o.normalizedName);
                     return (
                       <li key={o.normalizedName}>
                         <button
@@ -179,8 +192,12 @@ export function MediaSelector({
       </div>
 
       {/* 선택된 매체 칩 */}
-      <div className="flex flex-wrap items-center gap-2">
-        {selected.map((id) => {
+      <div
+        className={`flex flex-wrap items-center gap-2 transition-opacity ${
+          isPending ? "opacity-60" : ""
+        }`}
+      >
+        {optimistic.map((id) => {
           const isPinned = id === "segye";
           return (
             <span

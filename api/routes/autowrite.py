@@ -94,6 +94,7 @@ _DRAFT_RULES = (
     "- 원문 표현을 베끼지 말고, 사실을 기자 문체로 새로 서술하라.\n"
     "- 확인이 필요한 인용·수치는 [확인필요] 표시를 남겨라.\n"
     "- 사실 근거가 약한 문장은 쓰지 마라.\n"
+    "- 본문은 800~1000자로 작성하라. 단락은 3~5개로 구성하라.\n"
     "- 출력은 JSON만: {\"title\": \"제목\", \"content\": \"본문\"}"
 )
 
@@ -102,6 +103,7 @@ _DRAFT_RULES_NO_PROFILE = (
     "- 제공된 '사실 정보'에 없는 내용을 지어내지 마라. 추측·창작 금지.\n"
     "- 확인이 필요한 인용·수치는 [확인필요] 표시를 남겨라.\n"
     "- 역피라미드 구조로 작성하라.\n"
+    "- 본문은 800~1000자로 작성하라. 단락은 3~5개로 구성하라.\n"
     "- 출력은 JSON만: {\"title\": \"제목\", \"content\": \"본문\"}"
 )
 
@@ -116,6 +118,10 @@ def _build_facts_text(facts: list[dict]) -> str:
             lines.append(f"[사건] {d['what']}")
         if d.get("when"):
             lines.append(f"[시점] {d['when']}")
+        if d.get("where"):
+            lines.append(f"[장소] {d['where']}")
+        if d.get("who"):
+            lines.append(f"[인물] {', '.join(d['who'])}")
         if d.get("figures"):
             for fig in d["figures"]:
                 lines.append(f"[수치] {fig.get('label','')} {fig.get('value','')} (출처: {fig.get('source','')})")

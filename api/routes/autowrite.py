@@ -178,7 +178,7 @@ async def create_draft(req: DraftRequest):
         profile_json = _json.dumps(profile_row.get("profile") or {}, ensure_ascii=False)
         samples = profile_row.get("sample_articles") or []
         sample_text = "\n\n".join(
-            f"[제목] {s.get('title','')}\n{s.get('body','')}" for s in samples[:3]
+            f"[제목] {s.get('title','')}\n{s.get('body','')}" for s in samples[:6]
         )
         user = (
             f"{_DRAFT_RULES}\n\n"

@@ -37,7 +37,7 @@
 | cron-cluster | ranking 성공 직후 + UTC :30 6h fallback | 미할당 article 임베딩 클러스터링 → issue_cluster |
 | cron-gap | cluster 성공 직후 + UTC 01/07/13/19시 fallback | 클러스터 기반 미보도 탐지 → missed_issue_alert |
 | cron-publications | 10분마다 (UTC :02~:52) | 자사 전체 기사 → article + daily_publication_count |
-| cron-section-ranking | ranking 성공 직후 + UTC 02/08/14/20시 fallback | 섹션별 랭킹 → section_ranking_snapshot |
+| cron-section-ranking | 매시 7분 (UTC) — 47차 변경 (네이버 섹션 랭킹 매시간 업데이트 정합, 인기랭킹과 동일 시각) | 섹션별 랭킹 → section_ranking_snapshot |
 | cron-subscribers | UTC 23:00 (KST 08:00) | followers.json → subscriber_snapshot |
 | cron-comments | 매시 15분 (UTC) | 자사·경쟁사 댓글 수 → comment_metric |
 | cron-editorials | KST 06:00, 14:00, 22:00 (하루 3회) | 네이버 사설 수집 + AI 성향 분석 → editorial |

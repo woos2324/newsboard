@@ -19,8 +19,8 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # gap — UTC 1:00/7:00/13:00/19:00
 0 1,7,13,19 * * * root cd /app && python -m scripts.detect_gap --days 1 --min-competitors 2 >> /var/log/cron.log 2>&1
 
-# section-ranking — UTC 2:00/8:00/14:00/20:00
-0 2,8,14,20 * * * root cd /app && python -m scripts.collect_section_ranking >> /var/log/cron.log 2>&1
+# section-ranking — 매시 7분 UTC (네이버 섹션 랭킹 매시간 업데이트에 맞춤, 인기랭킹과 동일 시각)
+7 * * * * root cd /app && python -m scripts.collect_section_ranking >> /var/log/cron.log 2>&1
 
 # editorials — KST 06:00/14:00/22:00 = UTC 21:00/05:00/13:00
 # 수집 직후 merge_editorial_issues 체이닝: 그날 전체 사설을 사건 단위 canonical issue 로 재배정 (오늘의 사설 그룹 파편화 해소)

@@ -10,6 +10,6 @@ export async function GET(req: NextRequest) {
   if (!date) return NextResponse.json(null, { status: 400 });
   const data = await getTrafficPageData(date, 100, 100, device);
   return NextResponse.json(data, {
-    headers: { "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=3600" },
+    headers: { "Cache-Control": "no-store" },
   });
 }

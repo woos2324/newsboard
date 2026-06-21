@@ -33,9 +33,9 @@
 
 | 워크플로 | 트리거 | 역할 |
 |---|---|---|
-| cron-ranking | 매시 7분 (UTC) | 50개 매체 × 20건 인기 랭킹 → article + snapshot |
-| cron-cluster | ranking 성공 직후 + UTC :30 6h fallback | 미할당 article 임베딩 클러스터링 → issue_cluster |
-| cron-gap | cluster 성공 직후 + UTC 01/07/13/19시 fallback | 클러스터 기반 미보도 탐지 → missed_issue_alert |
+| cron-ranking | 매시 7분 (UTC) — 직후 cluster·gap 체이닝 (48차) | 50개 매체 × 20건 인기 랭킹 → article + snapshot |
+| cron-cluster | **매시 7분 ranking 직후 `&&` 체이닝 (48차, 기존 6시간 독립 라인 제거)** | 미할당 article(직전 4h, `--hours 4`) 임베딩 클러스터링 → issue_cluster. threshold 0.85 |
+| cron-gap | **매시 7분 cluster 직후 `&&` 체이닝 (48차)** | 클러스터 기반 미보도 탐지 → missed_issue_alert |
 | cron-publications | 10분마다 (UTC :02~:52) | 자사 전체 기사 → article + daily_publication_count |
 | cron-section-ranking | 매시 7분 (UTC) — 47차 변경 (네이버 섹션 랭킹 매시간 업데이트 정합, 인기랭킹과 동일 시각) | 섹션별 랭킹 → section_ranking_snapshot |
 | cron-subscribers | UTC 23:00 (KST 08:00) | followers.json → subscriber_snapshot |
@@ -47,7 +47,7 @@
 | **cron-naver-pv 실시간** | **10분마다 (`*/10`)** | **오늘 지표 실시간 수집 `--realtime` (/api/today: 총조회수·기사순위·유입경로 device별 + 검색키워드 + realtime_pv_tick) (40차)** |
 | **cron-foreign-editorials** | **KST 06:00/14:00/22:00 = UTC 21:00/05:00/13:00 (42차, 한국 사설과 동일)** | **해외 매체 사설 수집 + gpt-4o-mini 한국어 번역 → foreign_editorial** |
 
-**cron chain**: `ranking → cluster → gap` (매시 자동 연쇄)
+**cron chain**: `ranking → cluster → gap` (매시 7분 한 줄 `&&` 연쇄, 48차) — NCP crontab은 고정 시각만 지원하므로 GitHub Actions의 `workflow_run` 이벤트 연쇄를 `&&`로 대체. 수집 직후 즉시 클러스터링·미보도탐지 → 이슈 반영 지연 거의 0.
 
 ## DB 스키마 (마이그레이션 32건)
 
@@ -94,6 +94,47 @@
 - Sender email: `noreply@segye.com`
 - Email Template "Confirm signup" → `{{ .Token }}` 으로 OTP 6자리 발송 (10분 만료)
 - 비밀번호 정책: 8자 이상, 대소문자 + 숫자 + 특수문자
+
+## 재개 지점 (2026-06-21, 48차 세션 종료)
+
+**이번 세션 (48차) = 이슈 모니터링 "오늘 데이터 없음" 장애 진단·복구 + 클러스터링/미보도탐지 매시간 체이닝으로 구조 개선. DB 마이그레이션 없음. 변경 1파일([crontab](crontab)).**
+
+### 1. 장애 진단 — 오늘(6/21) 이슈 모니터링 데이터 0건
+
+- **증상**: `/issue` 페이지에 오늘 날짜 이슈 클러스터·미보도가 하나도 안 뜸. (어제까지는 매일 36~55개 정상)
+- **근본 원인**: **OpenAI 크레딧 소진** → `cluster_articles`의 임베딩(`embed`) 호출이 429로 실패 → 그날 클러스터 0건. crontab상 마지막 cluster 실행(UTC 00:30=KST 09:30)이 크레딧 소진 시간대에 걸려 그날 이슈가 안 만들어짐. (트렌딩 `collect_trends` 로그에도 동일 시간대 429 다발 — 같은 원인)
+- **부수 확인**: opinion 해외 논조 오늘 사설 3건 미번역도 같은 크레딧 소진 탓 → KST 14:00 `collect_foreign_editorials --all` 자동 cron이 크레딧 복구 후 번역 완료(수동 백필 불필요, DB에 title_ko·body_ko 채워진 것 확인).
+
+### 2. 복구 — 크레딧 복구 후 수동 실행 (paramiko 직접 SSH)
+
+- 사용자가 API 결제 갱신 → 워커 컨테이너에서 수동 실행: `docker exec worker-worker-1 sh -c "cd /app && python -m scripts.cluster_articles ..."` + `detect_gap`.
+- **중요 발견 — threshold 0.85가 오늘 풀에서 0개**: 크레딧 복구 **후**에도 `--threshold 0.85`로 돌리면 866건 대상 → 0개 채택(거의 다 1건짜리 후보). `--threshold 0.80`으로 낮추니 19개 클러스터 정상 생성. 즉 0개는 크레딧이 아니라 **임계값 문제**. (단 "어제까진 0.85로 잘 묶였다"는 사용자 관찰이 있어, 0.85 유지 후 모니터링하기로 결정 — 아래 판단 3)
+- detect_gap 수동 실행 → 24개 탐지(미보도 8 / 확인필요 15 / 유사보도있음 1). HIGH: 가수 옥희 별세(경쟁사 6), 6월 환율 1520원(경쟁사 4).
+
+### 3. 구조 개선 — ranking → cluster → gap 매시간 `&&` 체이닝 (커밋 후 NCP 배포 완료)
+
+- **문제**: NCP 이전(33차) 후 cluster·gap이 **6시간 주기 고정 시각**(UTC 0/6/12/18:30, 1/7/13/19:00)으로 분리 실행 → ranking은 매시간인데 클러스터링은 6시간마다라 **이슈 반영이 평균 ~3h, 최대 ~6h 지연**. 실시간 이슈 대응 목적 훼손. (GitHub Actions 시절엔 `workflow_run`으로 ranking 성공 직후 연쇄됐으나, crontab은 이벤트 트리거 미지원 → 시간 분리되며 연쇄 끊김)
+- **조치** ([crontab](crontab)): ranking 라인에 `&& cluster_articles --hours 4 --threshold 0.85 --min-size 2 && detect_gap --days 1 --min-competitors 2`를 한 줄로 체이닝. 기존 cluster·gap 독립 라인 제거. **매시 7분, 수집 직후 즉시 클러스터링·미보도탐지 → 지연 거의 0.**
+- `--hours 7→4`: 매시간 주기에 맞춰 직전 4시간 미할당 기사만 재평가(늦게 합류한 매체 커버 + 중복 임베딩 최소화). `&&`라 ranking 성공(exit 0) 시에만 cluster 실행 → 수집 실패 시 빈 데이터 클러스터링 방지.
+- detect_gap는 매시간 재실행해도 안전(멱등): `_upsert_alerts`가 `(issue_cluster_id + 자사)`당 1행만 유지(open이면 UPDATE, reviewing/resolved/ignored면 SKIP, 제목 중복도 SKIP). 화면 알림 기능은 없음(테이블 기록만, 카카오톡 알림은 향후 별도).
+- 배포: git push → GitHub Actions `Build Worker Docker Image`(1m5s) → infra-mcp `deploy_worker`(pull && up -d) → 컨테이너 `/etc/cron.d/newsboard` 반영 확인.
+
+**판단 사항 (48차)**:
+1. **이슈 반영 지연 해소 = crontab `&&` 체이닝** — NCP는 이벤트 연쇄 불가 → ranking 라인에 cluster·gap을 `&&`로 직렬 연결해 "수집 직후 즉시 클러스터링" 복원. 6시간 주기 독립 라인 제거.
+2. **`--hours 4`** — 실행 주기(매시간)보다 약간 큰 윈도우. 너무 짧으면(1~2h) 늦게 보도한 매체가 윈도우 밖으로 빠져 영영 안 묶임, 너무 길면 매시간 중복 임베딩(비용). 4시간이 균형.
+3. **threshold 0.85 유지(0.80 미채택)** — 데이터상 오늘은 0.80이어야 묶였으나, "지금까지 안 묶인 적 없다"는 사용자 관찰 + 0.80은 응집도 79%대까지 묶여 오묶음 위험 증가. 매시간 자주 돌면 평소처럼 정상화될 가능성 있어 **0.85 유지 + 며칠 모니터링**으로 결정. 0개 재발 시 0.80 재검토.
+4. **클러스터링 대상 = 인기 랭킹 기사(타 매체) + 자사 전체 발행** — `article` 테이블의 직전 4h 미할당분. 타 매체는 인기 랭킹 20건만이라 "경쟁사 N곳 보도"는 정확히는 "N곳 인기 20위 진입". 완전한 미보도 탐지는 전 매체 전체 발행 수집 필요(수집량·비용·차단 트레이드오프). **방향 결정 보류**(아래 미완료).
+
+### 미완료 / 다음 세션(49차) 할 일
+
+- ⚠ **클러스터링 threshold 0.85 모니터링** — 매시간 체이닝으로 며칠 돌려본 뒤, 0개 재발하면 0.80(또는 0.82) 재검토. cluster 로그에서 "신규 클러스터 N개" 추이 확인.
+- ⚠ **미보도 탐지 수집 범위 결정 (보류)** — 현재 타 매체는 인기 랭킹 20건만 수집 → 인기 20위 밖 보도는 사각지대. "전 매체 전체 발행 수집"으로 확장할지 미결(수집량 급증·비용·차단 위험 트레이드오프). 사용자 방향 결정 후 설계.
+- ⚠ **주간/월간 PV 수집 fallback 추가 (47차 이월, 재발 방지)** — 주간(월)·월간(1일) 수집 KST 05:00 단 1회·재시도 없음 → 장애 시간대에 걸리면 0/누락 영구 잔존.
+- ⚠ **opinion 배포 미완료 (45차 이월)** — opinion 모바일 반응형 변경 후 `cd opinion && vercel --prod --yes` 수동 배포 필요
+- (44차 이월) opinion 실제 ID/PW 로그인 흐름 사용자 브라우저 최종 확인
+- (기존 미완료 유지: 사설 과거 백필, `realtime_pv_tick` 7일 cleanup 미반영 등)
+
+---
 
 ## 재개 지점 (2026-06-18, 47차 세션 종료)
 

@@ -1,8 +1,10 @@
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-# ranking — 매시 7분 UTC
-7 * * * * root cd /app && python -m scripts.collect_ranking >> /var/log/cron.log 2>&1
+# ranking → cluster → gap 체이닝 (매시 7분 UTC) — 수집 직후 즉시 클러스터링·미보도탐지 (실시간 이슈 대응 복원)
+# NCP crontab 은 고정 시각만 지원 → ranking 성공 직후 &&로 cluster·gap 연쇄 (GitHub Actions workflow_run 연쇄 대체)
+# cluster --hours 4: 매시간 주기에 맞춰 직전 4시간 미할당 기사 재평가 (늦게 합류한 매체 커버). threshold 0.85 유지(47차→48차 모니터링)
+7 * * * * root cd /app && python -m scripts.collect_ranking >> /var/log/cron.log 2>&1 && python -m scripts.cluster_articles --hours 4 --threshold 0.85 --min-size 2 >> /var/log/cron.log 2>&1 && python -m scripts.detect_gap --days 1 --min-competitors 2 >> /var/log/cron.log 2>&1
 
 # publications — 10분마다
 2,12,22,32,42,52 * * * * root cd /app && python -m scripts.collect_publications >> /var/log/cron.log 2>&1
@@ -13,11 +15,7 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # comments — 매시 15분 UTC
 15 * * * * root cd /app && python -m scripts.collect_comments >> /var/log/cron.log 2>&1
 
-# cluster — UTC 0:30/6:30/12:30/18:30
-30 0,6,12,18 * * * root cd /app && python -m scripts.cluster_articles --hours 7 --threshold 0.85 --min-size 2 >> /var/log/cron.log 2>&1
-
-# gap — UTC 1:00/7:00/13:00/19:00
-0 1,7,13,19 * * * root cd /app && python -m scripts.detect_gap --days 1 --min-competitors 2 >> /var/log/cron.log 2>&1
+# cluster / gap 은 위 ranking 라인에 체이닝됨 (매시간) — 기존 6시간 주기 독립 라인 제거 (48차)
 
 # section-ranking — 매시 7분 UTC (네이버 섹션 랭킹 매시간 업데이트에 맞춤, 인기랭킹과 동일 시각)
 7 * * * * root cd /app && python -m scripts.collect_section_ranking >> /var/log/cron.log 2>&1

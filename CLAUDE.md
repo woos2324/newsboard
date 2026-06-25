@@ -42,7 +42,7 @@
 | cron-comments | 매시 15분 (UTC) | 자사·경쟁사 댓글 수 → comment_metric |
 | cron-editorials | KST 06:00, 14:00, 22:00 (하루 3회) | 네이버 사설 수집 + AI 성향 분석 → editorial |
 | cron-daily-briefing | UTC 15:00 (KST 00:00) | AI 일간 브리핑 → ai_summary |
-| cron-cleanup | UTC 15:00 (KST 00:00) | 7일 이전 스냅샷 삭제 |
+| cron-cleanup | UTC 15:00 (KST 00:00) | 스냅샷 삭제 (trending_keyword 1일·realtime_pv_tick 2일·나머지 7일, 49차) |
 | cron-naver-pv | UTC 20:00 (KST 05:00) 1차 + 22:00 fallback | 전일 확정 PV 수집 → 4개 테이블 |
 | **cron-naver-pv 실시간** | **10분마다 (`*/10`)** | **오늘 지표 실시간 수집 `--realtime` (/api/today: 총조회수·기사순위·유입경로 device별 + 검색키워드 + realtime_pv_tick) (40차)** |
 | **cron-foreign-editorials** | **KST 06:00/14:00/22:00 = UTC 21:00/05:00/13:00 (42차, 한국 사설과 동일)** | **해외 매체 사설 수집 + gpt-4o-mini 한국어 번역 → foreign_editorial** |
@@ -94,6 +94,52 @@
 - Sender email: `noreply@segye.com`
 - Email Template "Confirm signup" → `{{ .Token }}` 으로 OTP 6자리 발송 (10분 만료)
 - 비밀번호 정책: 8자 이상, 대소문자 + 숫자 + 특수문자
+
+## 재개 지점 (2026-06-25, 49차 세션 종료)
+
+**이번 세션 (49차) = Supabase DB 용량 위기 대응 — cleanup 보관 기간 조정. DB 마이그레이션 없음. 변경 1파일([scripts/cleanup_old_data.py](scripts/cleanup_old_data.py)).**
+
+### 1. DB 용량 95% 확인 → 테이블별 크기 분석
+
+- Supabase Free Plan 한도 0.5 GB 대비 **0.473 GB(95%)** 도달 → 쓰기 제한 위험.
+- 테이블별 크기 조회 결과: `trending_keyword` **123 MB**로 압도적 1위. 이유: 3분마다 25건 수집 × 행당 `related_queries(text[])` 등 ~3.7 KB → 1일치만으로도 ~40 MB.
+- `realtime_pv_tick`은 952 KB로 예상보다 작았음(수집 실패 기간 때문).
+
+### 2. cleanup 보관 기간 조정 ([scripts/cleanup_old_data.py](scripts/cleanup_old_data.py))
+
+| 테이블 | 변경 전 | 변경 후 |
+|---|---|---|
+| `trending_keyword` | 7일 | **1일** |
+| `realtime_pv_tick` | 미등록 | **2일** (신규 추가) |
+| 나머지 5개 테이블 | 7일 | 7일 (유지) |
+
+- `realtime_pv_tick` 컬럼명 확인: `captured_at` (collected_at 아님)
+- SQL로 즉시 정리: `trending_keyword` KST 6/25 이전 전량 삭제 (6/22~6/24 약 26,000행)
+- git push → GitHub Actions 빌드(55초) → NCP `deploy_worker` 배포 완료
+
+### 3. 발견 — trending_keyword 3~7일치 데이터 공백
+
+- 48차(2026-06-21) OpenAI 크레딧 소진 + 컨테이너 재시작 겹침 → `collect_trends.py` AI 호출 429로 수집 실패 → 6/22 이전 데이터 공백. cleanup 7일 기준으로도 실제 데이터가 3일치 밖에 없었던 것. 우리 DELETE가 추가로 삭제할 것이 적었던 이유.
+
+### 4. 용량 변화
+
+- 작업 전: **473 MB (95%)** → 작업 후(즉시 SQL 정리): **414 MB (80.8%)**
+- autovacuum 처리 후 최종 예상: **350 MB대 (70% 내외)**
+
+**판단 사항 (49차)**:
+1. **trending_keyword 1일 보관** — 트렌드 화면은 "지금 급상승"이 목적. 어제 데이터는 참고 가치 낮음. 1일이 적정. (3분 주기 수집이라 용량 최다 테이블)
+2. **realtime_pv_tick 2일 보관** — 전날 KST 05:00 확정 수집이 `hourly_pv_snapshot`을 채우면 tick은 불필요. 2일은 확정 수집 실패 시 여유 포함.
+3. **기타 PV 테이블(article_pv_snapshot 등) cleanup 제외** — 날짜별 히스토리 분석 근거 데이터. 보관 기간 제한 부적합.
+
+### 미완료 / 다음 세션(50차) 할 일
+
+- ⚠ **클러스터링 threshold 0.85 모니터링** (48차 이월) — 매시간 체이닝으로 며칠 돌려본 뒤 0개 재발하면 0.80 재검토
+- ⚠ **주간/월간 PV 수집 fallback 추가** (47차 이월)
+- ⚠ **opinion 배포 미완료** (45차 이월) — `cd opinion && vercel --prod --yes`
+- (44차 이월) opinion 실제 ID/PW 로그인 흐름 사용자 브라우저 최종 확인
+- (기존 미완료 유지: 사설 과거 백필, `realtime_pv_tick` 등)
+
+---
 
 ## 재개 지점 (2026-06-21, 48차 세션 종료)
 

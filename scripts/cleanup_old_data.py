@@ -5,7 +5,7 @@
   - section_ranking_snapshot: 7일
   - comment_metric: 7일
   - missed_issue_alert (reviewing 제외, open/resolved/ignored): 7일
-  - trending_keyword: 3일
+  - trending_keyword: 1일
   - realtime_pv_tick: 2일
 
 사용:
@@ -36,10 +36,10 @@ def main() -> None:
     now = datetime.now(timezone.utc)
     cutoff_7d = (now - timedelta(days=7)).isoformat()
     cutoff_7d_date = (now - timedelta(days=7)).date().isoformat()
-    cutoff_3d = (now - timedelta(days=3)).isoformat()
+    cutoff_1d = (now - timedelta(days=1)).isoformat()
     cutoff_2d = (now - timedelta(days=2)).isoformat()
 
-    print(f"기준일: 7일={cutoff_7d[:10]}, 3일={cutoff_3d[:10]}, 2일={cutoff_2d[:10]}")
+    print(f"기준일: 7일={cutoff_7d[:10]}, 1일={cutoff_1d[:10]}, 2일={cutoff_2d[:10]}")
 
     if args.dry_run:
         print("[dry-run] 실제 삭제 생략")
@@ -84,14 +84,14 @@ def main() -> None:
     )
     print(f"missed_issue_alert 삭제: {len(res.data)}건 (reviewing 제외)")
 
-    # 5. trending_keyword: 3일 보관 (3분 주기 수집, 용량 최다 테이블)
+    # 5. trending_keyword: 1일 보관 (3분 주기 수집, 용량 최다 테이블)
     res = (
         sb.table("trending_keyword")
         .delete()
-        .lt("fetched_at", cutoff_3d)
+        .lt("fetched_at", cutoff_1d)
         .execute()
     )
-    print(f"trending_keyword 삭제: {len(res.data)}건 (3일 보관)")
+    print(f"trending_keyword 삭제: {len(res.data)}건 (1일 보관)")
 
     # 6. realtime_pv_tick: 2일 보관 (전일 확정 PV 수집 후 불필요)
     res = (

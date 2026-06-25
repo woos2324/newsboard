@@ -1,15 +1,15 @@
-"""7일 이전 스냅샷 데이터 정리.
+"""스냅샷 데이터 정리.
 
-대상 테이블:
-  - ranking_news_snapshot (→ ranking_news_item CASCADE)
-  - section_ranking_snapshot
-  - comment_metric
-  - missed_issue_alert (reviewing 제외, open/resolved/ignored)
-  - trending_keyword
+대상 테이블 (보존 기간):
+  - ranking_news_snapshot (→ ranking_news_item CASCADE): 7일
+  - section_ranking_snapshot: 7일
+  - comment_metric: 7일
+  - missed_issue_alert (reviewing 제외, open/resolved/ignored): 7일
+  - trending_keyword: 3일
+  - realtime_pv_tick: 2일
 
 사용:
   python -m scripts.cleanup_old_data
-  python -m scripts.cleanup_old_data --days 7
   python -m scripts.cleanup_old_data --dry-run
 """
 from __future__ import annotations
@@ -30,14 +30,16 @@ from scripts.lib.db import get_client
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--days", type=int, default=7, help="보존 기간 (일)")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=args.days)).isoformat()
-    cutoff_date = (datetime.now(timezone.utc) - timedelta(days=args.days)).date().isoformat()
+    now = datetime.now(timezone.utc)
+    cutoff_7d = (now - timedelta(days=7)).isoformat()
+    cutoff_7d_date = (now - timedelta(days=7)).date().isoformat()
+    cutoff_3d = (now - timedelta(days=3)).isoformat()
+    cutoff_2d = (now - timedelta(days=2)).isoformat()
 
-    print(f"기준일: {cutoff} ({args.days}일 이전 데이터 삭제)")
+    print(f"기준일: 7일={cutoff_7d[:10]}, 3일={cutoff_3d[:10]}, 2일={cutoff_2d[:10]}")
 
     if args.dry_run:
         print("[dry-run] 실제 삭제 생략")
@@ -49,7 +51,7 @@ def main() -> None:
     res = (
         sb.table("ranking_news_snapshot")
         .delete()
-        .lt("created_at", cutoff)
+        .lt("created_at", cutoff_7d)
         .execute()
     )
     print(f"ranking_news_snapshot 삭제: {len(res.data)}건 (ranking_news_item CASCADE)")
@@ -58,7 +60,7 @@ def main() -> None:
     res = (
         sb.table("section_ranking_snapshot")
         .delete()
-        .lt("ranking_date", cutoff_date)
+        .lt("ranking_date", cutoff_7d_date)
         .execute()
     )
     print(f"section_ranking_snapshot 삭제: {len(res.data)}건")
@@ -67,7 +69,7 @@ def main() -> None:
     res = (
         sb.table("comment_metric")
         .delete()
-        .lt("created_at", cutoff)
+        .lt("created_at", cutoff_7d)
         .execute()
     )
     print(f"comment_metric 삭제: {len(res.data)}건")
@@ -76,20 +78,29 @@ def main() -> None:
     res = (
         sb.table("missed_issue_alert")
         .delete()
-        .lt("detected_at", cutoff)
+        .lt("detected_at", cutoff_7d)
         .in_("alert_status", ["open", "resolved", "ignored"])
         .execute()
     )
     print(f"missed_issue_alert 삭제: {len(res.data)}건 (reviewing 제외)")
 
-    # 5. trending_keyword
+    # 5. trending_keyword: 3일 보관 (3분 주기 수집, 용량 최다 테이블)
     res = (
         sb.table("trending_keyword")
         .delete()
-        .lt("fetched_at", cutoff)
+        .lt("fetched_at", cutoff_3d)
         .execute()
     )
-    print(f"trending_keyword 삭제: {len(res.data)}건")
+    print(f"trending_keyword 삭제: {len(res.data)}건 (3일 보관)")
+
+    # 6. realtime_pv_tick: 2일 보관 (전일 확정 PV 수집 후 불필요)
+    res = (
+        sb.table("realtime_pv_tick")
+        .delete()
+        .lt("captured_at", cutoff_2d)
+        .execute()
+    )
+    print(f"realtime_pv_tick 삭제: {len(res.data)}건 (2일 보관)")
 
     print("정리 완료")
 

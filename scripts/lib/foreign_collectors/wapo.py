@@ -25,6 +25,7 @@ from scripts.lib.foreign_collectors.playwright_base import load_cookies
 
 RSS_URL = "https://feeds.washingtonpost.com/rss/opinions"
 _PAYWALL_KW = ["subscribe to continue", "sign in to read", "get unlimited access"]
+_SKIP_URL_PATTERNS = ["/podcasts/", "/video/", "/live-updates/"]
 
 HEADERS = {
     "User-Agent": (
@@ -49,6 +50,8 @@ def _parse_rss(xml_text: str) -> list[dict]:
         title = (item.findtext("title") or "").strip()
         pub_raw = (item.findtext("pubDate") or "").strip()
         if not url or not title or url in seen:
+            continue
+        if any(p in url for p in _SKIP_URL_PATTERNS):
             continue
         seen.add(url)
         published_at = None

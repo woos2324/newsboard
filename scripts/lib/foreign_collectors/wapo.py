@@ -1,8 +1,10 @@
-"""워싱턴포스트 사설 수집기 (httpx, RSS + __NEXT_DATA__).
+"""워싱턴포스트 사설 수집기 (curl_cffi, RSS + __NEXT_DATA__).
 
-Playwright는 www.washingtonpost.com HTTP/2 차단으로 불가 — httpx로 대체.
+Playwright는 www.washingtonpost.com HTTP/2 차단으로 불가.
+httpx는 Akamai TLS 핑거프린트 감지로 타임아웃 차단.
+curl_cffi로 Chrome TLS 핑거프린트 위장 → Akamai 우회.
 인덱스: feeds.washingtonpost.com/rss/opinions (Cloudflare 우회)
-본문:   washingtonpost.com 기사 페이지 __NEXT_DATA__ JSON (구독 쿠키 필요)
+본문:   washingtonpost.com 기사 페이지 __NEXT_DATA__ JSON
 쿠키 캐시: foreign_session 테이블 (TTL 30일, --seed-cookies wapo 로 갱신)
 """
 from __future__ import annotations
@@ -15,6 +17,7 @@ import xml.etree.ElementTree as ET
 from typing import Optional
 
 import httpx
+from curl_cffi import requests as cffi_requests
 from email.utils import parsedate_to_datetime
 
 from scripts.lib.foreign_collectors.base import ForeignEditorialItem
@@ -111,12 +114,14 @@ async def collect(limit: int = 10, supabase=None) -> list[ForeignEditorialItem]:
     if cookie_header:
         h["Cookie"] = cookie_header
 
-    # 기사 수집 — httpx 동기 Client를 스레드에서 실행 (async ReadTimeout 우회)
+    # 기사 수집 — curl_cffi로 Chrome TLS 핑거프린트 위장 (Akamai 우회)
     def _fetch_article(url: str) -> Optional[str]:
         try:
-            with httpx.Client(follow_redirects=True, timeout=30) as c:
-                r = c.get(url, headers=h)
-                return r.text if r.status_code == 200 else None
+            r = cffi_requests.get(
+                url, headers=h, cookies={c["name"]: c["value"] for c in (cookies or [])},
+                impersonate="chrome124", timeout=30, allow_redirects=True,
+            )
+            return r.text if r.status_code == 200 else None
         except Exception as e:
             print(f"  [wapo] fetch 오류 {url[:60]}: {e}", file=sys.stderr)
             return None

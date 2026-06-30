@@ -141,6 +141,94 @@
 
 ---
 
+## 재개 지점 (2026-06-30, 51차 세션 종료)
+
+**이번 세션 (51차) = NCP worker 좀비 프로세스 발견·수정. DB 마이그레이션 없음. 변경 1파일([worker/docker-compose.yml](worker/docker-compose.yml)).**
+
+### 1. 좀비 프로세스 4,069개 발견
+
+- `docker exec worker-worker-1 ps -eo stat`로 확인: 컨테이너 전체 프로세스 4,072개 중 **4,069개가 `headless_shell <defunct>`** 좀비.
+- **원인**: `entrypoint.sh`의 `exec tail -f /var/log/cron.log`가 PID 1이 됨. `tail`은 고아(orphan) 프로세스를 수거(`wait()`)하지 않음 → chromium이 종료돼도 프로세스 테이블에 좀비로 잔존.
+- `collect_trends.py`가 3분마다 chromium(headless_shell)을 띄우면서 매 실행마다 좀비 2개씩 누적 → 약 4일 만에 4,069개.
+- PID 테이블이 꽉 차면 cron 자체가 새 프로세스를 fork 못 해 **전체 수집 장애** 예정이었음.
+- 진단 명령: `docker exec worker-worker-1 ps -eo pid,ppid,stat,comm --no-header | grep " Z"` / `ps aux | grep defunct`
+
+### 2. 수정 — `init: true` 추가 ([worker/docker-compose.yml](worker/docker-compose.yml))
+
+- Docker의 `init: true` 옵션 → `tini`(경량 init)를 PID 1로 자동 주입. `tini`는 고아 프로세스가 입양되면 즉시 `wait()` 호출 → 좀비 즉시 수거.
+- NCP 서버 `/home/segyecom/worker/docker-compose.yml` 직접 패치(paramiko SSH) + `docker compose up -d` 재시작.
+- 재시작 후: PID 1 = `docker-init`, 좀비 0개 확인. git push 완료 (커밋 `4b8f42f`).
+
+**판단 사항 (51차)**:
+1. **`init: true` 채택** — Dockerfile 수정(이미지 재빌드) 없이 docker-compose.yml 한 줄로 해결. Docker 내장 tini 재사용. Playwright 패턴(`with sync_playwright()`) 자체는 정상이며 PID 1 문제가 근본 원인.
+
+### 미완료 / 다음 세션(52차) 할 일
+
+- ⚠ **클러스터링 threshold 0.85 모니터링** (48차 이월)
+- ⚠ **주간/월간 PV 수집 fallback 추가** (47차 이월)
+- ⚠ **opinion 배포 미완료** (45차 이월) — `cd opinion && vercel --prod --yes`
+- (44차 이월) opinion 실제 ID/PW 로그인 흐름 사용자 브라우저 최종 확인
+
+---
+
+## 재개 지점 (2026-06-26, 50차 세션 종료)
+
+**이번 세션 (50차) = WaPo 수집 차단 원인 규명·수정 + 쿠키 갱신. DB 마이그레이션 없음. 변경 2파일([scripts/lib/foreign_collectors/wapo.py](scripts/lib/foreign_collectors/wapo.py), [requirements.txt](requirements.txt)).**
+
+### 1. 기술 스택 확인 — 네이버·해외 매체 로그인 메커니즘
+
+- **네이버 파트너센터**: Playwright 로그인 → `naver_session` 테이블 쿠키 캐시(TTL 14일). 만료 시 302 리다이렉트 → 44차에서 자동 재로그인(302 감지) 구현 완료.
+- **해외 매체 구독 매체(NYT/FT/SCMP)**: Playwright 로그인 → `foreign_session` 테이블 쿠키 캐시(TTL 30일). `playwright_base.py` 공통 기반.
+- **WaPo**: RSS + httpx + `__NEXT_DATA__` JSON 본문 추출 방식. 로그인 불필요(공개 기사) — 쿠키는 페이월 해제 보험용.
+
+### 2. WaPo 쿠키 만료 확인 → 갱신 완료
+
+- 기존 쿠키 만료: 2026-06-27(~1.25일 남음). 갱신 필요.
+- 사용자가 브라우저 로그인 후 EditThisCookie 확장으로 새 JSON(42개 쿠키) 추출 → `wapo_cookies.json` 교체.
+- `--seed-cookies wapo --cookies-file wapo_cookies.json` 으로 DB 적재. 새 만료: **2026-07-26**.
+
+### 3. 근본 원인 발견 — Akamai TLS 핑거프린트 감지 (httpx 차단)
+
+- WaPo 기사 본문 수집이 33차 쿠키 시딩 이후에도 **단 한 건도** 저장된 적 없었음 (DB 레코드 0건).
+- `--source wapo` 테스트 실행 시 10건 전부 `The read operation timed out` — 403 아님, 타임아웃.
+- **원인**: httpx의 Python TLS 핑거프린트가 Akamai 봇 매니저에 감지 → 응답 없이 무한 대기. 페이월 문제 아님(사용자가 비로그인 상태에서 기사 전문 확인). `_abck` 쿠키가 Akamai 봇 관리 쿠키.
+
+### 4. 수정 — httpx → curl_cffi (Chrome TLS 위장)
+
+- [scripts/lib/foreign_collectors/wapo.py](scripts/lib/foreign_collectors/wapo.py) — `_fetch_article()` 함수를 httpx → **curl_cffi** `impersonate="chrome124"` 로 교체.
+  - RSS 수집(feeds.washingtonpost.com)은 Cloudflare CDN이라 httpx 그대로 유지.
+  - 기사 본문 수집(www.washingtonpost.com)만 curl_cffi 사용.
+- [requirements.txt](requirements.txt) — `curl-cffi>=0.7` 추가.
+- 결과: 10건 중 9건 본문 수집 성공(2,905~8,000자), 1건은 팟캐스트(body=0).
+
+### 5. 팟캐스트/영상 URL 필터 추가
+
+- WaPo RSS에 팟캐스트·영상·라이브 업데이트 형식 콘텐츠가 섞임 → 본문 없이 저장되는 문제.
+- [wapo.py](scripts/lib/foreign_collectors/wapo.py) `_parse_rss()` 에 `_SKIP_URL_PATTERNS = ["/podcasts/", "/video/", "/live-updates/"]` 필터 추가 → RSS 파싱 단계에서 제외.
+- 이미 저장된 팟캐스트 기사(foreign_editorial_id: 3295) DB에서 삭제 완료.
+
+### 6. NCP 배포 완료 (2회)
+
+- 1차 커밋(`525f925`): curl_cffi + requirements.txt
+- 2차 커밋(`d8c9b42`): 팟캐스트 URL 필터 + wapo.py 모듈 docstring 업데이트
+- GitHub Actions 이미지 빌드 → infra-mcp `deploy_worker` → **WaPo 10건 수집·번역·저장 확인**
+
+**판단 사항 (50차)**:
+1. **Akamai = TLS 핑거프린트 차단** — 403·연결거부가 아니라 타임아웃. httpx의 Python TLS ClientHello가 Akamai에 식별됨. curl_cffi `impersonate="chrome124"`가 Chrome 실제 TLS 스택을 재현 → 완전 우회.
+2. **RSS 수집은 httpx 유지** — `feeds.washingtonpost.com`은 Cloudflare CDN이라 TLS 감지 없음. 변경 불필요.
+3. **WaPo 로그인 불필요 확정** — 공개 기사는 비로그인으로 전문 접근 가능. 쿠키는 혹시 모를 페이월 우회용 보험.
+4. **팟캐스트 필터 = RSS 단계에서** — 본문 수집 후 필터링보다 URL 패턴으로 미리 제외하는 게 효율적(불필요한 HTTP 요청 차단).
+
+### 미완료 / 다음 세션(51차) 할 일
+
+- ⚠ **클러스터링 threshold 0.85 모니터링** (48차 이월)
+- ⚠ **주간/월간 PV 수집 fallback 추가** (47차 이월)
+- ⚠ **opinion 배포 미완료** (45차 이월) — `cd opinion && vercel --prod --yes`
+- (44차 이월) opinion 실제 ID/PW 로그인 흐름 사용자 브라우저 최종 확인
+- (기존 미완료 유지: 사설 과거 백필 등)
+
+---
+
 ## 재개 지점 (2026-06-21, 48차 세션 종료)
 
 **이번 세션 (48차) = 이슈 모니터링 "오늘 데이터 없음" 장애 진단·복구 + 클러스터링/미보도탐지 매시간 체이닝으로 구조 개선. DB 마이그레이션 없음. 변경 1파일([crontab](crontab)).**

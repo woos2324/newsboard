@@ -95,6 +95,62 @@
 - Email Template "Confirm signup" → `{{ .Token }}` 으로 OTP 6자리 발송 (10분 만료)
 - 비밀번호 정책: 8자 이상, 대소문자 + 숫자 + 특수문자
 
+## 재개 지점 (2026-07-01, 52차 세션 종료)
+
+**이번 세션 (52차) = opinion 사설 검색 개선(전용 페이지+페이징) + 상세 모달 인쇄 기능 + 2023년 사설 백필(월 단위 진행 중). DB 마이그레이션 없음.**
+
+### 1. opinion 사설 검색 전면 개선 (커밋 `542aae6`, opinion 배포 완료)
+
+- **문제**: 검색 드롭다운이 `limit 10` 최신순이라 오래된 매칭 기사(예: 2025-02-03 매일경제 "딥시크")가 안 뜸. "딥시크" 매칭 33건 중 상위 10건만 노출.
+- **`/search` 전용 검색 결과 페이지 신설** ([opinion/src/app/search/page.tsx](opinion/src/app/search/page.tsx)) — 전체 결과 20건씩 페이징. 서버 컴포넌트에서 조회 + 페이지네이션.
+  - [queries.ts](opinion/src/lib/queries.ts) `searchEditorialsPaged` / [foreign-queries.ts](opinion/src/lib/foreign-queries.ts) `searchForeignEditorialsPaged` 추가 (`count: 'exact'` + `.range()`)
+- **SearchBar 단순화** ([opinion/src/components/SearchBar.tsx](opinion/src/components/SearchBar.tsx)) — 드롭다운/자동완성/개별항목 클릭 **전부 제거**. Enter·검색아이콘 클릭 시 `/search`로 이동만. → 타이핑당 DB 조회 사라져 성능 개선.
+- **검색 결과 인페이지 모달** ([opinion/src/components/SearchResultsList.tsx](opinion/src/components/SearchResultsList.tsx), 신규 클라이언트 컴포넌트) — 결과 클릭 시 오늘의 사설/해외 논조 페이지로 **이동하지 않고 그 자리에서 모달**. 본문은 `getEditorialById`/`getForeignEditorialById`로 지연 조회. `relatedEditorials=[]`(추가 조회 회피).
+
+### 2. 사설 상세 모달 인쇄 기능 (커밋 `2efd770`, `7aa8e3c`, opinion 배포 완료)
+
+- 국내([EditorialModal.tsx](opinion/src/components/EditorialModal.tsx))·해외([ForeignEditorialModal.tsx](opinion/src/components/ForeignEditorialModal.tsx)) 상세 모달 헤더에 🖨 인쇄 버튼. **매체·날짜·제목·본문만** 인쇄(요약·성향·같은주제 제외). 해외는 현재 선택 탭(한/원문) 기준.
+- **인쇄 방식 3차 반복 끝에 숨은 iframe으로 확정** ([opinion/src/lib/print.ts](opinion/src/lib/print.ts) `printEditorial`):
+  - ① globals.css `.print-area`(position:absolute) 방식 → **긴 본문이 첫 페이지 초과분 잘림**(절대위치는 인쇄 페이지 분할 불가, "1/1"). ② `window.open` 새 창 → **팝업 차단**에 걸림. ③ **숨은 iframe에 인쇄용 HTML 렌더 후 iframe.print()** → 팝업 안 걸리고 정상 흐름이라 긴 본문 자동 페이지 분할. globals.css 미변경(CompareClient 인쇄 영향 없음).
+- **`normalizeBody()`** (print.ts) — 수집 본문의 연속 빈 줄을 1개로 축약(부제-본문 사이 큰 간격 해소, 원인=네이버 수집 본문에 `⏎⏎ ⏎⏎⏎⏎` 포함). 화면 모달·인쇄 공통 적용, 부제 구분용 단일 개행은 보존. 인쇄 폰트 매체16/제목22/본문17.
+
+### 3. 과거 사설 백필 현황 확인 + 2023년 백필 (진행 중)
+
+- **기존 백필 확인**: 국내 사설(자사 세계일보 포함)은 이미 **2025-01-01 ~ 현재** 끊김 없이 존재(월 ~85건, 발행일 기준 자연 결손만). CLAUDE.md 로드맵의 "사설 3월 백필" 미완료 항목은 **사실상 완료**. (해외 `foreign_editorial` first_day 2018-01-12는 1건 파싱오류 의심)
+- **2023년 백필 착수** — `scripts.collect_editorials_data_backfill` (데이터만, AI 분석 없음, 하루씩 순회).
+  - ⚠ **크래시 1회**: `httpx.RemoteProtocolError: ConnectionTerminated`(네이버 HTTP/2 연결 종료, `last_stream_id:19999`≈1만 요청). **DB 용량 아님, 네트워크**. 스크립트 멱등(기존 URL skip)이라 마지막 적재일부터 재개.
+  - **월 단위로 전환** — 사용자 요청: 한 달 돌리고 **완료 시 보고·정지, 다음 달 자동 진행 안 함**.
+  - **진척: 2023-01 ~ 2023-10-31 완료** (약 9,800건). **남음: 2023-11 · 2023-12** (다음 세션).
+  - 실행: 로컬 `python -B -m scripts.collect_editorials_data_backfill --date-from 20231101 --date-to 20231130` (한국 IP라 로컬 유리).
+
+### 4. Supabase 용량 / Pro 업그레이드 안내 (미결정)
+
+- Free 0.5GB 한도 근접(논리 392MB=76.6%, 대시보드 디스크 지표는 백필 WAL로 ~424MB=85% 관측 — 백필 종료·WAL 정리 후 하락).
+- **용량 늘리려면 Pro($25/월, 8GB)가 유일** (Free는 0.5GB 고정).
+- **Pro는 조직(Organization) 단위** — newsboard는 **`woos2324's` 조직**에 있음(다른 조직 `segyeproject`는 무관). `woos2324's` 조직만 Upgrade to Pro 하면 newsboard 8GB, 나머지 무료 유지. **결정 대기.**
+
+### 5. NCP DB 이전 논의 (정보만, 실행 안 함)
+
+- Supabase→NCP 이전 시: **A안**(NCP에 Supabase 스택 셀프호스팅 = 코드 최소 수정, supabase-js/Auth 유지) vs **B안**(raw `pg` 전환 = `queries.ts` 62곳 + Python/FastAPI + Auth 9파일 전면 재작성, RLS 제거). **pgvector 미사용 확인**(임베딩은 Python 메모리). 내부망 DB라 **웹도 함께 이전 필요**.
+- 판단: 용량만이 목적이면 Pro가 압도적으로 저렴·안전. NCP는 "사내 데이터 내재화" 목적일 때.
+
+**판단 사항 (52차)**:
+1. **검색 = 전용 페이지 페이징** — 드롭다운 내 페이징은 화면이 좁아 부적합. 자동완성 제거로 타이핑당 쿼리 0(성능 개선 겸).
+2. **검색 결과 인페이지 모달** — `relatedEditorials=[]`로 "같은 주제 타사" 생략(검색 맥락엔 불필요 + 추가 조회 회피).
+3. **인쇄 = 숨은 iframe** — 절대위치(잘림)·새창(팝업차단)의 두 함정을 모두 회피. globals.css 미변경으로 비교 보고서 인쇄 무영향.
+4. **본문 빈 줄 = 데이터 문제** — `normalizeBody`로 렌더 시 축약(원본 DB는 안 건드림).
+5. **과거 백필 = 월 단위 + 각 달 후 정지** — HTTP/2 크래시 복원력 + 용량 모니터링. AI 분석 없이 데이터만(28차 방침 유지).
+6. **Pro는 조직 단위** — `woos2324's`만 업그레이드하면 됨.
+
+### 미완료 / 다음 세션(53차) 할 일
+
+- ⚠ **2023 백필 11·12월** — 월 단위로 이어서(각 달 완료 후 보고·정지). 남은 2개월.
+- ⚠ **Supabase Pro 업그레이드 결정** — `woos2324's` 조직. 계속 과거(2022↓) 백필하려면 사실상 필요.
+- (선택) 인쇄/검색 프로덕션 최종 확인
+- (기존 이월) 클러스터링 threshold 0.85 모니터링 / 주간·월간 PV fallback / opinion 배포 미완료 항목 등
+
+---
+
 ## 재개 지점 (2026-06-25, 49차 세션 종료)
 
 **이번 세션 (49차) = Supabase DB 용량 위기 대응 — cleanup 보관 기간 조정. DB 마이그레이션 없음. 변경 1파일([scripts/cleanup_old_data.py](scripts/cleanup_old_data.py)).**

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { X, ExternalLink, Languages } from 'lucide-react'
+import { X, ExternalLink, Languages, Printer } from 'lucide-react'
 import { ForeignEditorial, getForeignSourceMeta } from '@/lib/foreign-queries'
 
 const COUNTRY_FLAG: Record<string, string> = {
@@ -41,6 +41,19 @@ export default function ForeignEditorialModal({
       className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
+      {/* 인쇄 전용 (매체·날짜·제목·본문만 — 현재 선택된 탭 기준) */}
+      <div className="print-area print-only">
+        <div style={{ fontSize: '16px', color: '#555', marginBottom: '6px' }}>
+          {flag} {meta.name_ko} · {formatDate(item.published_at)}
+        </div>
+        <h2 style={{ fontSize: '22px', fontWeight: 700, lineHeight: 1.4, marginBottom: '14px' }}>
+          {tab === 'ko' ? titleKo : titleOrig}
+        </h2>
+        <div style={{ fontSize: '17px', lineHeight: 1.75, whiteSpace: 'pre-line' }}>
+          {tab === 'ko' ? bodyKo : bodyOrig}
+        </div>
+      </div>
+
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
 
         {/* 헤더 */}
@@ -62,9 +75,14 @@ export default function ForeignEditorialModal({
               <p className="text-xs text-gray-400 mt-1 truncate">원문: {titleOrig}</p>
             )}
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 ml-4 flex-shrink-0 mt-0.5">
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-1 ml-4 flex-shrink-0 mt-0.5 no-print">
+            <button onClick={() => window.print()} className="text-gray-400 hover:text-blue-600" title="인쇄" aria-label="인쇄">
+              <Printer className="w-5 h-5" />
+            </button>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="닫기">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* 탭 */}

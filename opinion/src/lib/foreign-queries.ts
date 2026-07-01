@@ -96,6 +96,27 @@ export async function searchForeignEditorials(keyword: string, limit = 10): Prom
   return (data ?? []) as unknown as ForeignEditorial[]
 }
 
+// 전용 검색 결과 페이지용 페이징 검색
+export async function searchForeignEditorialsPaged(
+  keyword: string,
+  page = 1,
+  pageSize = 20,
+): Promise<{ items: ForeignEditorial[]; total: number }> {
+  const q = keyword.trim()
+  if (q.length < 2) return { items: [], total: 0 }
+  const pattern = `%${q}%`
+  const from = (page - 1) * pageSize
+  const to = from + pageSize - 1
+  const { data, error, count } = await supabase
+    .from('foreign_editorial')
+    .select(LIST_COLS, { count: 'exact' })
+    .or(`title_original.ilike.${pattern},title_ko.ilike.${pattern}`)
+    .order('published_at', { ascending: false })
+    .range(from, to)
+  if (error) throw error
+  return { items: (data ?? []) as unknown as ForeignEditorial[], total: count ?? 0 }
+}
+
 export async function getForeignEditorialById(id: number): Promise<ForeignEditorial | null> {
   const { data, error } = await supabase
     .from('foreign_editorial')

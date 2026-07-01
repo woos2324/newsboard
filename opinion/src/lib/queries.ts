@@ -71,6 +71,26 @@ export async function searchEditorials(keyword: string, limit = 10): Promise<Edi
   return (data ?? []) as unknown as Editorial[]
 }
 
+// 전용 검색 결과 페이지용 페이징 검색 (전체 결과를 페이지 단위로)
+export async function searchEditorialsPaged(
+  keyword: string,
+  page = 1,
+  pageSize = 20,
+): Promise<{ items: Editorial[]; total: number }> {
+  const q = keyword.trim()
+  if (q.length < 2) return { items: [], total: 0 }
+  const from = (page - 1) * pageSize
+  const to = from + pageSize - 1
+  const { data, error, count } = await supabase
+    .from('editorial')
+    .select(EDITORIAL_LIST_COLS, { count: 'exact' })
+    .ilike('title', `%${q}%`)
+    .order('published_at', { ascending: false })
+    .range(from, to)
+  if (error) throw error
+  return { items: (data ?? []) as unknown as Editorial[], total: count ?? 0 }
+}
+
 const fetchEditorialsByDate = async (date: string): Promise<Editorial[]> => {
   const { data, error } = await supabase
     .from('editorial')

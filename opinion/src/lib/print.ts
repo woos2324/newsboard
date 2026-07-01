@@ -19,8 +19,9 @@ function escapeHtml(s: string): string {
 }
 
 /**
- * 매체·날짜·제목·본문만 담은 인쇄 전용 문서를 새 창에 렌더해 인쇄한다.
- * 절대위치 기반 @media print 방식과 달리 정상 문서 흐름이라 긴 본문도 페이지 분할된다.
+ * 매체·날짜·제목·본문만 담은 인쇄 전용 문서를 숨은 iframe에 렌더해 인쇄한다.
+ * - 새 창(window.open)을 쓰지 않으므로 팝업 차단에 걸리지 않는다.
+ * - iframe 문서는 정상 문서 흐름이라 긴 본문도 페이지 분할된다.
  */
 export function printEditorial({
   media,
@@ -33,15 +34,9 @@ export function printEditorial({
   title: string
   body: string | null | undefined
 }) {
-  const win = window.open('', '_blank', 'width=820,height=1000')
-  if (!win) {
-    alert('팝업이 차단되어 인쇄 창을 열 수 없습니다. 브라우저에서 팝업을 허용한 뒤 다시 시도해주세요.')
-    return
-  }
-
   const bodyHtml = escapeHtml(normalizeBody(body)).replace(/\n/g, '<br>')
 
-  win.document.write(`<!doctype html>
+  const html = `<!doctype html>
 <html lang="ko">
 <head>
 <meta charset="utf-8">
@@ -60,10 +55,39 @@ export function printEditorial({
   <h1>${escapeHtml(title)}</h1>
   <div class="body">${bodyHtml}</div>
 </body>
-</html>`)
-  win.document.close()
-  win.focus()
-  win.onafterprint = () => win.close()
-  // document.write 직후 렌더 완료를 잠깐 기다린 뒤 인쇄
-  setTimeout(() => win.print(), 300)
+</html>`
+
+  const iframe = document.createElement('iframe')
+  iframe.setAttribute('aria-hidden', 'true')
+  iframe.style.position = 'fixed'
+  iframe.style.right = '0'
+  iframe.style.bottom = '0'
+  iframe.style.width = '0'
+  iframe.style.height = '0'
+  iframe.style.border = '0'
+  document.body.appendChild(iframe)
+
+  const doc = iframe.contentWindow?.document
+  if (!doc) {
+    iframe.remove()
+    return
+  }
+  doc.open()
+  doc.write(html)
+  doc.close()
+
+  const win = iframe.contentWindow!
+  const cleanup = () => setTimeout(() => iframe.remove(), 100)
+  win.onafterprint = cleanup
+
+  // 렌더 완료를 잠깐 기다린 뒤 인쇄
+  setTimeout(() => {
+    win.focus()
+    win.print()
+  }, 300)
+
+  // onafterprint 미발화 브라우저 대비 안전 정리
+  setTimeout(() => {
+    if (iframe.parentNode) iframe.remove()
+  }, 120000)
 }

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { X, ExternalLink, Languages, Printer } from 'lucide-react'
 import { ForeignEditorial, getForeignSourceMeta } from '@/lib/foreign-queries'
+import { normalizeBody, printEditorial } from '@/lib/print'
 
 const COUNTRY_FLAG: Record<string, string> = {
   US: '🇺🇸', UK: '🇬🇧', HK: '🇭🇰', JP: '🇯🇵',
@@ -41,19 +42,6 @@ export default function ForeignEditorialModal({
       className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
-      {/* 인쇄 전용 (매체·날짜·제목·본문만 — 현재 선택된 탭 기준) */}
-      <div className="print-area print-only">
-        <div style={{ fontSize: '16px', color: '#555', marginBottom: '6px' }}>
-          {flag} {meta.name_ko} · {formatDate(item.published_at)}
-        </div>
-        <h2 style={{ fontSize: '22px', fontWeight: 700, lineHeight: 1.4, marginBottom: '14px' }}>
-          {tab === 'ko' ? titleKo : titleOrig}
-        </h2>
-        <div style={{ fontSize: '17px', lineHeight: 1.75, whiteSpace: 'pre-line' }}>
-          {tab === 'ko' ? bodyKo : bodyOrig}
-        </div>
-      </div>
-
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
 
         {/* 헤더 */}
@@ -76,7 +64,17 @@ export default function ForeignEditorialModal({
             )}
           </div>
           <div className="flex items-center gap-1 ml-4 flex-shrink-0 mt-0.5 no-print">
-            <button onClick={() => window.print()} className="text-gray-400 hover:text-blue-600" title="인쇄" aria-label="인쇄">
+            <button
+              onClick={() => printEditorial({
+                media: `${flag} ${meta.name_ko}`,
+                date: formatDate(item.published_at),
+                title: tab === 'ko' ? titleKo : titleOrig,
+                body: tab === 'ko' ? bodyKo : bodyOrig,
+              })}
+              className="text-gray-400 hover:text-blue-600"
+              title="인쇄"
+              aria-label="인쇄"
+            >
               <Printer className="w-5 h-5" />
             </button>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="닫기">
@@ -123,7 +121,7 @@ export default function ForeignEditorialModal({
             <div>
               {tab === 'ko' ? (
                 bodyKo ? (
-                  <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{bodyKo}</p>
+                  <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{normalizeBody(bodyKo)}</p>
                 ) : (
                   <p className="text-sm text-gray-400 italic">번역 본문이 아직 준비되지 않았습니다.</p>
                 )
@@ -132,7 +130,7 @@ export default function ForeignEditorialModal({
                   <p
                     className="text-sm text-gray-700 leading-relaxed whitespace-pre-line"
                     lang={item.source_language}
-                  >{bodyOrig}</p>
+                  >{normalizeBody(bodyOrig)}</p>
                 ) : (
                   <p className="text-sm text-gray-400 italic">원문 본문이 저장되지 않았습니다.</p>
                 )

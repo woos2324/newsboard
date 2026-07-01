@@ -2,6 +2,7 @@
 
 import { X, ExternalLink, Printer } from 'lucide-react'
 import { Editorial, groupKey } from '@/lib/queries'
+import { normalizeBody, printEditorial } from '@/lib/print'
 
 const STANCE_COLORS: Record<string, string> = {
   진보: 'bg-blue-100 text-blue-700',
@@ -49,15 +50,6 @@ export default function EditorialModal({
       className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
-      {/* 인쇄 전용 (매체·날짜·제목·본문만) */}
-      <div className="print-area print-only">
-        <div style={{ fontSize: '16px', color: '#555', marginBottom: '6px' }}>
-          {item.media_company?.name ?? '알 수 없음'}{isOurs ? ' ★' : ''} · {formatDate(item.published_at)}
-        </div>
-        <h2 style={{ fontSize: '22px', fontWeight: 700, lineHeight: 1.4, marginBottom: '14px' }}>{item.title}</h2>
-        <div style={{ fontSize: '17px', lineHeight: 1.75, whiteSpace: 'pre-line' }}>{item.body}</div>
-      </div>
-
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
 
         {/* 헤더 */}
@@ -75,7 +67,17 @@ export default function EditorialModal({
             <h2 className="text-base font-bold text-gray-900 leading-snug">{item.title}</h2>
           </div>
           <div className="flex items-center gap-1 ml-4 flex-shrink-0 mt-0.5 no-print">
-            <button onClick={() => window.print()} className="text-gray-400 hover:text-blue-600" title="인쇄" aria-label="인쇄">
+            <button
+              onClick={() => printEditorial({
+                media: `${item.media_company?.name ?? '알 수 없음'}${isOurs ? ' ★' : ''}`,
+                date: formatDate(item.published_at),
+                title: item.title,
+                body: item.body,
+              })}
+              className="text-gray-400 hover:text-blue-600"
+              title="인쇄"
+              aria-label="인쇄"
+            >
               <Printer className="w-5 h-5" />
             </button>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="닫기">
@@ -149,7 +151,7 @@ export default function EditorialModal({
           ) : item.body ? (
             <div>
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">본문</p>
-              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{item.body}</p>
+              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{normalizeBody(item.body)}</p>
             </div>
           ) : null}
 

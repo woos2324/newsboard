@@ -147,7 +147,7 @@ export default async function ArticlesPage({ searchParams }: Props) {
       {/* 기사 목록 */}
       <div className="card">
         <p className="section-title mb-4">기사 목록</p>
-        <ArticleListClient date={date} initialArticles={data.articles} total={data.total} />
+        <ArticleListClient key={date} date={date} initialArticles={data.articles} total={data.total} />
       </div>
     </PageShell>
   );

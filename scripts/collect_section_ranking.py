@@ -108,6 +108,34 @@ async def fetch_one(
             return []
 
 
+def _delete_stale_ranks(sb, all_rows: list[dict]) -> int:
+    """(media, section, date) 별로 이번 수집에 없는 예전 rank 행을 삭제.
+
+    upsert는 rank 슬롯 단위 키라서, 기사가 랭킹을 이동하면 예전 rank 자리는
+    이번 수집에서 다른 기사가 그 자리를 새로 차지하지 않는 한 그대로 남는다
+    (같은 기사가 여러 rank에 중복 표시되는 버그). upsert 이후에 호출해
+    빈 데이터 노출 구간 없이 정리한다.
+    """
+    groups: dict[tuple[int, str, str], set[int]] = {}
+    for row in all_rows:
+        key = (row["media_company_id"], row["section_name"], row["ranking_date"])
+        groups.setdefault(key, set()).add(row["rank"])
+
+    deleted = 0
+    for (media_company_id, section_name, ranking_date), ranks in groups.items():
+        res = (
+            sb.table("section_ranking_snapshot")
+            .delete()
+            .eq("media_company_id", media_company_id)
+            .eq("section_name", section_name)
+            .eq("ranking_date", ranking_date)
+            .not_.in_("rank", list(ranks))
+            .execute()
+        )
+        deleted += len(res.data)
+    return deleted
+
+
 async def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -178,6 +206,11 @@ async def main() -> None:
     for m, rows in zip(media_rows, results):
         if rows:
             print(f"  {m['name']}: {len(rows)}건")
+
+    deleted = _delete_stale_ranks(sb, all_rows)
+    if deleted:
+        print(f"스테일 rank 정리: {deleted}건 삭제")
+
     revalidate("compare")
 
 

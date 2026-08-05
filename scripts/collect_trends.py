@@ -117,15 +117,19 @@ def _parse_related_queries(text: str) -> list[str]:
     return result
 
 
+# 관련뉴스 '시각 <구분자> 출처' 구분자. 구글이 ●(U+25CF) → ·(U+00B7) 로 바꿔서 둘 다 허용
+_NEWS_SEP = r"[●·]"
+
+
 def _parse_news_link(el_text: str, el_href: str) -> Optional[dict]:
-    """'제목 N시간 전 ● 출처' → dict."""
+    """'제목 N시간 전 · 출처' → dict."""
     href = el_href or ""
     if not href.startswith("http") or "google" in href:
         return None
     text = el_text.strip().replace("\xa0", " ")
-    # 출처: ● 뒤
+    # 출처: 구분자 뒤
     source = ""
-    m = re.search(r"●\s*(.+)$", text)
+    m = re.search(_NEWS_SEP + r"\s*(.+)$", text)
     if m:
         source = m.group(1).strip()
         text = text[: m.start()].strip()
@@ -160,7 +164,9 @@ def _fetch_trends_dom() -> list[dict]:
 
         page.goto(TRENDS_URL, wait_until="domcontentloaded", timeout=60000)
         try:
-            page.wait_for_selector("table tbody tr", timeout=30000)
+            # tbody 첫 행이 height=0 스페이서라 기본 state="visible" 로는 첫 매치가
+            # 영원히 보이지 않아 타임아웃 → 데이터 셀이 DOM 에 붙는 것만 확인한다
+            page.wait_for_selector("table tbody tr td", state="attached", timeout=30000)
         except Exception:
             print("  [경고] table 셀렉터 타임아웃 — 행 0개로 처리")
             browser.close()
@@ -168,7 +174,8 @@ def _fetch_trends_dom() -> list[dict]:
         page.wait_for_timeout(2500)
 
         rows = page.query_selector_all("table tbody tr")
-        data_rows = [r for r in rows if len(r.query_selector_all("td")) >= 7]
+        # 데이터 행 td 는 6개(과거 7개). 스페이서 행은 1개라 이 필터로 걸러진다
+        data_rows = [r for r in rows if len(r.query_selector_all("td")) >= 6]
         print(f"  데이터 행: {len(data_rows)}개")
 
         # 1단계: 클릭 없이 기본 필드 파싱
@@ -236,7 +243,7 @@ def _fetch_trends_dom() -> list[dict]:
                     if not href.startswith("http") or "google" in href:
                         continue
                     t = (link.inner_text() or "").strip()
-                    if "●" not in t:
+                    if not re.search(_NEWS_SEP, t):
                         continue
                     parsed = _parse_news_link(t, href)
                     if parsed and parsed["title"]:

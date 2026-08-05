@@ -95,6 +95,134 @@
 - Email Template "Confirm signup" → `{{ .Token }}` 으로 OTP 6자리 발송 (10분 만료)
 - 비밀번호 정책: 8자 이상, 대소문자 + 숫자 + 특수문자
 
+## 재개 지점 (2026-08-05, 55차 세션 종료)
+
+**이번 세션 (55차) = 13일간(7/23~8/5) 멈춰 있던 수집 2종 장애 진단·복구. ① 실시간 트렌드 = 구글 트렌드 DOM 변경(코드 수정), ② 트래픽 = 네이버 파트너센터 비밀번호 변경(자격증명 갱신) + 13일치 백필. DB 마이그레이션 없음. 변경 1파일([scripts/collect_trends.py](scripts/collect_trends.py)).**
+
+### 0. 진단 방법 — 원인이 서로 다른 2건이었음
+
+- 증상은 "실시간 트렌드·트래픽 분석 업데이트 안 됨" 하나였지만 **원인은 완전히 별개**였다. 공통점은 둘 다 Playwright 경유라는 것뿐이고, chromium 자체는 정상이었음(두 사이트 모두 페이지 로드까지 성공).
+- **진단 순서**: 테이블별 `max(captured_at)` 일괄 조회 → 멈춘 테이블 특정 → **나머지 파이프라인은 정상**임을 먼저 확인(랭킹·댓글·사설·이슈 전부 1시간 내 수집) → 워커 로그 → 로컬 재현.
+- **로컬 재현이 핵심 판별기**였다: 트렌드는 로컬에서도 실패 → IP 차단 아님, DOM 변경 확정. (NCP IP 차단을 의심해 시간 버리는 걸 방지)
+- ⚠ `infra-mcp` SSH 는 내부 IP `10.36.194.36` 이라 **VPN 필수**. 사내망 아니면 `WinError 10060` 타임아웃.
+- ⚠ **`trending_keyword` 가 0행이었던 건 cleanup 정상 동작** — 1일 보관(49차)이라 수집이 끊기면 테이블이 통째로 빈다. `realtime_pv_tick`(2일)도 동일. "테이블이 비었다"를 삭제 버그로 오해하지 말 것.
+
+### 1. 실시간 트렌드 — 구글 트렌드 DOM 변경 3건 (커밋 `4bc4826`, NCP 배포 완료)
+
+워커 로그가 3분마다 `[경고] table 셀렉터 타임아웃 — 행 0개로 처리` 반복. 원인 3개가 겹쳐 있었고 [collect_trends.py](scripts/collect_trends.py) 3곳 수정:
+
+| # | 문제 | 수정 |
+|---|---|---|
+| 1 (치명) | tbody 첫 행이 `height=0` 스페이서(td 1개)로 추가됨. `wait_for_selector` 는 기본 `state="visible"` 로 **첫 매치**를 검사 → 영원히 안 보여 30초 타임아웃 → 즉시 0건 종료 | `wait_for_selector("table tbody tr td", state="attached")` |
+| 2 | 데이터 행 td **7개 → 6개**. `>= 7` 필터에 전량 탈락. **td 인덱스 의미는 불변**(1=키워드, 2=검색량+증가율, 3=시작시각+상태, 4=관련검색어) | `>= 6` (6·7 양쪽 호환) |
+| 3 | 관련뉴스 '시각 ● 출처' 구분자가 **●(U+25CF) → ·(U+00B7)** 로 변경. `"●" not in t` 필터 + `_parse_news_link` 정규식 전량 탈락 | `_NEWS_SEP = r"[●·]"` 로 둘 다 허용(재변경 대비) |
+
+- 검증: 로컬 dry-run 25건 파싱 + 키워드별 관련뉴스 3건 + 클러스터 매칭 5/25 + AI 요약 25/25. 배포 후 워커 실행분도 동일, 2회차부터 `캐시 재사용: 25건 / 신규 0건`으로 AI 비용 원복.
+- 행 클릭 → `a.xZCHj` 3건 수집 방식은 그대로 유효.
+
+### 2. 트래픽 — 네이버 파트너센터 비밀번호 변경
+
+- 워커 로그: `302 Not logined.(empty session)` → 44차의 302 자동 재로그인이 **정상 작동** → 그런데 `_playwright_login()` 이 `loginForm.sec` 에 머물며 실패.
+- **실패 사유 확인법이 중요**: 화면엔 에러가 없고 `alert()` 로 뜨는데 **Playwright 가 다이얼로그를 자동 닫아** 원인이 안 보였다. `page.on("dialog", ...)` 핸들러를 붙여야 원문이 잡힌다 → **"파트너 계정이 존재하지 않거나 비밀번호가 일치하지 않습니다."**
+- 타임라인 일치: `naver_session` 마지막 갱신 7/22 11:40(당시 로그인 성공) → 7/23 19:40 KST 하드 중단 → 이후 10분마다 실패 반복(약 1,900회 누적).
+- 사용자가 새 비밀번호로 `.env.local` + NCP `/home/segyecom/worker/.env` 양쪽 갱신 → 로컬 로그인 성공(`/main/welcome`) 확인 후 `--realtime` 1회 실행 → 쿠키 DB 저장으로 워커도 즉시 정상화.
+
+### 3. ⚠ 교훈 — `.env` 수정만으로는 반영 안 됨 (컨테이너 재생성 필수)
+
+- `worker/docker-compose.yml` 은 `env_file: .env` 이고, **env_file 은 컨테이너 생성 시점에만 읽힌다**. NCP `.env` 를 고쳐도 실행 중 컨테이너는 옛 값을 그대로 들고 있다.
+- 이번에 실제로 발생: `.env` 수정 16:33 vs 컨테이너 재생성 16:29 → **파일은 새 비밀번호, 프로세스는 옛 비밀번호**. 로컬 실행이 쿠키를 갱신해줘서 당장은 수집됐지만, 쿠키 만료(14일) 후 재로그인에서 같은 장애가 재발할 상태였음.
+- **검증법(비밀번호 노출 없이)**: 파일값 sha256 vs `docker exec worker-worker-1 sh -c 'printf %s "$NAVER_PARTNER_PW" | sha256sum'` 비교. 불일치면 `deploy_worker`(= `pull && up -d`)로 재생성 후 재확인.
+- **자격증명 변경 시 필수 순서**: ① NCP `.env` 수정 → ② 컨테이너 재생성 → ③ 컨테이너 내부 해시 일치 확인.
+
+### 4. 트래픽 13일치 백필 (일간 13 + 주간 2 + 월간 1 = 16회, 전부 성공)
+
+- 로컬에서 순차 실행(54차 방침 — 워커는 크론과 네이버 세션 경합). `--date` 13회(7/23~8/4), `--weekly --week-date 20260720/20260727`, `--monthly --month-date 20260701`.
+- 7/23 은 일간 데이터는 있었으나 `hourly_pv_snapshot` 만 0이라 함께 재수집 → 72행(24h×3디바이스) 복구.
+- 결과: 일간 13일 전부 cv 30 / article_pv ~2,800~2,900 / hourly 72(전 구간 pv>0) / traffic_source 11 / keyword 100. weekly 7/20·7/27, monthly 7/01 신규 적재.
+- **주간/월간 날짜 인자 의미**: `--week-date` = 대상 주의 **월요일**, `--month-date` = 대상 월의 **1일**. 크론은 월요일에 전주, 1일에 전월을 수집하므로 장애 기간에 걸린 회차는 7/20·7/27 주와 7월.
+- ⚠ **백필로는 복구 불가한 항목**: `traffic_source_daily` 의 **device 분리(pc/mobile)** 는 40차에 추가된 `--realtime` 경로에서만 수집된다. 일간 수집(`--date`)은 `all` 만 적재 → 7/24~8/4 은 `all` 11행뿐(7/23·8/5 는 실시간이 돌아 33행). 네이버가 과거 디바이스별 유입경로를 소급 제공하지 않아 **영구 결손**. 총계는 정상이라 화면 표시엔 문제 없음. `search_keyword_daily` 도 같은 이유로 백필분은 100건.
+
+**판단 사항 (55차)**:
+1. **로컬 재현을 IP 차단 의심보다 먼저** — 해외 매체(33·50차)에서 IP 차단을 여러 번 겪어 트렌드도 그쪽을 의심하기 쉬웠으나, 로컬 1회 실행으로 즉시 DOM 문제로 확정됐다. 원격 환경 요인을 파기 전에 로컬 재현이 최단 경로.
+2. **DOM 셀렉터는 `state="attached"` 기본 고려** — 구글이 0-height 스페이서 행을 넣는 것만으로 `visible` 판정이 깨졌다. 데이터 존재 확인 목적이면 가시성은 불필요.
+3. **컬럼 수 필터는 하한만(`>= 6`)** — 정확 일치나 과한 하한은 UI 변경에 취약. 인덱스 의미가 유지되는 한 하한만 낮게.
+4. **구분자는 문자 클래스로 허용(`[●·]`)** — 한 문자 바뀐 것으로 뉴스 전량이 탈락했다. 이런 표시용 문자는 단일 문자 하드코딩을 피한다.
+5. **Playwright 로그인 실패 진단엔 dialog 핸들러 필수** — 자동 닫힘 때문에 "화면에 에러 없음"으로 오판하면 원인 추적이 막힌다.
+6. **백필은 로컬 순차 + 결과 요약 로그** — 16회 장시간 작업이라 회차별 성공/실패를 한 줄로 남겨 중단 지점 복구가 쉽게.
+
+### 미완료 / 다음 세션(56차) 할 일
+
+- ⚠ **GitHub Secrets `NAVER_PARTNER_PW` 갱신** (신규, 낮은 우선순위) — 지금은 미사용. `NAVER_PARTNER` 참조 워크플로는 `cron-naver-pv.yml` 하나뿐이고 `disabled_manually`(33차), active 인 `docker-build.yml` 은 `GITHUB_TOKEN` 만 쓰므로 **이미지에 자격증명이 안 들어감**. 롤백 대비 정합성용으로만 갱신.
+- ⚠ **네이버 비밀번호 만료 주기 확인 / 재발 방지** (신규) — 7/23 무통보 변경으로 13일 결손. 만료 주기를 알면 사전 갱신 가능. 또는 로그인 실패 시 알림(향후 카카오톡 알림과 함께).
+- ⚠ **opinion 신규 코드 git 커밋** (54차 이월) — `opinion/src/app/api/revalidate/route.ts` + `proxy.ts` 미커밋.
+- ⚠ **OpenAI Auto-recharge 설정** (54차 이월, 계정 소유자).
+- ⚠ **comment_metric 주기적 VACUUM 검토** (54차 이월).
+- ⚠ **섹션별 랭킹 스테일 정리 — 전 매체 확인** (53차 이월).
+- ⚠ **2023 백필 11·12월** (52차 이월) — DB 용량 여유 확인 후.
+- ⚠ **Supabase Pro 업그레이드 결정** (52차 이월) — `woos2324's` 조직.
+- ⚠ **미보도 탐지 수집 범위 결정 (보류)** (48차 이월).
+
+---
+
+## 재개 지점 (2026-07-22, 54차 세션 종료)
+
+**이번 세션 (54차) = ① 오피니언 사설 AI 분석·해외번역 밀린 데이터 복구(7/17~7/22), ② opinion 캐시 무효화 API 신설, ③ Supabase DB 용량 위기 대응(99%→71% VACUUM FULL 정리), ④ OpenAI 한도 확인. DB 마이그레이션 없음. 신규 2파일([opinion/src/app/api/revalidate/route.ts](opinion/src/app/api/revalidate/route.ts), [opinion/src/proxy.ts](opinion/src/proxy.ts) 수정).**
+
+### 1. 국내 사설 AI 분석 복구 (7/17~7/22)
+
+- **증상**: opinion "오늘의 사설" 분석(요약·성향)이 7/17까지만. 7/18~7/21 대부분·7/22 일부 누락.
+- **진짜 원인 = 크레딧(잔액) 소진** — rate limit 아님. 로컬에서 OpenAI 키 직접 테스트 시 200 정상(충전 반영됨). 밀린 기간이 크레딧 0 구간과 겹쳐 `429 insufficient_quota`(rate-limit 429와 코드 동일 → 혼동) 반복. `collect_editorials.py` cron 모드는 **어제+오늘만** 처리 → 지나간 날짜는 자동 재시도 안 됨.
+- **복구**: 로컬에서 날짜별 재분석 실행 (워커는 매시 크론이 OpenAI 경합 → 로컬이 안전).
+  - `python -B -m scripts.collect_editorials --reanalyze-date YYYYMMDD` (summary NULL 사설만 재분석, 건당 gpt-4o 1콜 + 5초 sleep)
+  - `python -B -m scripts.merge_editorial_issues --date YYYYMMDD` (issue 채운 뒤 issue_canonical 사후 병합 재실행)
+  - 7/17~7/22 전량 복구 확인 (issue·issue_canonical·summary·stance 모두 채움).
+
+### 2. 해외 사설 번역 복구 (7/17~7/22)
+
+- **증상**: opinion "해외 논조" 7/17부터 title_ko/body_ko 누락(같은 크레딧 소진 원인).
+- **복구**: `python -B -m scripts.collect_foreign_editorials --translate-backfill --backfill-limit 80` (body_ko NULL 레코드만 번역).
+
+### 3. opinion 캐시 무효화 API 신설 (opinion 배포 완료)
+
+- **문제**: DB를 직접 고쳐도 opinion 화면이 안 바뀜. opinion 과거 날짜 조회가 캐시됨 — `getPastEditorials`는 `revalidate: false`(영구), `getPastForeignEditorials`는 `revalidate: 86400`(24h). opinion엔 newsboard의 `/api/revalidate` 같은 무효화 엔드포인트가 **없었음**.
+- **신설**: [opinion/src/app/api/revalidate/route.ts](opinion/src/app/api/revalidate/route.ts) — `?tag=&secret=` 로 `revalidateTag(tag, {expire:0})`. 허용 태그 `editorials`, `foreign-editorial`. [opinion/src/proxy.ts](opinion/src/proxy.ts)에 이 경로 로그인 예외 추가(secret으로만 보호).
+- **⚠ 시크릿 주의**: 기존 `OPINION_AUTH_SECRET`은 Vercel Sensitive라 `vercel env pull` 시 빈 값(43차 캡처와 동일 현상) → 재사용 불가. **전용 `OPINION_REVALIDATE_SECRET` 신규 생성·등록**. 이것도 CLI로 add하면 Sensitive라 되읽기 불가 → 값을 세션 중 로컬 보관 필요. 무효화 호출: `curl "https://opinion-eta.vercel.app/api/revalidate?tag=editorials&secret=<SECRET>"` → `{"revalidated":true}`. 두 태그 다 무효화 완료.
+- **Next 16 시그니처**: route는 `revalidateTag(tag, {expire:0})`(2인자, 즉시 만료). Server Action 내부는 `updateTag` 사용(1인자, editorial-actions.ts 참고). deprecated 1인자 `revalidateTag(tag)` 회피.
+
+### 4. Supabase DB 용량 위기 대응 (99% → 71%)
+
+- **증상**: DB 0.496/0.5GB(99%), 쓰기 제한 임박.
+- **테이블별 크기 조회 + VACUUM FULL 정리** → **496MB→363MB (약 133MB 회수, 71%)**.
+- **주범 = `comment_metric`**: 매시간 26,000여 건 upsert(UPDATE)로 죽은 튜플 누적 → 실데이터 3.4MB가 물리 40MB로 부풀음. `VACUUM FULL`로 ~35MB 회수. (기사당 최신 1행 UNIQUE(article_id) 제약은 정상 작동 중 — 46차)
+- `article_pv_snapshot`(-19MB, 죽은행 12%), trending_keyword·ranking_news_item·editorial·issue_cluster(_article)·search_keyword_daily·foreign_editorial·reporter_style_profile 도 정리.
+- **회수 불가 확인**: `article`(130MB, 죽은행 0.8%)·`editorial`(본문 TOAST)은 대부분 **실데이터** → VACUUM으로 못 줄임. 앞으로 다시 차오르는 건 실데이터 누적 때문.
+- ⚠ **VACUUM FULL 주의**: 새 복사본 생성 방식이라 작업 중 압축 후 크기만큼 여유 공간 필요 → 99% 상태에서 대형 테이블 먼저 하면 실패 위험. 작은 bloat 테이블부터 정리해 여유 확보 후 대형 순으로 진행함.
+
+### 5. OpenAI 한도 확인 (인상 불필요)
+
+- 응답 헤더로 확인: **이미 Usage Tier 2** — gpt-4o **450,000 TPM / 5,000 RPM**, gpt-4o-mini 2,000,000 TPM. (2026-06-17 Tier 1 = 30K TPM에서 15배↑). 한도는 충분, 밀린 원인은 잔액이었음.
+- Tier는 수동 신청 불가 — 누적 결제액+경과일로 자동 승격. 재발 방지 핵심 = Billing **Auto-recharge**(계정 소유자만 설정 가능).
+- 메모리 [[project_openai_tpm_limit]] 최신 한도로 갱신함.
+
+**판단 사항 (54차)**:
+1. **재분석은 로컬에서** — 워커는 매시 크론이 OpenAI 동시 호출로 경합(429). 로컬은 같은 키·다른 크론 없음 → 안전. `--reanalyze-date`는 summary NULL만 골라 재처리(멱등).
+2. **밀림 원인 = 크레딧, rate limit 아님** — `429 insufficient_quota` ≠ rate-limit 429. 충전 즉시 정상. 근본 재발 방지는 Auto-recharge.
+3. **opinion 무효화 = 전용 시크릿 + route** — 기존 AUTH_SECRET은 Sensitive라 pull 불가. 새 `OPINION_REVALIDATE_SECRET` 신설. proxy 예외 + route 내부 secret 검증 2중.
+4. **VACUUM FULL 순서 = 작은 것부터** — 여유 공간 부족 시 대형 테이블 실패. bloat 큰 소형부터 회수해 헤드룸 확보.
+5. **용량 근본대책은 Pro** — VACUUM은 일회성 bloat 정리일 뿐, comment_metric은 재부풀고 실데이터는 누적. Supabase Pro($25/월, 8GB) 이월 과제.
+
+### 미완료 / 다음 세션(55차) 할 일
+
+- ⚠ **opinion 신규 코드 git 커밋** (신규) — `opinion/src/app/api/revalidate/route.ts` + `proxy.ts` 수정분 아직 미커밋. (opinion은 수동 배포는 됐으나 git 반영 필요)
+- ⚠ **OpenAI Auto-recharge 설정** (신규, 계정 소유자) — 크레딧 소진 재발 방지 핵심.
+- ⚠ **comment_metric 주기적 VACUUM 검토** (신규) — bloat 재발 → `cleanup_old_data.py`에 주기 VACUUM 넣을지, 또는 이력 불필요하면 보관 단축.
+- ⚠ **섹션별 랭킹 스테일 정리 — 전 매체 확인** (53차 이월) — 세계일보 외 매체 정상 정리 확인.
+- ⚠ **2023 백필 11·12월** (52차 이월) — 단, DB 용량 여유 없으면 Pro 먼저.
+- ⚠ **Supabase Pro 업그레이드 결정** (52차 이월) — `woos2324's` 조직.
+- ⚠ **미보도 탐지 수집 범위 결정 (보류)** (48차 이월).
+
+---
+
 ## 재개 지점 (2026-07-09, 53차 세션 종료)
 
 **이번 세션 (53차) = ① 경쟁사 비교 섹션별 랭킹 스테일 데이터 버그 수정, ② 실시간 트렌드 InfoTip 툴팁 텍스트 넘침 버그 수정. DB 마이그레이션 없음. 변경 2파일([scripts/collect_section_ranking.py](scripts/collect_section_ranking.py), [src/components/InfoTip.tsx](src/components/InfoTip.tsx)).**
